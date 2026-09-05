@@ -274,11 +274,14 @@ describe("ManagementDashboardPage", () => {
     expect(
       within(bdd as HTMLElement).getByRole("link", { name: "2" }),
     ).toHaveAttribute("href", "/incidents?discipline=road_safety");
-    // у неразмеченных ссылки нет: фильтра «без дисциплины» в реестре нет
+    // у неразмеченных — ссылка в реестр с фильтром «без разметки» (срез-65)
     const unmarked = within(table)
       .getByText("— не размечено")
       .closest("tr") as HTMLElement;
-    expect(within(unmarked).queryByRole("link")).not.toBeInTheDocument();
+    expect(within(unmarked).getByRole("link")).toHaveAttribute(
+      "href",
+      "/incidents?discipline=none",
+    );
     // ноль — не ссылка, некуда вести
     const medical = within(table)
       .getByText("Медосмотры")

@@ -259,10 +259,10 @@ describe("Происшествия клиента из отчёта (срез-61
       "href",
       "/incidents?company_id=comp-a&discipline=ecology",
     );
-    // неразмеченные — весь реестр клиента: фильтра «без дисциплины» нет
+    // неразмеченные — тот же реестр клиента с фильтром «без разметки» (срез-65)
     expect(
       within(links).getByRole("link", { name: "без разметки — 1" }),
-    ).toHaveAttribute("href", "/incidents?company_id=comp-a");
+    ).toHaveAttribute("href", "/incidents?company_id=comp-a&discipline=none");
     // отчёт без происшествий ссылок не показывает — нечего открывать
     expect(
       within(rows[1]).queryByTestId("incident-links"),

@@ -50,6 +50,11 @@ _INCIDENT_WRITE_ROLES = ["admin"]
 #: приём, что у курса обучения и стажировки
 _DISCIPLINE_CODES = {d.value: DISCIPLINE_TITLES[d] for d in Discipline}
 
+#: Значение фильтра списка «без разметки» (срез-65): отчёты называют число
+#: неразмеченных, реестр обязан уметь показать ИХ, а не весь список. Только
+#: для фильтра — записать «none» дисциплиной нельзя, снятие разметки — null.
+UNMARKED_FILTER = "none"
+
 
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
     return getattr(tenant, "id", None)
@@ -78,13 +83,17 @@ def _incident_bad_request(message: str) -> HTTPException:
     )
 
 
-def _validate_discipline(discipline: str | None) -> None:
+def _validate_discipline(discipline: str | None, *, allow_unmarked: bool = False) -> None:
     """Неизвестный код — ошибка запроса, а не тихая запись «чего-то»."""
 
-    if discipline is not None and discipline not in _DISCIPLINE_CODES:
-        raise _incident_bad_request(
-            f"Неизвестная дисциплина {discipline!r}; допустимые: {', '.join(_DISCIPLINE_CODES)}"
-        )
+    if discipline is None or discipline in _DISCIPLINE_CODES:
+        return
+    if allow_unmarked and discipline == UNMARKED_FILTER:
+        return
+    allowed = [*_DISCIPLINE_CODES, *([UNMARKED_FILTER] if allow_unmarked else [])]
+    raise _incident_bad_request(
+        f"Неизвестная дисциплина {discipline!r}; допустимые: {', '.join(allowed)}"
+    )
 
 
 async def _get_incident(session: AsyncSession, tenant: Tenant, incident_id: str) -> Incident:
@@ -132,12 +141,16 @@ async def list_incidents(
     site_id: str | None = Query(default=None, min_length=1, max_length=36),
     status_filter: IncidentStatus | None = Query(default=None),
     incident_type: IncidentType | None = Query(default=None),
-    discipline: str | None = Query(default=None, max_length=32),
+    discipline: str | None = Query(
+        default=None,
+        max_length=32,
+        description="Код дисциплины из общего словаря; «none» — только неразмеченные.",
+    ),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> IncidentPage | Response:
     TenantContextValidator.ensure_tenant_context(tenant)
-    _validate_discipline(discipline)
+    _validate_discipline(discipline, allow_unmarked=True)
 
     stmt = (
         select(Incident)
@@ -152,7 +165,9 @@ async def list_incidents(
         stmt = stmt.where(Incident.status == status_filter)
     if incident_type:
         stmt = stmt.where(Incident.incident_type == incident_type)
-    if discipline:
+    if discipline == UNMARKED_FILTER:
+        stmt = stmt.where(Incident.discipline.is_(None))
+    elif discipline:
         stmt = stmt.where(Incident.discipline == discipline)
 
     total_stmt = select(func.count()).select_from(stmt.subquery())

@@ -13,7 +13,9 @@
 ЧТО ПРОВЕРЯЕТСЯ: код принимается и возвращается словами; пусто — «не
 размечено», а НЕ «охрана труда»; неизвестный код — ошибка запроса, а не
 тихая запись; разметку можно поставить, сменить и снять; список фильтруется
-по дисциплине; чужие и неразмеченные в фильтр не попадают.
+по дисциплине; чужие и неразмеченные в фильтр не попадают; ``discipline=none``
+отбирает ТОЛЬКО неразмеченные (срез-65: отчёты называют их число — реестр
+обязан их показать), но записать «none» дисциплиной нельзя.
 """
 
 from __future__ import annotations
@@ -163,6 +165,49 @@ class TestФильтр:
         assert own.status_code == 200, own.text
         assert own.json()["total"] == 2
         assert all(i["discipline"] == "industrial_safety" for i in own.json()["items"])
+
+    async def test_none_отбирает_только_неразмеченные(
+        self, async_client, make_auth_headers, sessionmaker, data_factory
+    ) -> None:
+        """Срез-65: ссылка «без разметки» из отчётов ведёт к своим записям."""
+
+        company_id, site_id = await _fixtures(sessionmaker, data_factory)
+        headers = await make_auth_headers(RoleEnum.ADMIN)
+        for discipline in ("ecology", None, None):
+            response = await async_client.post(
+                _API, json=_payload(company_id, site_id, discipline=discipline), headers=headers
+            )
+            assert response.status_code == 201, response.text
+
+        unmarked = await async_client.get(_API, params={"discipline": "none"}, headers=headers)
+        assert unmarked.status_code == 200, unmarked.text
+        assert unmarked.json()["total"] == 2
+        assert all(i["discipline"] is None for i in unmarked.json()["items"])
+
+        # Фильтр и полный список — разные ответы, а не один кэш (ETag).
+        everything = await async_client.get(_API, headers=headers)
+        assert everything.json()["total"] == 3
+        assert everything.headers["etag"] != unmarked.headers["etag"]
+
+    async def test_none_нельзя_записать_дисциплиной(
+        self, async_client, make_auth_headers, sessionmaker, data_factory
+    ) -> None:
+        """«none» — слово фильтра, не код словаря: снятие разметки — null."""
+
+        company_id, site_id = await _fixtures(sessionmaker, data_factory)
+        headers = await make_auth_headers(RoleEnum.ADMIN)
+        created = await async_client.post(
+            _API, json=_payload(company_id, site_id, discipline="none"), headers=headers
+        )
+        assert created.status_code == 400, created.text
+
+        plain = (
+            await async_client.post(_API, json=_payload(company_id, site_id), headers=headers)
+        ).json()
+        patched = await async_client.patch(
+            f"{_API}/{plain['id']}", json={"discipline": "none"}, headers=headers
+        )
+        assert patched.status_code == 400, patched.text
 
     async def test_фильтр_по_неизвестной_дисциплине_отвергается(
         self, async_client, make_auth_headers, sessionmaker, data_factory
