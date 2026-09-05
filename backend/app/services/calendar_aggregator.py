@@ -57,7 +57,9 @@ from app.models.models import (
     PermitStatus,
     PPEIssue,
     PPEIssueStatus,
+    TrainingCertificate,
     TrainingCourse,
+    TrainingProgram,
     TrainingSession,
     TrainingSessionStatus,
 )
@@ -83,6 +85,11 @@ ALL_SOURCES: tuple[str, ...] = (
     "ppe_issue",
     "permit",
     "training_session",
+    # Доп. №1 разд. 57.2 (срез-75): истёкшее удостоверение по обучению —
+    # самый частый срок охраны труда, а в календаре его не было вовсе:
+    # ``training_session`` — это занятия, ``compliance_deadline`` — снимок,
+    # который делает только ручной пересчёт. Источник поимённый.
+    "training_certificate",
     "inspection",
     "compliance_deadline",
     "briefing_entry",
@@ -162,6 +169,7 @@ _SLA_THRESHOLDS: dict[str, tuple[int, int]] = {
     "civil_defense_drill": (7, 30),
     "road_safety_vehicle": (7, 30),
     "road_safety_driver": (7, 30),
+    "training_certificate": (7, 30),
 }
 
 
@@ -357,6 +365,22 @@ class CalendarAggregatorService:
             by_source.append(
                 CalendarSourceCount(
                     source_type="road_safety_driver", count=total, overdue_count=overdue
+                )
+            )
+
+        if "training_certificate" in sources:
+            collected, total, overdue = await self._build_training_certificates(
+                from_at=from_at,
+                to_at=to_at,
+                person_id=person_id,
+                now=now,
+                include_fact=include_fact,
+                include_sla=include_sla,
+            )
+            items.extend(collected)
+            by_source.append(
+                CalendarSourceCount(
+                    source_type="training_certificate", count=total, overdue_count=overdue
                 )
             )
 
@@ -610,6 +634,105 @@ class CalendarAggregatorService:
         )
         total = await self._count(base_count)
         overdue = await self._count(base_count.where(Driver.license_due < today))
+        return items, total, overdue
+
+    async def _build_training_certificates(
+        self,
+        *,
+        from_at: datetime | None,
+        to_at: datetime | None,
+        person_id: str | None,
+        now: datetime,
+        include_fact: bool = False,
+        include_sla: bool = False,
+    ) -> tuple[list[CalendarEventItem], int, int]:
+        """Сроки удостоверений по обучению — поимённый источник обучения (срез-75).
+
+        Считаются ТОЛЬКО действующие удостоверения (``status == "active"``,
+        не удалённые): отозванное ничего не блокирует. Пустая дата — бессрочное
+        удостоверение, это не срок и в календарь не попадает. Правило просрочки
+        то же, что у медосмотров: ``valid_until < today`` — в день окончания
+        удостоверение ещё действует. Название берётся из программы, иначе из
+        курса, иначе — номер или код: у старых удостоверений программы нет.
+        """
+
+        today = now.date()
+        stmt = (
+            select(TrainingCertificate, TrainingProgram.title, TrainingCourse.title)
+            .outerjoin(
+                TrainingProgram, TrainingProgram.id == TrainingCertificate.training_program_id
+            )
+            .outerjoin(TrainingCourse, TrainingCourse.id == TrainingCertificate.course_id)
+            .where(
+                TrainingCertificate.tenant_id == self.tenant_id,
+                TrainingCertificate.deleted_at.is_(None),
+                TrainingCertificate.status == "active",
+                TrainingCertificate.valid_until.is_not(None),
+            )
+            .order_by(TrainingCertificate.valid_until.asc(), TrainingCertificate.issued_at.asc())
+            .limit(self._limit)
+        )
+        if person_id:
+            stmt = stmt.where(TrainingCertificate.person_id == person_id)
+        if from_at is not None:
+            stmt = stmt.where(TrainingCertificate.valid_until >= from_at.date())
+        if to_at is not None:
+            stmt = stmt.where(TrainingCertificate.valid_until <= to_at.date())
+
+        items: list[CalendarEventItem] = []
+        for cert, program_title, course_title in (await self.db.execute(stmt)).all():
+            anchor = _coerce_dt(cert.valid_until)
+            if anchor is None:
+                continue
+            is_overdue = cert.valid_until < today
+            days_to_due = _days_to_due(anchor, now) if include_sla else None
+            subject = program_title or course_title or cert.number or cert.code or "без программы"
+            items.append(
+                CalendarEventItem(
+                    id=f"training_certificate:{cert.id}",
+                    source_type="training_certificate",
+                    source_id=str(cert.id),
+                    title=f"Удостоверение: {subject}",
+                    starts_at=anchor,
+                    ends_at=None,
+                    status="expired" if is_overdue else "valid",
+                    is_overdue=is_overdue,
+                    person_id=str(cert.person_id) if cert.person_id else None,
+                    site_id=None,
+                    expected_at=anchor if include_fact else None,
+                    actual_at=_coerce_dt(cert.issued_at) if include_fact else None,
+                    variance_days=None,
+                    days_to_due=days_to_due,
+                    sla_band=(
+                        _sla_band(
+                            "training_certificate", days_to_due=days_to_due, is_overdue=is_overdue
+                        )
+                        if include_sla
+                        else None
+                    ),
+                    extra={
+                        "number": cert.number,
+                        "code": cert.code,
+                        "issued_at": cert.issued_at.isoformat() if cert.issued_at else None,
+                        "valid_until": cert.valid_until.isoformat(),
+                        "program_title": program_title,
+                        "course_title": course_title,
+                    },
+                )
+            )
+
+        base_count = self._apply_window(
+            self._scoped_count(TrainingCertificate, person_id=person_id).where(
+                TrainingCertificate.status == "active",
+                TrainingCertificate.valid_until.is_not(None),
+            ),
+            TrainingCertificate.valid_until,
+            from_at,
+            to_at,
+            as_date=True,
+        )
+        total = await self._count(base_count)
+        overdue = await self._count(base_count.where(TrainingCertificate.valid_until < today))
         return items, total, overdue
 
     async def _build_medicals(

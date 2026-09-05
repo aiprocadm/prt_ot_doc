@@ -26,6 +26,8 @@ from app.models.models import (
     Person,
     PPEIssue,
     PPEIssueStatus,
+    TrainingCertificate,
+    TrainingProgram,
 )
 from app.models.obligations import Task, TaskPriority, TaskStatus
 from app.models.road_safety import Driver, Vehicle
@@ -721,6 +723,56 @@ async def test_attention_worker_sees_own_driver_license_only(db_session) -> None
     assert road[0].title == "Водительское удостоверение: Иванов Иван"
     by_code = {row.code: row for row in payload.disciplines}
     assert by_code["road_safety"].overdue == 1, "своё — да, чужое и машина — нет"
+
+
+@pytest.mark.asyncio
+async def test_attention_worker_sees_own_training_certificate_only(db_session) -> None:
+    """Разд. 57.2 (срез-75): истёкшее удостоверение — событие дисциплины «Обучение».
+
+    Рабочий видит только своё: чужое удостоверение того же арендатора в ленту
+    и в итог строки «Обучение» не попадает (``PERSON_SCOPED_SOURCES``).
+    """
+
+    tenant = SimpleNamespace(id="tenant-1", slug="tenant-a", name="Tenant A", is_active=True)
+    worker = _access("worker-1", "worker", tenant.id, tenant.slug)
+    today = datetime.now(timezone.utc).date()
+
+    mine = _person(tenant.id, email=worker.user.email)
+    stranger = _person(tenant.id, email="stranger@tenant.test")
+    program = TrainingProgram(
+        tenant_id=tenant.id, code="ОТ-1", title="Охрана труда", category="ot", kind="program"
+    )
+    db_session.add_all([mine, stranger, program])
+    await db_session.flush()
+    db_session.add_all(
+        [
+            TrainingCertificate(
+                tenant_id=tenant.id,
+                number="УД-1",
+                training_program_id=program.id,
+                person_id=mine.id,
+                issued_at=today - timedelta(days=400),
+                valid_until=today - timedelta(days=3),
+            ),
+            TrainingCertificate(
+                tenant_id=tenant.id,
+                number="УД-2",
+                training_program_id=program.id,
+                person_id=stranger.id,
+                issued_at=today - timedelta(days=400),
+                valid_until=today - timedelta(days=3),
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    payload = await workspace_attention(tenant=tenant, session=db_session, access=worker)
+
+    training = [item for item in payload.items if item.item_type == "training_certificate"]
+    assert [item.title for item in training] == ["Удостоверение: Охрана труда"]
+    assert training[0].discipline == "training"
+    by_code = {row.code: row for row in payload.disciplines}
+    assert by_code["training"].overdue == 1, "своё — да, чужое — нет"
 
 
 @pytest.mark.asyncio
