@@ -15,9 +15,11 @@
 - потолок обхода назван, а не проглочен;
 - (срез-72) срок отчётности или платежа эколога (срез-71) — событие с видом
   в ключе; исполненный срок событием не становится;
-- (срез-76) истёкшее удостоверение по обучению (срез-75) — единственный
-  источник ядра в обходе, потому что своего события у срока нет; бессрочное,
-  отозванное и действующее событием не становятся.
+- (срез-76) истёкшее удостоверение по обучению (срез-75) — источник ядра в
+  обходе, потому что своего события у срока нет; бессрочное, отозванное и
+  действующее событием не становятся;
+- (срез-78) просроченное назначение на обучение (срез-77) — второй источник
+  ядра по той же причине; сданное, проваленное, без срока и будущее молчат.
 """
 
 from __future__ import annotations
@@ -32,7 +34,13 @@ from app.core.disciplines import Discipline
 from app.models.civil_defense import CivilDefenseDrill
 from app.models.ecology import EcologyReportingDeadline
 from app.models.master_data import Person
-from app.models.models import Company, Outbox, TrainingCertificate, TrainingProgram
+from app.models.models import (
+    Company,
+    Outbox,
+    TrainingCertificate,
+    TrainingEnrollment,
+    TrainingProgram,
+)
 from app.models.road_safety import Driver, Vehicle
 from app.services import discipline_deadline_events as svc
 from app.services.discipline_deadline_events import (
@@ -122,7 +130,7 @@ def test_ядро_в_обходе_только_по_названной_прич�
         if SOURCE_DISCIPLINE[source] in core:
             assert source in CORE_DEADLINE_SOURCES, source
     assert CORE_DEADLINE_SOURCES <= set(DEADLINE_EVENT_SOURCES)
-    assert CORE_DEADLINE_SOURCES == {"training_certificate"}
+    assert CORE_DEADLINE_SOURCES == {"training_certificate", "training_enrollment"}
 
 
 async def test_просрочки_становятся_событиями_один_раз(sessionmaker, data_factory):
@@ -372,6 +380,62 @@ async def test_истёкшее_удостоверение_становится_
     assert payload["title"] == "Удостоверение: Охрана труда — Смирнова Анна"
     assert payload["person_id"] == str(person.id)
     assert payload["days_overdue"] == 4
+
+    assert (await _run(sessionmaker, tenant_id)).emitted == 0, "тот же день — ничего нового"
+
+
+async def test_просроченное_назначение_становится_событием_а_сданное_и_будущее_нет(
+    sessionmaker, data_factory
+):
+    """Срез-78: срок назначения (срез-77) — тот же обход; модуль не нужен."""
+
+    tenant_id = await _tenant(sessionmaker, data_factory, modules=())
+    now = datetime.now(timezone.utc)
+    async with sessionmaker() as session:
+        company = Company(tenant_id=tenant_id, name="ООО Стройка")
+        program = TrainingProgram(
+            tenant_id=tenant_id, code="ОТ-1", title="Охрана труда", category="ot", kind="program"
+        )
+        session.add_all([company, program])
+        await session.flush()
+        person = Person(
+            tenant_id=tenant_id, company_id=company.id, first_name="Олег", last_name="Кузнецов"
+        )
+        session.add(person)
+        await session.flush()
+
+        def enrollment(**kw):
+            return TrainingEnrollment(
+                tenant_id=tenant_id,
+                training_program_id=program.id,
+                person_id=person.id,
+                **kw,
+            )
+
+        session.add_all(
+            [
+                enrollment(status="assigned", due_at=now - timedelta(days=6)),
+                enrollment(status="passed", due_at=now - timedelta(days=6)),
+                enrollment(status="failed", due_at=now - timedelta(days=6)),
+                enrollment(status="assigned", due_at=None),
+                enrollment(status="in_progress", due_at=now + timedelta(days=5)),
+            ]
+        )
+        await session.commit()
+
+    outcome = await _run(sessionmaker, tenant_id)
+    assert outcome.emitted == 1, outcome
+    assert Discipline.TRAINING not in outcome.skipped, "обучение — ядро, модуля нет"
+
+    (row,) = await _events(sessionmaker, tenant_id)
+    key, payload = row.idempotency_key, row.payload
+    assert ":training_enrollment:" in key, key
+    assert key.endswith((now - timedelta(days=6)).date().isoformat())
+    assert payload["discipline"] == "training"
+    assert payload["source_type"] == "training_enrollment"
+    assert payload["title"] == "Назначение: Охрана труда — Кузнецов Олег"
+    assert payload["person_id"] == str(person.id)
+    assert payload["days_overdue"] == 6
 
     assert (await _run(sessionmaker, tenant_id)).emitted == 0, "тот же день — ничего нового"
 

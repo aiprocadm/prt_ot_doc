@@ -210,6 +210,42 @@ LIBRARY_RULES: tuple[LibraryRule, ...] = (
         ],
         priority=20,
     ),
+    LibraryRule(
+        discipline=Discipline.TRAINING,
+        name="Обучение: срок назначения истёк — обеспечить прохождение",
+        description=(
+            "Назначенное обучение работник обязан пройти в установленный срок; "
+            "работодатель обязан обеспечить обучение и не допускать к работе не "
+            "прошедших его (ТК РФ ст. 214, 76; ПП РФ № 2464). Срок назначения "
+            "истекает у конкретного человека (срез-77); правило ставит задачу "
+            "обеспечить прохождение — назначить дату, напомнить, при нужде "
+            "отстранить — и предупреждает специалиста по ОТ и кадры. Задача на "
+            "три дня: сдать обучение за день нельзя, но и тянуть месяц — тоже."
+        ),
+        event_type="DisciplineDeadlineOverdue",
+        conditions={
+            "match": "all",
+            "conditions": [{"field": "source_type", "op": "eq", "value": "training_enrollment"}],
+        },
+        actions=[
+            {
+                "type": "create_task",
+                "title_template": "{title}: срок истёк — обеспечить прохождение обучения",
+                "priority": "high",
+                "due_in_days": 3,
+                "assignee_mode": "none",
+            },
+            {
+                "type": "notify",
+                "title_template": "Истёк срок назначенного обучения",
+                "body_template": "{title} — срок истёк, просрочка {days_overdue} дн.; назначить дату и напомнить работнику.",
+                "recipient_mode": "role",
+                "roles": ["ot_specialist", "hr"],
+                "priority": "high",
+            },
+        ],
+        priority=20,
+    ),
     # ── Пожарная безопасность ───────────────────────────────────────────────
     LibraryRule(
         discipline=Discipline.FIRE_SAFETY,

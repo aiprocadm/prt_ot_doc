@@ -160,8 +160,8 @@ async def test_каталог_называет_дисциплины_без_пр�
 
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["total"] == 14
-    assert body["installed"] == 14
+    assert body["total"] == 15
+    assert body["installed"] == 15
     rows = {row["discipline"]: row for row in body["items"]}
     assert len(rows) == 8, "в каталоге обязаны быть ВСЕ дисциплины ТЗ"
     assert rows["fire_safety"]["rules"] == 1
@@ -360,6 +360,77 @@ async def test_истёкшее_удостоверение_доходит_до_�
 
 
 @pytest.mark.asyncio
+async def test_просроченное_назначение_доходит_до_задачи_и_один_раз(
+    tenant_with_library, sessionmaker
+):
+    """Срез-78 живьём: срок назначения (срез-77) → обход → событие → правило → задача.
+
+    Обучение — ядро: модуль не нужен. Сданное назначение задачи не рождает;
+    повторный обход в тот же день — второй задачи нет; правило удостоверения
+    (срез-76) на событие назначения молчит.
+    """
+
+    from datetime import datetime, timedelta, timezone
+
+    from app.models.master_data import Person
+    from app.models.models import Company, TrainingEnrollment, TrainingProgram
+    from app.services.discipline_deadline_events import emit_overdue_deadline_events
+
+    tenant, _ = tenant_with_library
+    tid = str(tenant.id)
+    now = datetime.now(timezone.utc)
+    async with sessionmaker() as session:
+        company = Company(tenant_id=tid, name="ООО Стройка")
+        program = TrainingProgram(
+            tenant_id=tid, code="ОТ-1", title="Охрана труда", category="ot", kind="program"
+        )
+        session.add_all([company, program])
+        await session.flush()
+        person = Person(
+            tenant_id=tid, company_id=company.id, first_name="Олег", last_name="Кузнецов"
+        )
+        session.add(person)
+        await session.flush()
+        session.add_all(
+            [
+                TrainingEnrollment(
+                    tenant_id=tid,
+                    training_program_id=program.id,
+                    person_id=person.id,
+                    status="assigned",
+                    due_at=now - timedelta(days=3),
+                ),
+                TrainingEnrollment(
+                    tenant_id=tid,
+                    training_program_id=program.id,
+                    person_id=person.id,
+                    status="passed",
+                    due_at=now - timedelta(days=3),
+                ),
+            ]
+        )
+        await session.commit()
+
+    for _ in range(2):
+        async with sessionmaker() as session:
+            await emit_overdue_deadline_events(session, tenant_id=tid)
+            await session.commit()
+
+    async with sessionmaker() as session:
+        titles = [
+            str(title)
+            for title in (
+                await session.execute(select(Task.title).where(Task.tenant_id == tid))
+            ).scalars()
+        ]
+    matching = [t for t in titles if "обеспечить прохождение обучения" in t]
+    assert len(matching) == 1, titles
+    assert matching[0].startswith("Назначение: Охрана труда — Кузнецов Олег")
+    # правила других источников на том же событии молчат
+    assert not any("переобучение" in t or "отстранить от рейсов" in t for t in titles), titles
+
+
+@pytest.mark.asyncio
 async def test_выдача_недостающих_правил_существующему_арендатору(
     async_client, make_auth_headers, sessionmaker, data_factory
 ):
@@ -381,18 +452,18 @@ async def test_выдача_недостающих_правил_существу
     first = await async_client.post(f"{RULES}/library/install", headers=headers)
     assert first.status_code == 200, first.text
     body = first.json()
-    assert len(body["created"]) == body["total"] == 14
-    assert body["installed"] == 14
+    assert len(body["created"]) == body["total"] == 15
+    assert body["installed"] == 15
     assert body["kept_deleted"] == []
     assert any("отстранить от рейсов" in name or "БДД" in name for name in body["created"])
 
     second = await async_client.post(f"{RULES}/library/install", headers=headers)
     assert second.status_code == 200, second.text
     assert second.json()["created"] == []
-    assert second.json()["installed"] == 14
+    assert second.json()["installed"] == 15
 
     after = await async_client.get(f"{RULES}/library", headers=headers)
-    assert after.json()["installed"] == 14
+    assert after.json()["installed"] == 15
     assert after.json()["removed"] == 0
     # срез-66: до выдачи каждая строка называла имена по своей дисциплине,
     # после — не выдано нечего
@@ -400,7 +471,7 @@ async def test_выдача_недостающих_правил_существу
     assert rows_before["road_safety"]["missing"] == [
         name for name in body["created"] if "БДД" in name or "рейс" in name
     ]
-    assert sum(len(row["missing"]) for row in rows_before.values()) == 14
+    assert sum(len(row["missing"]) for row in rows_before.values()) == 15
     assert all(row["missing"] == [] for row in after.json()["items"])
     assert all(row["removed"] == [] for row in after.json()["items"])
 
@@ -439,10 +510,10 @@ async def test_удалённое_специалистом_правило_не_�
     body = response.json()
     assert body["created"] == []
     assert body["kept_deleted"] == [name]
-    assert body["installed"] == 13
+    assert body["installed"] == 14
 
     catalog = await async_client.get(f"{RULES}/library", headers=headers)
-    assert catalog.json()["installed"] == 13
+    assert catalog.json()["installed"] == 14
     assert catalog.json()["removed"] == 1
     # срез-66: удалённое названо по имени в своей строке и НЕ числится «не выданным»
     rows = [row for row in catalog.json()["items"] if row["removed"]]
