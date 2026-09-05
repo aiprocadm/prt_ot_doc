@@ -769,7 +769,7 @@ async def test_attention_worker_sees_own_training_certificate_only(db_session) -
     payload = await workspace_attention(tenant=tenant, session=db_session, access=worker)
 
     training = [item for item in payload.items if item.item_type == "training_certificate"]
-    assert [item.title for item in training] == ["Удостоверение: Охрана труда"]
+    assert [item.title for item in training] == ["Удостоверение: Охрана труда — Иванов Иван"]
     assert training[0].discipline == "training"
     by_code = {row.code: row for row in payload.disciplines}
     assert by_code["training"].overdue == 1, "своё — да, чужое — нет"

@@ -14,7 +14,10 @@
 - окно — как у Центра внимания: полугодовой давности просрочка — архив;
 - потолок обхода назван, а не проглочен;
 - (срез-72) срок отчётности или платежа эколога (срез-71) — событие с видом
-  в ключе; исполненный срок событием не становится.
+  в ключе; исполненный срок событием не становится;
+- (срез-76) истёкшее удостоверение по обучению (срез-75) — единственный
+  источник ядра в обходе, потому что своего события у срока нет; бессрочное,
+  отозванное и действующее событием не становятся.
 """
 
 from __future__ import annotations
@@ -29,10 +32,11 @@ from app.core.disciplines import Discipline
 from app.models.civil_defense import CivilDefenseDrill
 from app.models.ecology import EcologyReportingDeadline
 from app.models.master_data import Person
-from app.models.models import Company, Outbox
+from app.models.models import Company, Outbox, TrainingCertificate, TrainingProgram
 from app.models.road_safety import Driver, Vehicle
 from app.services import discipline_deadline_events as svc
 from app.services.discipline_deadline_events import (
+    CORE_DEADLINE_SOURCES,
     DEADLINE_EVENT_SOURCES,
     emit_overdue_deadline_events,
 )
@@ -103,17 +107,22 @@ async def _run(sessionmaker, tenant_id: str):
         return outcome
 
 
-def test_обходятся_только_источники_пяти_дисциплин() -> None:
-    """Ядро (медосмотры, СИЗ) сюда не входит — у него свои события просрочки."""
+def test_ядро_в_обходе_только_по_названной_причине() -> None:
+    """Ядро (медосмотры, СИЗ) сюда не входит — у него свои события просрочки.
+
+    Исключение одно — ``CORE_DEADLINE_SOURCES`` (срез-76: у срока удостоверения
+    по обучению события нет). Новый источник ядра в обходе без записи в этом
+    списке — ошибка: две задачи на одну просрочку.
+    """
 
     from app.core.disciplines import SOURCE_DISCIPLINE
 
+    core = {Discipline.MEDICAL, Discipline.PPE, Discipline.TRAINING}
     for source in DEADLINE_EVENT_SOURCES:
-        assert SOURCE_DISCIPLINE[source] not in {
-            Discipline.MEDICAL,
-            Discipline.PPE,
-            Discipline.TRAINING,
-        }, source
+        if SOURCE_DISCIPLINE[source] in core:
+            assert source in CORE_DEADLINE_SOURCES, source
+    assert CORE_DEADLINE_SOURCES <= set(DEADLINE_EVENT_SOURCES)
+    assert CORE_DEADLINE_SOURCES == {"training_certificate"}
 
 
 async def test_просрочки_становятся_событиями_один_раз(sessionmaker, data_factory):
@@ -289,6 +298,80 @@ async def test_срок_отчётности_эколога_становится
     assert payload["kind"] == "report"
     assert payload["title"] == "Отчётность: 2-ТП (воздух)"
     assert payload["days_overdue"] == 6
+
+    assert (await _run(sessionmaker, tenant_id)).emitted == 0, "тот же день — ничего нового"
+
+
+async def test_истёкшее_удостоверение_становится_событием_а_бессрочное_и_отозванное_нет(
+    sessionmaker, data_factory
+):
+    """Срез-76: срок удостоверения (срез-75) — тот же обход; модуль не нужен."""
+
+    tenant_id = await _tenant(sessionmaker, data_factory, modules=())
+    async with sessionmaker() as session:
+        company = Company(tenant_id=tenant_id, name="ООО Стройка")
+        program = TrainingProgram(
+            tenant_id=tenant_id, code="ОТ-1", title="Охрана труда", category="ot", kind="program"
+        )
+        session.add_all([company, program])
+        await session.flush()
+        person = Person(
+            tenant_id=tenant_id, company_id=company.id, first_name="Анна", last_name="Смирнова"
+        )
+        session.add(person)
+        await session.flush()
+        session.add_all(
+            [
+                TrainingCertificate(
+                    tenant_id=tenant_id,
+                    number="УД-1",
+                    training_program_id=program.id,
+                    person_id=person.id,
+                    issued_at=TODAY - timedelta(days=370),
+                    valid_until=TODAY - timedelta(days=4),
+                ),
+                TrainingCertificate(
+                    tenant_id=tenant_id,
+                    number="УД-2",
+                    training_program_id=program.id,
+                    person_id=person.id,
+                    issued_at=TODAY - timedelta(days=370),
+                    valid_until=None,
+                ),
+                TrainingCertificate(
+                    tenant_id=tenant_id,
+                    number="УД-3",
+                    training_program_id=program.id,
+                    person_id=person.id,
+                    status="revoked",
+                    issued_at=TODAY - timedelta(days=370),
+                    valid_until=TODAY - timedelta(days=4),
+                ),
+                TrainingCertificate(
+                    tenant_id=tenant_id,
+                    number="УД-4",
+                    training_program_id=program.id,
+                    person_id=person.id,
+                    issued_at=TODAY - timedelta(days=10),
+                    valid_until=TODAY + timedelta(days=355),
+                ),
+            ]
+        )
+        await session.commit()
+
+    outcome = await _run(sessionmaker, tenant_id)
+    assert outcome.emitted == 1, outcome
+    assert Discipline.TRAINING not in outcome.skipped, "обучение — ядро, модуля нет"
+
+    (row,) = await _events(sessionmaker, tenant_id)
+    key, payload = row.idempotency_key, row.payload
+    assert ":training_certificate:" in key, key
+    assert key.endswith((TODAY - timedelta(days=4)).isoformat())
+    assert payload["discipline"] == "training"
+    assert payload["source_type"] == "training_certificate"
+    assert payload["title"] == "Удостоверение: Охрана труда — Смирнова Анна"
+    assert payload["person_id"] == str(person.id)
+    assert payload["days_overdue"] == 4
 
     assert (await _run(sessionmaker, tenant_id)).emitted == 0, "тот же день — ничего нового"
 
