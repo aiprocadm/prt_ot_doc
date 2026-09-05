@@ -17,7 +17,7 @@ from datetime import date, datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.discipline_status import DisciplineCounts
+from app.core.discipline_status import DisciplineCounts, RoadSafetyNumbers
 from app.models.master_data import EmploymentStatus, Person
 from app.services.discipline_numbers import collect_people_numbers
 
@@ -25,19 +25,25 @@ __all__ = ["ClientReadinessNumbers", "collect_client_numbers"]
 
 
 class ClientReadinessNumbers:
-    """Числа трёх измеримых направлений одного клиента."""
+    """Числа трёх измеримых направлений одного клиента + факт БДД (срез-64)."""
 
     def __init__(
-        self, medical: DisciplineCounts, ppe: DisciplineCounts, training_overdue: int
+        self,
+        medical: DisciplineCounts,
+        ppe: DisciplineCounts,
+        training_overdue: int,
+        road_safety: RoadSafetyNumbers | None = None,
     ) -> None:
         self.medical = medical
         self.ppe = ppe
         self.training_overdue = training_overdue
+        # Удостоверения водителей клиента — тем же правилом, что у карточки
+        # сотрудника и площадки: клиенту нельзя показывать другой БДД, чем его
+        # людям.
+        self.road_safety = road_safety or RoadSafetyNumbers()
 
 
-async def _company_people(
-    session: AsyncSession, tenant_id: str, company_id: str
-) -> list[Person]:
+async def _company_people(session: AsyncSession, tenant_id: str, company_id: str) -> list[Person]:
     rows = (
         await session.execute(
             select(Person).where(
@@ -74,4 +80,5 @@ async def collect_client_numbers(
         medical=numbers.medical,
         ppe=numbers.ppe,
         training_overdue=numbers.training_overdue,
+        road_safety=numbers.road_safety,
     )

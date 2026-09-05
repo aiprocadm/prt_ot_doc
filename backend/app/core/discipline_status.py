@@ -27,12 +27,21 @@
 **3. «Не было вовсе» и «было, но не действует» — разные разрывы.** Оба красные,
 но специалист по ним работает по-разному: первый — организовать с нуля, второй
 — продлить или довыдать. В расшифровке они названы отдельными числами.
+
+**4. БДД: удостоверение водителя — факт, а не эталон (срез-64).** У допущенного
+водителя есть один поимённый срок — удостоверение, и истекшее удостоверение
+красит БДД красным так же честно, как просроченное обучение красит
+«Обучение». Но зелёным БДД не бывает: действующее удостоверение не значит
+«всё положенное по БДД действует» — предрейсовые, стажировки и инструктажи
+эталоном не заданы. Это тот же приём, что у обучения: просрочка — красный,
+её отсутствие — не зелёный, а «не измеряется» с фактом в расшифровке.
 """
 
 from __future__ import annotations
 
 import enum
 from dataclasses import dataclass, field, replace
+from datetime import date
 
 from app.core.disciplines import (
     DISCIPLINE_TITLES,
@@ -43,9 +52,11 @@ from app.core.disciplines import (
 __all__ = [
     "DisciplineCounts",
     "DisciplineStatus",
+    "RoadSafetyNumbers",
     "TrafficLight",
     "build_discipline_statuses",
     "evaluate_counts",
+    "road_safety_status",
     "training_status",
     "with_extra_reason",
     "worst_light",
@@ -144,16 +155,99 @@ def training_status(overdue: int) -> DisciplineStatus:
     )
 
 
+@dataclass(frozen=True)
+class RoadSafetyNumbers:
+    """Водительские удостоверения по набору людей — поимённый факт БДД (срез-64).
+
+    Считаются ТОЛЬКО допущенные к управлению — то же правило, что у источника
+    ``road_safety_driver`` общего календаря и у готовности модуля БДД. Пустая
+    дата — «сведений нет», не просрочка (бессрочных удостоверений не бывает,
+    но «не знаем» и «истекло» — разные утверждения).
+    """
+
+    #: допущенных водителей среди этих людей
+    drivers: int = 0
+    #: удостоверение истекло
+    expired: int = 0
+    #: действует, но истекает в горизонте
+    expiring: int = 0
+    #: срок не указан — сведений нет
+    without_due: int = 0
+    #: ближайший срок среди действующих — карточке одного человека нужна дата
+    next_due: date | None = None
+
+
+def road_safety_status(numbers: RoadSafetyNumbers) -> DisciplineStatus:
+    """БДД по удостоверениям: просрочка — красный, остальное — не зелёный.
+
+    Без водителей — прежняя причина словаря: эталона БДД по должностям нет,
+    и у людей без удостоверения сравнивать не с чем. С водителями факт
+    называется в расшифровке (дата — когда водитель один), но цвет выше
+    жёлтого не поднимается: см. решение 4 в докстринге модуля.
+    """
+
+    base = UNMEASURED_DISCIPLINES[Discipline.ROAD_SAFETY]
+    title = DISCIPLINE_TITLES[Discipline.ROAD_SAFETY]
+    counts = DisciplineCounts(
+        required=numbers.drivers, lapsed=numbers.expired, expiring=numbers.expiring
+    )
+    if numbers.drivers == 0:
+        return DisciplineStatus(
+            discipline=Discipline.ROAD_SAFETY,
+            title=title,
+            light=TrafficLight.NOT_MEASURED,
+            reason=base,
+        )
+    no_date = f"; срок не указан: {numbers.without_due}" if numbers.without_due else ""
+    if numbers.expired > 0:
+        return DisciplineStatus(
+            discipline=Discipline.ROAD_SAFETY,
+            title=title,
+            light=TrafficLight.RED,
+            reason=f"Истекло водительское удостоверение: {numbers.expired}{no_date}",
+            counts=counts,
+        )
+    when = f" (до {numbers.next_due.strftime('%d.%m.%Y')})" if numbers.next_due else ""
+    if numbers.expiring > 0:
+        return DisciplineStatus(
+            discipline=Discipline.ROAD_SAFETY,
+            title=title,
+            light=TrafficLight.YELLOW,
+            reason=(
+                f"Водительское удостоверение истекает в ближайшее время: "
+                f"{numbers.expiring}{when}{no_date}"
+            ),
+            counts=counts,
+        )
+    if numbers.without_due == numbers.drivers:
+        fact = f"Срок водительского удостоверения не указан: {numbers.without_due}"
+    elif numbers.drivers == 1:
+        fact = f"Водительское удостоверение действует{when}"
+    else:
+        fact = f"Водительские удостоверения действуют: {numbers.drivers - numbers.without_due}{no_date}"
+    return DisciplineStatus(
+        discipline=Discipline.ROAD_SAFETY,
+        title=title,
+        light=TrafficLight.NOT_MEASURED,
+        reason=f"{fact}. {base}",
+        counts=counts,
+    )
+
+
 def build_discipline_statuses(
     *,
     medical: DisciplineCounts,
     ppe: DisciplineCounts,
     training_overdue: int,
+    road_safety: RoadSafetyNumbers | None = None,
 ) -> list[DisciplineStatus]:
     """Полный светофор: измеримое + дисциплины с причиной.
 
     Порядок фиксированный (как в ТЗ), а не «красное сверху»: светофор читают
     регулярно, и скачущие местами строки мешают сравнивать неделю с неделей.
+
+    ``road_safety`` необязателен: кто удостоверения не считал (светофор
+    клиента), получает прежнюю причину словаря, а не выдуманные нули.
     """
 
     rows: list[DisciplineStatus] = []
@@ -173,6 +267,9 @@ def build_discipline_statuses(
         )
     rows.append(training_status(training_overdue))
     for discipline, reason in UNMEASURED_DISCIPLINES.items():
+        if discipline is Discipline.ROAD_SAFETY and road_safety is not None:
+            rows.append(road_safety_status(road_safety))
+            continue
         rows.append(
             DisciplineStatus(
                 discipline=discipline,

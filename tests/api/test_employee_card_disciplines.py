@@ -10,7 +10,10 @@
 - «эталон не задан» говорит про должность человека, а не «должности клиента»;
 - уволенный не красится: «не измеряется» с причиной, итог ``not_measured``;
 - неизмеримые дисциплины в итог не входят: зелёные медосмотры и СИЗ дают
-  зелёный итог, а не «неизвестно».
+  зелёный итог, а не «неизвестно»;
+- (срез-64) у допущенного водителя строка «БДД» считается по удостоверению:
+  истекло — красный, действует — факт с датой, но не зелёный; у площадки те
+  же числа; не водитель — прежняя причина словаря.
 """
 
 from __future__ import annotations
@@ -26,6 +29,7 @@ from app.models.master_data import EmploymentStatus, Person, Site, Workplace
 from app.models.medical import MedicalExam, MedicalExamKind, MedicalNorm
 from app.models.models import Position, PPEIssue, PPEItem, PPENorm, RoleEnum
 from app.models.risk import RiskHazard
+from app.models.road_safety import Driver
 from app.models.training import TrainingEnrollment, TrainingProgram
 from app.services.employee_card import TERMINATED_REASON
 
@@ -201,6 +205,88 @@ class TestEmployeeCardDisciplines:
         # обучение без просрочек — «эталон не задан», а не зелёный
         assert _row(section, "training")["light"] == "not_measured"
         assert section["overall"] == "green"
+
+    async def test_удостоверение_водителя_красит_бдд_и_площадка_считает_так_же(
+        self, async_client: AsyncClient, make_auth_headers, welder, sessionmaker
+    ) -> None:
+        """Срез-64: у допущенного водителя БДД — по удостоверению.
+
+        Истекло — красный (как просрочка обучения). Площадка, где этот человек
+        единственный, показывает те же числа: правила одни. Не водитель —
+        прежняя причина словаря, слово в слово.
+        """
+
+        from app.core.disciplines import UNMEASURED_DISCIPLINES
+
+        tenant, person_id, site_id = welder
+        headers = await make_auth_headers(RoleEnum.ADMIN)
+
+        before = (await _card(async_client, headers, person_id))["disciplines"]
+        assert _row(before, "road_safety")["light"] == "not_measured"
+        assert (
+            _row(before, "road_safety")["reason"] == UNMEASURED_DISCIPLINES[Discipline.ROAD_SAFETY]
+        )
+
+        async with sessionmaker() as session:
+            session.add(
+                Driver(
+                    tenant_id=tenant.id,
+                    person_id=person_id,
+                    license_number="77 АА 000001",
+                    categories=["B"],
+                    license_due=TODAY - timedelta(days=2),
+                    status="admitted",
+                )
+            )
+            await session.commit()
+
+        section = (await _card(async_client, headers, person_id))["disciplines"]
+        site = (await async_client.get(f"/api/v1/sites/{site_id}/overview", headers=headers)).json()
+
+        row = _row(section, "road_safety")
+        assert row["light"] == "red"
+        assert row["reason"] == "Истекло водительское удостоверение: 1"
+        assert row["required"] == 1 and row["lapsed"] == 1
+        theirs = next(r for r in site["disciplines"] if r["discipline"] == "road_safety")
+        assert (theirs["light"], theirs["required"], theirs["lapsed"]) == ("red", 1, 1)
+
+    async def test_действующее_удостоверение_это_факт_а_не_зелёный(
+        self, async_client: AsyncClient, make_auth_headers, welder, sessionmaker
+    ) -> None:
+        """Отстранённый водитель не считается вовсе; действующее удостоверение
+        называется с датой, но цвет — «не измеряется»: эталона БДД нет."""
+
+        tenant, person_id, _ = welder
+        headers = await make_auth_headers(RoleEnum.ADMIN)
+        due = TODAY + timedelta(days=200)
+
+        async with sessionmaker() as session:
+            driver = Driver(
+                tenant_id=tenant.id,
+                person_id=person_id,
+                license_number="77 АА 000002",
+                categories=["B"],
+                license_due=due,
+                status="suspended",
+            )
+            session.add(driver)
+            await session.commit()
+            driver_id = driver.id
+
+        suspended = (await _card(async_client, headers, person_id))["disciplines"]
+        assert _row(suspended, "road_safety")["required"] == 0
+
+        async with sessionmaker() as session:
+            record = await session.get(Driver, driver_id)
+            record.status = "admitted"
+            await session.commit()
+
+        row = _row((await _card(async_client, headers, person_id))["disciplines"], "road_safety")
+        assert row["light"] == "not_measured"
+        assert row["reason"].startswith(
+            f"Водительское удостоверение действует (до {due.strftime('%d.%m.%Y')}). "
+        )
+        assert "эталон" in row["reason"].lower()
 
     async def test_эталон_не_задан_говорит_про_должность_человека(
         self, async_client: AsyncClient, make_auth_headers, sessionmaker, data_factory
