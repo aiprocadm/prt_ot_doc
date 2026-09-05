@@ -31,7 +31,7 @@ from __future__ import annotations
 from datetime import date, datetime, time, timezone
 from typing import Any, Iterable
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.civil_defense import CivilDefenseDrill
@@ -72,6 +72,7 @@ __all__ = [
     "CalendarAggregatorService",
     "MAX_ITEMS_PER_SOURCE",
     "ALL_SOURCES",
+    "overdue_compliance_deadline_where",
 ]
 
 MAX_ITEMS_PER_SOURCE = 50
@@ -118,6 +119,20 @@ _VEHICLE_DUE_COLUMNS: tuple[tuple[str, str, str], ...] = (
 )
 
 _CLOSED_DEADLINE_STATUSES = frozenset({"closed", "completed", "cancelled"})
+
+
+def overdue_compliance_deadline_where(now: datetime):
+    """Одно условие «контрольный срок просрочен» для календаря и Центра внимания (срез-73).
+
+    Просрочка считается по времени, а не по сохранённому статусу: статус `overdue`
+    пишет только ручной пересчёт сертификатов, и между пересчётами строка с `upcoming`
+    и прошедшей датой иначе выпадала бы из счётчика. Закрытые статусы не считаются.
+    """
+    return and_(
+        ComplianceDeadline.status.notin_(tuple(_CLOSED_DEADLINE_STATUSES)),
+        ComplianceDeadline.due_at < now,
+    )
+
 
 # Per-source SLA thresholds: (critical_window_days, warning_window_days).
 # `critical` ⇒ inner band (urgent, immediate attention); `warning` ⇒ outer
@@ -1828,8 +1843,7 @@ class CalendarAggregatorService:
         total = await self._count(base_count)
         overdue = await self._count(
             base_count.where(
-                ComplianceDeadline.status.notin_(tuple(_CLOSED_DEADLINE_STATUSES)),
-                ComplianceDeadline.due_at < now,
+                overdue_compliance_deadline_where(now),
             )
         )
         return items, total, overdue

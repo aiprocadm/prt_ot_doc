@@ -139,6 +139,61 @@ async def test_workspace_attention_returns_overdue_deadlines_and_sync_counts(db_
     assert any("просроченные задачи" in rec for rec in payload.recommendations)
 
 
+# ── BIZ-54-57 срез-73: просрочка контрольных сроков считается по времени ──────
+
+
+@pytest.mark.asyncio
+async def test_attention_counts_stale_upcoming_deadline_as_overdue(db_session) -> None:
+    """Статус `overdue` пишет только ручной пересчёт сертификатов. Без него строка
+    `upcoming` с прошедшей датой всё равно просрочена — и Центр внимания, и сводка
+    роли, и календарь считают её по одной формуле (разд. 57.2). Закрытые не считаются."""
+    from app.services.calendar_aggregator import CalendarAggregatorService
+
+    tenant = SimpleNamespace(id="tenant-1", slug="tenant-a", name="Tenant A", is_active=True)
+    access = _access("user-1", "admin", tenant.id, tenant.slug)
+    now = datetime.now(timezone.utc)
+
+    db_session.add_all(
+        [
+            ComplianceDeadline(
+                tenant_id=tenant.id,
+                entity_type="certificate",
+                entity_id="cert-stale",
+                due_at=now - timedelta(hours=1),
+                status="upcoming",  # пересчёт не запускали — статус устарел
+            ),
+            ComplianceDeadline(
+                tenant_id=tenant.id,
+                entity_type="certificate",
+                entity_id="cert-future",
+                due_at=now + timedelta(days=3),
+                status="upcoming",
+            ),
+            ComplianceDeadline(
+                tenant_id=tenant.id,
+                entity_type="certificate",
+                entity_id="cert-done",
+                due_at=now - timedelta(days=2),
+                status="completed",
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    attention = await workspace_attention(
+        tenant=tenant, session=db_session, access=access, limit=20
+    )
+    summary = await role_workspace_summary(tenant=tenant, session=db_session, access=access)
+    calendar = await CalendarAggregatorService(tenant_id=tenant.id, db=db_session).list_events(
+        source_types=("compliance_deadline",)
+    )
+    calendar_overdue = {c.source_type: c.overdue_count for c in calendar.by_source}
+
+    assert attention.summary.overdue_deadlines == 1
+    assert summary.overdue_deadlines == 1
+    assert calendar_overdue["compliance_deadline"] == 1
+
+
 # ── BIZ-54-57 срез-1: дисциплины в Центре внимания (Доп. №1 разд. 57.2) ──────
 
 

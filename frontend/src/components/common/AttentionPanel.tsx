@@ -185,7 +185,9 @@ export const AttentionPanel = ({
             )}
             {s.overdue_deadlines > 0 && (
               <Link
-                to="/tasks?overdue=true"
+                // Счётчик — контрольные сроки, а не задачи: своей страницы у них нет,
+                // единственный экран — календарь с отбором «просрочено» (срез-73).
+                to="/calendar?sources=compliance_deadline&include_sla=1&sla_bands=overdue"
                 className="flex items-center gap-1 text-destructive hover:underline"
               >
                 <AlertCircle className="h-3.5 w-3.5" />
