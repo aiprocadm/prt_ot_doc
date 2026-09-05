@@ -83,6 +83,18 @@ export interface RuleLibraryPage {
   total: number;
   /** Сколько правил библиотеки уже заведено у арендатора. */
   installed: number;
+  /** Сколько правил библиотеки специалист удалил — выдача их не вернёт (срез-63). */
+  removed: number;
+}
+
+/** Итог выдачи недостающих правил библиотеки (BIZ-54-57 срез-63). */
+export interface RuleLibraryInstallOut {
+  /** Имена заведённых сейчас правил. */
+  created: string[];
+  /** Имена правил, удалённых специалистом ранее: не вернули. */
+  kept_deleted: string[];
+  installed: number;
+  total: number;
 }
 
 export interface DryRunEvent {

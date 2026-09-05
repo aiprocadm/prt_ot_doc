@@ -9,7 +9,10 @@
 * правило другой дисциплины на этом же событии НЕ срабатывает — вид работ
   разделяет ПБ и ПромБез, иначе «дисциплина» была бы украшением;
 * повторная выдача библиотеки не плодит копий;
-* каталог библиотеки называет дисциплины без правил ПРИЧИНОЙ, а не нулём.
+* каталог библиотеки называет дисциплины без правил ПРИЧИНОЙ, а не нулём;
+* (срез-62) просроченные права водителя доходят до задачи — и ровно одной;
+* (срез-63) ручка выдачи даёт существующему арендатору недостающие правила,
+  не возвращает удалённые специалистом и доступна только admin/owner.
 """
 
 from __future__ import annotations
@@ -220,3 +223,98 @@ async def test_просроченные_права_водителя_доходя
     assert "Рулёв" in matching[0]
     # правило другой дисциплины на том же событии молчит
     assert not any("ЭПБ" in t or "разрешение" in t for t in titles), titles
+
+
+@pytest.mark.asyncio
+async def test_выдача_недостающих_правил_существующему_арендатору(
+    async_client, make_auth_headers, sessionmaker, data_factory
+):
+    """Срез-63: арендатор, созданный до пополнения библиотеки, получает правила ручкой.
+
+    Первая выдача заводит всё; вторая — ничего не плодит и честно говорит
+    «создано 0». Каталог после выдачи показывает «выдано 12 из 12».
+    """
+
+    async with sessionmaker() as session:
+        await data_factory.ensure_tenant(session=session)
+        await session.commit()
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+
+    before = await async_client.get(f"{RULES}/library", headers=headers)
+    assert before.status_code == 200, before.text
+    assert before.json()["installed"] == 0
+
+    first = await async_client.post(f"{RULES}/library/install", headers=headers)
+    assert first.status_code == 200, first.text
+    body = first.json()
+    assert len(body["created"]) == body["total"] == 12
+    assert body["installed"] == 12
+    assert body["kept_deleted"] == []
+    assert any("отстранить от рейсов" in name or "БДД" in name for name in body["created"])
+
+    second = await async_client.post(f"{RULES}/library/install", headers=headers)
+    assert second.status_code == 200, second.text
+    assert second.json()["created"] == []
+    assert second.json()["installed"] == 12
+
+    after = await async_client.get(f"{RULES}/library", headers=headers)
+    assert after.json()["installed"] == 12
+    assert after.json()["removed"] == 0
+
+
+@pytest.mark.asyncio
+async def test_удалённое_специалистом_правило_не_возвращается(
+    async_client, make_auth_headers, tenant_with_library, sessionmaker
+):
+    """Срез-63: удаление — решение специалиста, выдача его не отменяет.
+
+    Имя правила уникально на арендатора БЕЗ учёта удалённых, поэтому старый
+    посев «по живым именам» упёрся бы здесь в ограничение базы. Теперь
+    удалённое называется в ответе отдельно, а посев при создании арендатора
+    (``seed_rule_library``) на том же арендаторе тоже не падает.
+    """
+
+    from app.models.rules_engine import AutomationRule
+
+    tenant, _ = tenant_with_library
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+
+    async with sessionmaker() as session:
+        rule_id, name = (
+            await session.execute(
+                select(AutomationRule.id, AutomationRule.name)
+                .where(AutomationRule.tenant_id == str(tenant.id))
+                .order_by(AutomationRule.name)
+                .limit(1)
+            )
+        ).one()
+    deleted = await async_client.delete(f"{RULES}/{rule_id}", headers=headers)
+    assert deleted.status_code in (200, 204), deleted.text
+
+    response = await async_client.post(f"{RULES}/library/install", headers=headers)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["created"] == []
+    assert body["kept_deleted"] == [name]
+    assert body["installed"] == 11
+
+    catalog = await async_client.get(f"{RULES}/library", headers=headers)
+    assert catalog.json()["installed"] == 11
+    assert catalog.json()["removed"] == 1
+
+    async with sessionmaker() as session:
+        assert await seed_rule_library(session, tenant_id=str(tenant.id)) == 0
+        await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_выдачу_библиотеки_делает_только_админ(
+    async_client, make_auth_headers, tenant_with_library
+):
+    """Правила исполняют действия от имени системы — выдаёт их только admin/owner."""
+
+    headers = await make_auth_headers(RoleEnum.WORKER)
+
+    response = await async_client.post(f"{RULES}/library/install", headers=headers)
+
+    assert response.status_code == 403, response.text

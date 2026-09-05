@@ -32,6 +32,7 @@ vi.mock("@/api/rules", async (importOriginal) => {
       test: vi.fn(),
       triggers: vi.fn(),
       library: vi.fn(),
+      installLibrary: vi.fn(),
     },
   };
 });
@@ -106,6 +107,7 @@ const FEATURE_OFF_ERROR = {
 const LIBRARY = {
   total: 6,
   installed: 6,
+  removed: 0,
   items: [
     {
       discipline: "fire_safety",
@@ -357,6 +359,55 @@ describe("RulesPage", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByText(/выдано 6 из 6/)).toBeInTheDocument();
+  });
+
+  it("выдаёт недостающие правила библиотеки и перечитывает экран (срез-63)", async () => {
+    vi.mocked(rulesApi.library).mockResolvedValue({
+      ...LIBRARY,
+      total: 12,
+      installed: 6,
+    });
+    vi.mocked(rulesApi.installLibrary).mockResolvedValue({
+      created: ["БДД: истёк срок водительского удостоверения"],
+      kept_deleted: [],
+      installed: 12,
+      total: 12,
+    });
+    renderPage();
+
+    const button = await screen.findByRole("button", {
+      name: /Выдать недостающие \(6\)/,
+    });
+    expect(rulesApi.list).toHaveBeenCalledTimes(1);
+    fireEvent.click(button);
+
+    await waitFor(() => expect(rulesApi.installLibrary).toHaveBeenCalled());
+    // После выдачи экран обязан перечитать и реестр правил, и библиотеку:
+    // иначе «выдано 6 из 12» так и висело бы.
+    await waitFor(() => expect(rulesApi.list).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(rulesApi.library).toHaveBeenCalledTimes(2));
+  });
+
+  it("удалённые специалистом правила названы числом, а кнопки без недостающих нет", async () => {
+    vi.mocked(rulesApi.library).mockResolvedValue({
+      ...LIBRARY,
+      total: 12,
+      installed: 10,
+      removed: 2,
+    });
+    renderPage();
+
+    await screen.findByTestId("rule-library");
+    expect(screen.getByTestId("rule-library-removed")).toHaveTextContent(
+      "удалено вами: 2",
+    );
+    // 10 + 2 = 12: ни разу не выданных нет — кнопка, которая ничего не
+    // сделает, хуже отсутствующей.
+    expect(
+      screen.queryByRole("button", { name: /Выдать недостающие/ }),
+    ).not.toBeInTheDocument();
+    // Событие сроков названо словами, а не кодом.
+    expect(screen.getByText(/«Срок дисциплины просрочен»/)).toBeInTheDocument();
   });
 
   it("ошибка библиотеки не гасит реестр правил", async () => {
