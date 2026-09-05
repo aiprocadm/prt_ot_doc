@@ -76,6 +76,10 @@ export interface RuleLibraryDiscipline {
   rules: number;
   /** Почему правил нет. Пусто у дисциплин, где правила есть. */
   reason: string;
+  /** Имена правил дисциплины, ни разу не выданных арендатору (срез-66). */
+  missing: string[];
+  /** Имена правил дисциплины, удалённых специалистом: выдача не вернёт. */
+  removed: string[];
 }
 
 export interface RuleLibraryPage {

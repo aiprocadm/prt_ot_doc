@@ -23,6 +23,10 @@ import type { RuleLibraryPage } from "@/types/dto/rules";
  * Кнопка «Выдать недостающие» даёт существующему арендатору новые правила;
  * удалённые специалистом она НЕ возвращает — и панель говорит об этом
  * числом, иначе «выдано 10 из 12» читалось бы как «два потеряли».
+ *
+ * Срез-66: числа мало — в строке дисциплины названы ИМЕНА: «не выдано: …»
+ * (это и заведёт кнопка) и «удалено вами: …» (это она не тронет). Иначе
+ * специалист гадал бы, каких двух не хватает и что именно вернёт нажатие.
  */
 
 /** Событие, на котором живут правила по срокам дисциплин (срез-62). */
@@ -111,6 +115,22 @@ export const RuleLibraryPanel = ({ library, onInstalled }: Props) => {
                     правил нет — {row.reason}
                   </span>
                 )}
+                {row.missing.length > 0 ? (
+                  <span
+                    className="text-muted-foreground"
+                    data-testid={`rule-library-missing-${row.discipline}`}
+                  >
+                    не выдано: {row.missing.join("; ")}
+                  </span>
+                ) : null}
+                {row.removed.length > 0 ? (
+                  <span
+                    className="text-muted-foreground"
+                    data-testid={`rule-library-removed-${row.discipline}`}
+                  >
+                    удалено вами: {row.removed.join("; ")}
+                  </span>
+                ) : null}
               </li>
             ))}
           </ul>
