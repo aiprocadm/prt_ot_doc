@@ -339,6 +339,7 @@ class EmployeeCardService:
                 medical=numbers.medical,
                 ppe=numbers.ppe,
                 training_overdue=numbers.training_overdue,
+                road_safety=numbers.road_safety,
             ),
             applicability,
         )

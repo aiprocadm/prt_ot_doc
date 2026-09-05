@@ -8,6 +8,8 @@
   видит в принципе;
 * действующие записи дают зелёный, истекающие — жёлтый;
 * дисциплины без поимённого учёта отданы с причиной, а не выкрашены;
+* БДД у клиента считается тем же правилом, что у сотрудника и площадки
+  (срез-64): истёкшее удостоверение водителя — красный, а не «не ведётся»;
 * Dedicated-клиент — честное ``not_aggregated``, не нули;
 * выключенный модуль — 404.
 """
@@ -24,6 +26,7 @@ from app.domains.managed_clients.lifecycle import ContractStatus, ManagedClientM
 from app.models.managed_clients import ManagedClient
 from app.models.medical import MedicalExam, MedicalExamKind, MedicalNorm
 from app.models.models import Position, RoleEnum
+from app.models.road_safety import Driver
 
 BASE = "/api/v1/managed-clients"
 
@@ -191,6 +194,35 @@ class TestClientReadiness:
         assert ecology["light"] == "not_measured"
         assert "не ведётся" in ecology["reason"]
         assert body["not_applicable"] is None
+
+    async def test_удостоверение_водителя_красит_бдд_клиента(
+        self, async_client: AsyncClient, make_auth_headers, served_client
+    ) -> None:
+        """Срез-64: у клиента и у его сотрудника БДД одного цвета."""
+
+        tenant, person, mcid = served_client
+        headers = await make_auth_headers(RoleEnum.ADMIN)
+        before = _direction(await _readiness(async_client, headers, mcid), "road_safety")
+        assert before["light"] == "not_measured"
+        assert "эталон" in before["reason"]
+
+        async with await _trusted() as session:
+            session.add(
+                Driver(
+                    tenant_id=tenant.id,
+                    person_id=person.id,
+                    license_number="77 АА 000001",
+                    license_due=TODAY - timedelta(days=2),
+                    status="admitted",
+                )
+            )
+            await session.commit()
+
+        after = _direction(await _readiness(async_client, headers, mcid), "road_safety")
+        assert after["light"] == "red"
+        assert after["reason"] == "Истекло водительское удостоверение: 1"
+        assert after["required"] == 1
+        assert after["lapsed"] == 1
 
     async def test_дисциплина_вне_редакции_исполнителя_скрыта_и_названа(
         self,

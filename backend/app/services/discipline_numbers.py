@@ -18,6 +18,10 @@
   сравниваются без учёта регистра (выдачи заводились и руками).
 - **«Истекает» считается только у закрытых норм**: у разрыва истекать нечему,
   он уже красный.
+- **БДД считается по допущенным водителям** (срез-64): удостоверение —
+  единственный поимённый срок дисциплины, правило то же, что у источника
+  ``road_safety_driver`` общего календаря. Пустая дата — «сведений нет», не
+  просрочка. Горизонт «истекает» — общий с медосмотрами и СИЗ.
 
 Выборки помещаются в память намеренно: честная склейка пар «сотрудник × норма»
 в Python читается и проверяется лучше, чем один нечитаемый мега-JOIN.
@@ -32,11 +36,12 @@ from datetime import date, datetime, timedelta, timezone
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.discipline_status import DisciplineCounts
+from app.core.discipline_status import DisciplineCounts, RoadSafetyNumbers
 from app.core.feature_flags import as_utc
 from app.models.master_data import Person
 from app.models.medical import MedicalExam, MedicalNorm
 from app.models.ppe import PPEIssue, PPENorm
+from app.models.road_safety import Driver
 from app.models.training import TrainingEnrollment
 
 __all__ = ["DisciplineNumbers", "collect_people_numbers"]
@@ -47,11 +52,48 @@ _ACTIVE_TRAINING_STATUSES = ("assigned", "in_progress")
 
 @dataclass(frozen=True)
 class DisciplineNumbers:
-    """Числа трёх измеримых дисциплин по набору людей."""
+    """Числа трёх измеримых дисциплин по набору людей + факт БДД (срез-64)."""
 
     medical: DisciplineCounts
     ppe: DisciplineCounts
     training_overdue: int
+    road_safety: RoadSafetyNumbers = RoadSafetyNumbers()
+
+
+async def _road_safety_numbers(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    person_ids: list[str],
+    today: date,
+    horizon: timedelta,
+) -> RoadSafetyNumbers:
+    """Удостоверения допущенных водителей среди этих людей."""
+
+    dues = (
+        (
+            await session.execute(
+                select(Driver.license_due).where(
+                    Driver.tenant_id == tenant_id,
+                    Driver.person_id.in_(person_ids),
+                    Driver.deleted_at.is_(None),
+                    Driver.status == "admitted",
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not dues:
+        return RoadSafetyNumbers()
+    valid = sorted(due for due in dues if due is not None and due >= today)
+    return RoadSafetyNumbers(
+        drivers=len(dues),
+        expired=sum(1 for due in dues if due is not None and due < today),
+        expiring=sum(1 for due in valid if due <= today + horizon),
+        without_due=sum(1 for due in dues if due is None),
+        next_due=valid[0] if valid else None,
+    )
 
 
 def _medical_counts(
@@ -79,9 +121,7 @@ def _medical_counts(
                 lapsed += 1
             else:
                 missing += 1
-    return DisciplineCounts(
-        required=required, missing=missing, lapsed=lapsed, expiring=expiring
-    )
+    return DisciplineCounts(required=required, missing=missing, lapsed=lapsed, expiring=expiring)
 
 
 def _ppe_counts(
@@ -100,9 +140,7 @@ def _ppe_counts(
         for norm in norms:
             required += 1
             item = (norm.item_name or "").strip().lower()
-            same_item = [
-                i for i in issues if (i.item_name or "").strip().lower() == item
-            ]
+            same_item = [i for i in issues if (i.item_name or "").strip().lower() == item]
             # ``as_utc`` обязателен: SQLite отдаёт expires_at без зоны, и
             # сравнение с aware-now падало бы ровно в момент показа светофора.
             active = [
@@ -113,8 +151,7 @@ def _ppe_counts(
             ]
             if len(active) >= max(int(norm.quantity or 1), 1):
                 if any(
-                    i.expires_at is not None
-                    and (as_utc(i.expires_at) or deadline) < deadline
+                    i.expires_at is not None and (as_utc(i.expires_at) or deadline) < deadline
                     for i in active
                 ):
                     expiring += 1
@@ -122,9 +159,7 @@ def _ppe_counts(
                 lapsed += 1
             else:
                 missing += 1
-    return DisciplineCounts(
-        required=required, missing=missing, lapsed=lapsed, expiring=expiring
-    )
+    return DisciplineCounts(required=required, missing=missing, lapsed=lapsed, expiring=expiring)
 
 
 async def collect_people_numbers(
@@ -136,7 +171,7 @@ async def collect_people_numbers(
     now: datetime | None = None,
     horizon_days: int = 30,
 ) -> DisciplineNumbers:
-    """Собрать числа трёх измеримых дисциплин по готовому набору людей."""
+    """Собрать числа измеримых дисциплин и факт БДД по готовому набору людей."""
 
     today = today or datetime.now(tz=timezone.utc).date()
     now = now or datetime.now(tz=timezone.utc)
@@ -231,9 +266,10 @@ async def collect_people_numbers(
     )
 
     return DisciplineNumbers(
-        medical=_medical_counts(
-            people, med_norms, exams_by_person, today=today, horizon=horizon
-        ),
+        medical=_medical_counts(people, med_norms, exams_by_person, today=today, horizon=horizon),
         ppe=_ppe_counts(people, ppe_norms, issues_by_person, now=now, horizon=horizon),
         training_overdue=training_overdue,
+        road_safety=await _road_safety_numbers(
+            session, tenant_id=tenant_id, person_ids=person_ids, today=today, horizon=horizon
+        ),
     )
