@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.db.session import rearm_session_tenant_context
-from app.models.models import Tenant
+from app.models.models import Incident, Tenant
 from app.models.safety_core import (
     RiskMapItem,
     RiskMapItemMeasure,
@@ -20,9 +20,10 @@ from app.models.safety_core import (
     SafetyRiskMap,
     SafetyRiskMethodology,
 )
-from app.models.safety_ops import CorrectiveAction, IncidentCase
+from app.models.safety_ops import CorrectiveAction
 from app.modules.rbac_abac import require_permission
 from app.modules.risk.services import RiskCalculationService, RiskMeasureService
+from app.services.discipline_incidents import open_incidents_where
 
 router = APIRouter(prefix="/risk/advanced", tags=["risk-advanced"])
 
@@ -375,12 +376,13 @@ async def risk_summary(
             )
         ).scalar_one()
     )
+    # «Давление происшествий» — живые происшествия арендатора по общей формуле
+    # (срез-74). Раньше считались строки `IncidentCase` — таблицы, которую ни одна
+    # ручка не заполняет, — и цифра всегда была нулём.
     open_incidents = int(
         (
             await session.execute(
-                select(func.count())
-                .select_from(IncidentCase)
-                .where(IncidentCase.tenant_id == tenant.id, IncidentCase.status != "closed")
+                select(func.count()).select_from(Incident).where(*open_incidents_where(tenant.id))
             )
         ).scalar_one()
     )
