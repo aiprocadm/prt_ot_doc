@@ -160,11 +160,13 @@ async def test_каталог_называет_дисциплины_без_пр�
 
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["total"] == 16
-    assert body["installed"] == 16
+    assert body["total"] == 18
+    assert body["installed"] == 18
     rows = {row["discipline"]: row for row in body["items"]}
     assert len(rows) == 8, "в каталоге обязаны быть ВСЕ дисциплины ТЗ"
-    assert rows["fire_safety"]["rules"] == 2, "наряд на огневые + срок средства защиты (срез-79)"
+    assert (
+        rows["fire_safety"]["rules"] == 4
+    ), "наряд на огневые + срок средства защиты (срез-79) + тренировка и документ (срез-80)"
     # срез-62: событие сроков закрыло три пустые клетки — причин больше нет,
     # но поле остаётся: пустая клетка без причины по-прежнему запрещена
     for code in ("ecology", "civil_defense", "road_safety"):
@@ -490,6 +492,76 @@ async def test_просроченная_перезарядка_доходит_д
 
 
 @pytest.mark.asyncio
+async def test_тренировка_и_документ_пб_доходят_до_задач_и_один_раз(
+    tenant_with_library, sessionmaker, data_factory
+):
+    """Срез-80 живьём: тренировка и пересмотр документа → обход → событие → правило → задача.
+
+    Проведённая тренировка и бессрочный документ задач не рождают; повторный
+    обход в тот же день — вторых задач нет; правило на средства защиты молчит.
+    """
+
+    from datetime import date, timedelta
+
+    from app.models.fire_safety import FireDrill, FireSafetyDocument
+    from app.services.discipline_deadline_events import emit_overdue_deadline_events
+
+    tenant, _ = tenant_with_library
+    tid = str(tenant.id)
+    async with sessionmaker() as session:
+        await data_factory.set_modules(session, tenant.id, ("fire_safety",))
+        session.add_all(
+            [
+                FireDrill(
+                    tenant_id=tid,
+                    kind="evacuation",
+                    title="Эвакуация корпус А",
+                    planned_on=date.today() - timedelta(days=4),
+                ),
+                FireDrill(
+                    tenant_id=tid,
+                    kind="evacuation",
+                    title="Проведённая",
+                    planned_on=date.today() - timedelta(days=4),
+                    held_on=date.today() - timedelta(days=4),
+                    outcome="passed",
+                ),
+                FireSafetyDocument(
+                    tenant_id=tid,
+                    kind="evacuation_plan",
+                    title="Корпус А, 2 этаж",
+                    review_due=date.today() - timedelta(days=9),
+                ),
+                FireSafetyDocument(tenant_id=tid, kind="journal", title="Журнал"),
+            ]
+        )
+        await session.commit()
+
+    for _ in range(2):
+        async with sessionmaker() as session:
+            await emit_overdue_deadline_events(session, tenant_id=tid)
+            await session.commit()
+
+    async with sessionmaker() as session:
+        titles = [
+            str(title)
+            for title in (
+                await session.execute(select(Task.title).where(Task.tenant_id == tid))
+            ).scalars()
+        ]
+    drills = [t for t in titles if "провести или перенести" in t]
+    assert drills == [
+        "Тренировка ПБ: Эвакуация корпус А: плановая дата прошла — провести или перенести"
+    ], titles
+    documents = [t for t in titles if "срок пересмотра истёк — актуализировать" in t]
+    assert documents == [
+        "Пересмотр: План эвакуации — Корпус А, 2 этаж: срок пересмотра истёк — актуализировать"
+    ], titles
+    # правила других источников на тех же событиях молчат
+    assert not any("заказать перезарядку" in t for t in titles), titles
+
+
+@pytest.mark.asyncio
 async def test_выдача_недостающих_правил_существующему_арендатору(
     async_client, make_auth_headers, sessionmaker, data_factory
 ):
@@ -511,18 +583,18 @@ async def test_выдача_недостающих_правил_существу
     first = await async_client.post(f"{RULES}/library/install", headers=headers)
     assert first.status_code == 200, first.text
     body = first.json()
-    assert len(body["created"]) == body["total"] == 16
-    assert body["installed"] == 16
+    assert len(body["created"]) == body["total"] == 18
+    assert body["installed"] == 18
     assert body["kept_deleted"] == []
     assert any("отстранить от рейсов" in name or "БДД" in name for name in body["created"])
 
     second = await async_client.post(f"{RULES}/library/install", headers=headers)
     assert second.status_code == 200, second.text
     assert second.json()["created"] == []
-    assert second.json()["installed"] == 16
+    assert second.json()["installed"] == 18
 
     after = await async_client.get(f"{RULES}/library", headers=headers)
-    assert after.json()["installed"] == 16
+    assert after.json()["installed"] == 18
     assert after.json()["removed"] == 0
     # срез-66: до выдачи каждая строка называла имена по своей дисциплине,
     # после — не выдано нечего
@@ -530,7 +602,7 @@ async def test_выдача_недостающих_правил_существу
     assert rows_before["road_safety"]["missing"] == [
         name for name in body["created"] if "БДД" in name or "рейс" in name
     ]
-    assert sum(len(row["missing"]) for row in rows_before.values()) == 16
+    assert sum(len(row["missing"]) for row in rows_before.values()) == 18
     assert all(row["missing"] == [] for row in after.json()["items"])
     assert all(row["removed"] == [] for row in after.json()["items"])
 
@@ -569,10 +641,10 @@ async def test_удалённое_специалистом_правило_не_�
     body = response.json()
     assert body["created"] == []
     assert body["kept_deleted"] == [name]
-    assert body["installed"] == 15
+    assert body["installed"] == 17
 
     catalog = await async_client.get(f"{RULES}/library", headers=headers)
-    assert catalog.json()["installed"] == 15
+    assert catalog.json()["installed"] == 17
     assert catalog.json()["removed"] == 1
     # срез-66: удалённое названо по имени в своей строке и НЕ числится «не выданным»
     rows = [row for row in catalog.json()["items"] if row["removed"]]

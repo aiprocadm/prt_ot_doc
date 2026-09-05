@@ -21,7 +21,9 @@
 - (срез-78) просроченное назначение на обучение (срез-77) — второй источник
   ядра по той же причине; сданное, проваленное, без срока и будущее молчат;
 - (срез-79) перезарядка и поверка средств ПБ (срез-79): два срока одной
-  единицы — два события с видом в ключе; списанное и без модуля ПБ молчат.
+  единицы — два события с видом в ключе; списанное и без модуля ПБ молчат;
+- (срез-80) не проведённая к дате тренировка по ПБ и просроченный пересмотр
+  документа ПБ; проведённая тренировка и бессрочный документ молчат.
 """
 
 from __future__ import annotations
@@ -35,7 +37,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.disciplines import Discipline
 from app.models.civil_defense import CivilDefenseDrill
 from app.models.ecology import EcologyReportingDeadline
-from app.models.fire_safety import FireSafetyEquipment
+from app.models.fire_safety import FireDrill, FireSafetyDocument, FireSafetyEquipment
 from app.models.master_data import Person
 from app.models.models import (
     Company,
@@ -517,6 +519,63 @@ async def test_без_модуля_пб_срок_средства_молчит(s
     outcome = await _run(sessionmaker, tenant_id)
     assert outcome.emitted == 0
     assert Discipline.FIRE_SAFETY in outcome.skipped
+
+
+async def test_тренировка_и_документ_пб_становятся_событиями_проведённая_и_бессрочный_нет(
+    sessionmaker, data_factory
+):
+    """Срез-80: не проведённая тренировка и просроченный пересмотр — по событию каждому."""
+
+    tenant_id = await _tenant(sessionmaker, data_factory, modules=("fire_safety",))
+    async with sessionmaker() as session:
+        session.add_all(
+            [
+                FireDrill(
+                    tenant_id=tenant_id,
+                    kind="evacuation",
+                    title="Эвакуация корпус А",
+                    planned_on=TODAY - timedelta(days=4),
+                ),
+                # проведена — протокол, не срок
+                FireDrill(
+                    tenant_id=tenant_id,
+                    kind="evacuation",
+                    title="Эвакуация корпус Б",
+                    planned_on=TODAY - timedelta(days=4),
+                    held_on=TODAY - timedelta(days=4),
+                    outcome="passed",
+                ),
+                FireSafetyDocument(
+                    tenant_id=tenant_id,
+                    kind="order",
+                    number="7",
+                    title="О противопожарном режиме",
+                    review_due=TODAY - timedelta(days=9),
+                ),
+                # бессрочный — не срок
+                FireSafetyDocument(tenant_id=tenant_id, kind="journal", title="Журнал"),
+            ]
+        )
+        await session.commit()
+
+    outcome = await _run(sessionmaker, tenant_id)
+    assert outcome.emitted == 2, outcome
+    assert Discipline.FIRE_SAFETY not in outcome.skipped
+
+    rows = await _events(sessionmaker, tenant_id)
+    by_source = {row.payload["source_type"]: row for row in rows}
+    assert set(by_source) == {"fire_safety_drill", "fire_safety_document"}
+    drill = by_source["fire_safety_drill"]
+    assert drill.payload["title"] == "Тренировка ПБ: Эвакуация корпус А"
+    assert drill.payload["days_overdue"] == 4
+    assert drill.payload["kind"] == "evacuation"
+    document = by_source["fire_safety_document"]
+    assert document.payload["title"] == "Пересмотр: Приказ № 7 — О противопожарном режиме"
+    assert document.payload["days_overdue"] == 9
+    assert document.payload["kind"] == "order"
+    assert all(row.payload["discipline"] == "fire_safety" for row in rows)
+
+    assert (await _run(sessionmaker, tenant_id)).emitted == 0, "тот же день — ничего нового"
 
 
 async def test_без_единого_модуля_обход_пуст(sessionmaker, data_factory):

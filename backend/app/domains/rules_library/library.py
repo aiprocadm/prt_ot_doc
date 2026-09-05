@@ -315,6 +315,76 @@ LIBRARY_RULES: tuple[LibraryRule, ...] = (
         ],
         priority=20,
     ),
+    LibraryRule(
+        discipline=Discipline.FIRE_SAFETY,
+        name="ПБ: тренировка не проведена в срок — провести или перенести",
+        description=(
+            "Тренировка по эвакуации или применению первичных средств пожаротушения "
+            "из плана-графика не проведена к плановой дате (ПП РФ № 1479, п. 9: "
+            "практические тренировки — не реже одного раза в полугодие). Без "
+            "протокола тренировка не состоялась: задача — провести и оформить либо "
+            "перенести с внесением новой даты в план; ответственный за ПБ "
+            "предупреждается."
+        ),
+        event_type="DisciplineDeadlineOverdue",
+        conditions={
+            "match": "all",
+            "conditions": [{"field": "source_type", "op": "eq", "value": "fire_safety_drill"}],
+        },
+        actions=[
+            {
+                "type": "create_task",
+                "title_template": "{title}: плановая дата прошла — провести или перенести",
+                "priority": "high",
+                "due_in_days": 3,
+                "assignee_mode": "none",
+            },
+            {
+                "type": "notify",
+                "title_template": "Тренировка по ПБ не проведена в срок",
+                "body_template": "{title} — плановая дата прошла, просрочка {days_overdue} дн.",
+                "recipient_mode": "role",
+                "roles": ["pb_engineer"],
+                "priority": "high",
+            },
+        ],
+        priority=30,
+    ),
+    LibraryRule(
+        discipline=Discipline.FIRE_SAFETY,
+        name="ПБ: истёк срок пересмотра документа — актуализировать",
+        description=(
+            "Инструкция о мерах ПБ, план эвакуации, приказ или декларация должны "
+            "пересматриваться в установленный срок (ПП РФ № 1479, п. 2, 5); "
+            "устаревший документ на проверке МЧС — нарушение, а при пожаре — "
+            "неверный порядок действий. Правило ставит задачу актуализировать "
+            "документ и предупреждает ответственного за ПБ. Срок — две недели: "
+            "пересмотр требует согласования, за день его не сделать."
+        ),
+        event_type="DisciplineDeadlineOverdue",
+        conditions={
+            "match": "all",
+            "conditions": [{"field": "source_type", "op": "eq", "value": "fire_safety_document"}],
+        },
+        actions=[
+            {
+                "type": "create_task",
+                "title_template": "{title}: срок пересмотра истёк — актуализировать",
+                "priority": "high",
+                "due_in_days": 14,
+                "assignee_mode": "none",
+            },
+            {
+                "type": "notify",
+                "title_template": "Истёк срок пересмотра документа ПБ",
+                "body_template": "{title} — срок пересмотра истёк, просрочка {days_overdue} дн.",
+                "recipient_mode": "role",
+                "roles": ["pb_engineer"],
+                "priority": "high",
+            },
+        ],
+        priority=25,
+    ),
     # ── Промышленная безопасность ───────────────────────────────────────────
     LibraryRule(
         discipline=Discipline.INDUSTRIAL_SAFETY,

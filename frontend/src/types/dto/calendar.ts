@@ -31,7 +31,10 @@ export type CalendarSourceType =
   | "road_safety_vehicle"
   | "road_safety_driver"
   // Доп. №1 разд. 54.1 (срез-79): перезарядка и поверка средств защиты.
-  | "fire_safety_equipment";
+  | "fire_safety_equipment"
+  // Срез-80: тренировки по ПБ и пересмотр документов ПБ.
+  | "fire_safety_drill"
+  | "fire_safety_document";
 
 export const CALENDAR_SOURCE_TYPES: readonly CalendarSourceType[] = [
   "medical_exam",
@@ -53,6 +56,8 @@ export const CALENDAR_SOURCE_TYPES: readonly CalendarSourceType[] = [
   "road_safety_vehicle",
   "road_safety_driver",
   "fire_safety_equipment",
+  "fire_safety_drill",
+  "fire_safety_document",
 ] as const;
 
 export type CalendarSlaBand = "overdue" | "critical" | "warning" | "ok";

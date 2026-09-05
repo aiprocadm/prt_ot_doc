@@ -42,7 +42,12 @@ from app.models.ecology import (
     EmissionNorm,
     WaterUsagePoint,
 )
-from app.models.fire_safety import FireSafetyEquipment
+from app.models.fire_safety import (
+    FIRE_DOCUMENT_KINDS,
+    FireDrill,
+    FireSafetyDocument,
+    FireSafetyEquipment,
+)
 from app.models.industrial_safety import TechnicalDevice
 from app.models.master_data import Person
 from app.models.models import (
@@ -129,6 +134,11 @@ ALL_SOURCES: tuple[str, ...] = (
     # готовности к проверке МЧС, а общий календарь и Центр внимания молчали —
     # строка «Пожарная безопасность» видела только инструктажи.
     "fire_safety_equipment",
+    # Срез-80: тренировки по ПБ из плана-графика (не проведённые к дате —
+    # как учения ГО) и срок пересмотра документов ПБ. Сводка модуля считала
+    # ``overdue_drills`` и ``overdue_documents``, календарь их не знал.
+    "fire_safety_drill",
+    "fire_safety_document",
 )
 
 #: Сроки документов ТС: колонка → (код вида, подпись). Порядок — порядок
@@ -197,6 +207,9 @@ _SLA_THRESHOLDS: dict[str, tuple[int, int]] = {
     "training_enrollment": (3, 14),
     # у модуля ПБ «скоро» = 30 дней (``_DUE_SOON_DAYS``) — та же полоса
     "fire_safety_equipment": (7, 30),
+    "fire_safety_drill": (7, 30),
+    # пересмотр инструкции или плана эвакуации — недели работы, не день
+    "fire_safety_document": (14, 30),
 }
 
 
@@ -392,6 +405,38 @@ class CalendarAggregatorService:
             by_source.append(
                 CalendarSourceCount(
                     source_type="fire_safety_equipment", count=total, overdue_count=overdue
+                )
+            )
+
+        if "fire_safety_drill" in sources:
+            collected, total, overdue = await self._build_fire_drills(
+                from_at=from_at,
+                to_at=to_at,
+                site_id=site_id,
+                now=now,
+                include_fact=include_fact,
+                include_sla=include_sla,
+            )
+            items.extend(collected)
+            by_source.append(
+                CalendarSourceCount(
+                    source_type="fire_safety_drill", count=total, overdue_count=overdue
+                )
+            )
+
+        if "fire_safety_document" in sources:
+            collected, total, overdue = await self._build_fire_documents(
+                from_at=from_at,
+                to_at=to_at,
+                site_id=site_id,
+                now=now,
+                include_fact=include_fact,
+                include_sla=include_sla,
+            )
+            items.extend(collected)
+            by_source.append(
+                CalendarSourceCount(
+                    source_type="fire_safety_document", count=total, overdue_count=overdue
                 )
             )
 
@@ -1785,6 +1830,184 @@ class CalendarAggregatorService:
             base = self._apply_window(_base(attr), column, from_at, to_at, as_date=True)
             total += await self._count(base)
             overdue += await self._count(base.where(column < today))
+        return items, total, overdue
+
+    async def _build_fire_drills(
+        self,
+        *,
+        from_at: datetime | None,
+        to_at: datetime | None,
+        site_id: str | None,
+        now: datetime,
+        include_fact: bool = False,
+        include_sla: bool = False,
+    ) -> tuple[list[CalendarEventItem], int, int]:
+        """Тренировки и учения по ПБ из плана-графика, ещё НЕ проведённые (разд. 54.1, срез-80).
+
+        Та же логика, что у учений ГО (``_build_cd_drills``) и у сводки
+        модуля ПБ (``overdue_drills``): проведённая тренировка — протокол,
+        а не срок, в календарь не идёт; плановая дата в прошлом без
+        ``held_on`` — «тренировка не проведена».
+        """
+
+        today = now.date()
+        stmt = (
+            select(FireDrill)
+            .where(
+                FireDrill.tenant_id == self.tenant_id,
+                FireDrill.deleted_at.is_(None),
+                FireDrill.held_on.is_(None),
+            )
+            .order_by(FireDrill.planned_on.asc())
+            .limit(self._limit)
+        )
+        if site_id:
+            stmt = stmt.where(FireDrill.site_id == site_id)
+        if from_at is not None:
+            stmt = stmt.where(FireDrill.planned_on >= from_at.date())
+        if to_at is not None:
+            stmt = stmt.where(FireDrill.planned_on <= to_at.date())
+
+        items: list[CalendarEventItem] = []
+        for drill in (await self.db.execute(stmt)).scalars().all():
+            anchor = _coerce_dt(drill.planned_on)
+            if anchor is None:
+                continue
+            is_overdue = drill.planned_on < today
+            days_to_due = _days_to_due(anchor, now) if include_sla else None
+            items.append(
+                CalendarEventItem(
+                    id=f"fire_safety_drill:{drill.id}",
+                    source_type="fire_safety_drill",
+                    source_id=str(drill.id),
+                    title=f"Тренировка ПБ: {drill.title}",
+                    starts_at=anchor,
+                    ends_at=None,
+                    status="overdue" if is_overdue else "planned",
+                    is_overdue=is_overdue,
+                    expected_at=anchor if include_fact else None,
+                    actual_at=None,
+                    variance_days=None,
+                    days_to_due=days_to_due,
+                    sla_band=(
+                        _sla_band(
+                            "fire_safety_drill",
+                            days_to_due=days_to_due,
+                            is_overdue=is_overdue,
+                        )
+                        if include_sla
+                        else None
+                    ),
+                    site_id=str(drill.site_id) if drill.site_id else None,
+                    extra={
+                        "kind": drill.kind,
+                        "planned_on": drill.planned_on.isoformat(),
+                    },
+                )
+            )
+
+        base = self._apply_window(
+            self._scoped_count(FireDrill, site_id=site_id).where(FireDrill.held_on.is_(None)),
+            FireDrill.planned_on,
+            from_at,
+            to_at,
+            as_date=True,
+        )
+        total = await self._count(base)
+        overdue = await self._count(base.where(FireDrill.planned_on < today))
+        return items, total, overdue
+
+    async def _build_fire_documents(
+        self,
+        *,
+        from_at: datetime | None,
+        to_at: datetime | None,
+        site_id: str | None,
+        now: datetime,
+        include_fact: bool = False,
+        include_sla: bool = False,
+    ) -> tuple[list[CalendarEventItem], int, int]:
+        """Срок пересмотра документов ПБ (разд. 54.1, срез-80).
+
+        Бессрочный документ (``review_due IS NULL``) — не срок, как в сводке
+        модуля (``overdue_documents``) и в статусе карточки
+        (``_document_status``). Пересмотренный документ срок двигает сам —
+        «факта» отдельно нет.
+        """
+
+        today = now.date()
+        stmt = (
+            select(FireSafetyDocument)
+            .where(
+                FireSafetyDocument.tenant_id == self.tenant_id,
+                FireSafetyDocument.deleted_at.is_(None),
+                FireSafetyDocument.review_due.is_not(None),
+            )
+            .order_by(FireSafetyDocument.review_due.asc())
+            .limit(self._limit)
+        )
+        if site_id:
+            stmt = stmt.where(FireSafetyDocument.site_id == site_id)
+        if from_at is not None:
+            stmt = stmt.where(FireSafetyDocument.review_due >= from_at.date())
+        if to_at is not None:
+            stmt = stmt.where(FireSafetyDocument.review_due <= to_at.date())
+
+        items: list[CalendarEventItem] = []
+        for doc in (await self.db.execute(stmt)).scalars().all():
+            due = doc.review_due
+            anchor = _coerce_dt(due)
+            if anchor is None or due is None:
+                continue
+            is_overdue = due < today
+            days_to_due = _days_to_due(anchor, now) if include_sla else None
+            kind_title = FIRE_DOCUMENT_KINDS.get(doc.kind, "Документ ПБ")
+            label = f"{kind_title} № {doc.number}" if doc.number else kind_title
+            items.append(
+                CalendarEventItem(
+                    id=f"fire_safety_document:{doc.id}",
+                    source_type="fire_safety_document",
+                    source_id=str(doc.id),
+                    title=f"Пересмотр: {label} — {doc.title}",
+                    starts_at=anchor,
+                    ends_at=None,
+                    status="overdue" if is_overdue else "valid",
+                    is_overdue=is_overdue,
+                    expected_at=anchor if include_fact else None,
+                    actual_at=None,
+                    variance_days=None,
+                    days_to_due=days_to_due,
+                    sla_band=(
+                        _sla_band(
+                            "fire_safety_document",
+                            days_to_due=days_to_due,
+                            is_overdue=is_overdue,
+                        )
+                        if include_sla
+                        else None
+                    ),
+                    site_id=str(doc.site_id) if doc.site_id else None,
+                    extra={
+                        "kind": doc.kind,
+                        "number": doc.number,
+                        "location": doc.location,
+                        "responsible": doc.responsible,
+                        "review_due": due.isoformat(),
+                    },
+                )
+            )
+
+        base = self._apply_window(
+            self._scoped_count(FireSafetyDocument, site_id=site_id).where(
+                FireSafetyDocument.review_due.is_not(None)
+            ),
+            FireSafetyDocument.review_due,
+            from_at,
+            to_at,
+            as_date=True,
+        )
+        total = await self._count(base)
+        overdue = await self._count(base.where(FireSafetyDocument.review_due < today))
         return items, total, overdue
 
     async def _build_ppe(

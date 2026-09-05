@@ -160,6 +160,10 @@ SOURCE_DISCIPLINE: dict[str, Discipline] = {
     # первый источник сроков ПБ с собственной таблицей (до него дисциплина
     # дотягивалась до календаря только через вид инструктажа).
     "fire_safety_equipment": Discipline.FIRE_SAFETY,
+    # Срез-80: тренировки по ПБ и пересмотр документов ПБ — тоже по
+    # площадке, дисциплина у источников одна.
+    "fire_safety_drill": Discipline.FIRE_SAFETY,
+    "fire_safety_document": Discipline.FIRE_SAFETY,
 }
 
 #: Источники БЕЗ дисциплины — каждый с причиной. Причина уходит в ответ API:
