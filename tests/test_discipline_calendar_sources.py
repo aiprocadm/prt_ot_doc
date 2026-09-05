@@ -28,12 +28,15 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.disciplines import Discipline, discipline_of
 from app.models.civil_defense import CivilDefenseDrill
 from app.models.industrial_safety import HazardousFacility, TechnicalDevice
-from app.models.road_safety import Vehicle
+from app.models.master_data import Person
+from app.models.models import Company
+from app.models.road_safety import Driver, Vehicle
 from app.services.calendar_aggregator import ALL_SOURCES, CalendarAggregatorService
 from tests.utils.factories import TestDataFactory
 
@@ -43,6 +46,8 @@ _SOURCES = {
     "industrial_safety_epb": Discipline.INDUSTRIAL_SAFETY,
     "civil_defense_drill": Discipline.CIVIL_DEFENSE,
     "road_safety_vehicle": Discipline.ROAD_SAFETY,
+    # срез-59 (разд. 56.2): поимённый срок БДД — водительское удостоверение
+    "road_safety_driver": Discipline.ROAD_SAFETY,
 }
 
 TODAY = date.today()
@@ -89,6 +94,41 @@ def _vehicle(tenant_id: str, plate: str, **fields) -> Vehicle:
     return Vehicle(
         tenant_id=tenant_id, plate_number=plate, brand_model="ГАЗель", kind="truck", **fields
     )
+
+
+async def _driver(
+    session: AsyncSession,
+    tenant_id: str,
+    *,
+    last_name: str,
+    license_due: date | None,
+    status: str = "admitted",
+) -> Driver:
+    company = (
+        (await session.execute(select(Company).where(Company.tenant_id == tenant_id)))
+        .scalars()
+        .first()
+    )
+    if company is None:
+        company = Company(tenant_id=tenant_id, name="ООО Автобаза")
+        session.add(company)
+        await session.flush()
+    person = Person(
+        tenant_id=tenant_id, company_id=company.id, first_name="Пётр", last_name=last_name
+    )
+    session.add(person)
+    await session.flush()
+    driver = Driver(
+        tenant_id=tenant_id,
+        person_id=person.id,
+        license_number=f"77 {last_name}",
+        categories=["B", "C"],
+        license_due=license_due,
+        status=status,
+    )
+    session.add(driver)
+    await session.flush()
+    return driver
 
 
 def _service(tenant_id: str, session: AsyncSession) -> CalendarAggregatorService:
@@ -349,6 +389,94 @@ class TestДокументыТС:
         assert windowed.by_source[0].count == 1
 
 
+class TestВодительскиеУдостоверения:
+    """Срез-59 (разд. 56.2): поимённый срок БДД — правила те же, что у
+    готовности модуля: только допущенные, пустая дата — «сведений нет»."""
+
+    async def test_срок_удостоверения_попадает_в_календарь_с_человеком(
+        self, test_db_session: AsyncSession, data_factory: TestDataFactory
+    ) -> None:
+        tenant = await data_factory.ensure_tenant(session=test_db_session)
+        driver = await _driver(
+            test_db_session,
+            str(tenant.id),
+            last_name="Шофёров",
+            license_due=TODAY - timedelta(days=2),
+        )
+        await test_db_session.commit()
+
+        response = await _service(str(tenant.id), test_db_session).list_events(
+            source_types=["road_safety_driver"], include_sla=True
+        )
+        assert response.total == 1
+        item = response.items[0]
+        assert item.source_type == "road_safety_driver"
+        assert item.title == "Водительское удостоверение: Шофёров Пётр"
+        assert item.person_id == str(driver.person_id)
+        assert item.is_overdue is True and item.status == "expired"
+        assert item.sla_band == "overdue"
+        assert item.extra["license_number"] == "77 Шофёров"
+        assert item.extra["categories"] == ["B", "C"]
+        source = response.by_source[0]
+        assert (source.count, source.overdue_count) == (1, 1)
+
+    async def test_отстранённый_уволенный_и_без_даты_не_считаются(
+        self, test_db_session: AsyncSession, data_factory: TestDataFactory
+    ) -> None:
+        tenant = await data_factory.ensure_tenant(session=test_db_session)
+        tid = str(tenant.id)
+        await _driver(
+            test_db_session, tid, last_name="Допущенный", license_due=TODAY + timedelta(days=5)
+        )
+        await _driver(
+            test_db_session,
+            tid,
+            last_name="Отстранённый",
+            license_due=TODAY - timedelta(days=5),
+            status="suspended",
+        )
+        await _driver(
+            test_db_session,
+            tid,
+            last_name="Уволенный",
+            license_due=TODAY - timedelta(days=5),
+            status="dismissed",
+        )
+        await _driver(test_db_session, tid, last_name="Безсведений", license_due=None)
+        await test_db_session.commit()
+
+        response = await _service(tid, test_db_session).list_events(
+            source_types=["road_safety_driver"]
+        )
+        assert [item.title for item in response.items] == [
+            "Водительское удостоверение: Допущенный Пётр"
+        ]
+        source = response.by_source[0]
+        assert (source.count, source.overdue_count) == (1, 0)
+
+    async def test_сужение_до_человека_отдаёт_только_его(
+        self, test_db_session: AsyncSession, data_factory: TestDataFactory
+    ) -> None:
+        """Источник поимённый: чужое удостоверение в личный список не попадает."""
+
+        tenant = await data_factory.ensure_tenant(session=test_db_session)
+        tid = str(tenant.id)
+        mine = await _driver(
+            test_db_session, tid, last_name="Свой", license_due=TODAY - timedelta(days=1)
+        )
+        await _driver(
+            test_db_session, tid, last_name="Чужой", license_due=TODAY - timedelta(days=1)
+        )
+        await test_db_session.commit()
+
+        response = await _service(tid, test_db_session).list_events(
+            source_types=["road_safety_driver"], person_id=str(mine.person_id)
+        )
+        assert [item.person_id for item in response.items] == [str(mine.person_id)]
+        source = response.by_source[0]
+        assert (source.count, source.overdue_count) == (1, 1)
+
+
 class TestЧужойАрендатор:
     async def test_чужой_арендатор_не_видит_сроков(
         self, test_db_session: AsyncSession, data_factory: TestDataFactory
@@ -360,6 +488,12 @@ class TestЧужойАрендатор:
         test_db_session.add(_drill(str(tenant.id), planned_on=TODAY + timedelta(days=1)))
         test_db_session.add(
             _vehicle(str(tenant.id), "Т901УФ77", inspection_due=TODAY + timedelta(days=1))
+        )
+        await _driver(
+            test_db_session,
+            str(tenant.id),
+            last_name="Чужак",
+            license_due=TODAY + timedelta(days=1),
         )
         await test_db_session.commit()
 

@@ -22,7 +22,8 @@ export type CalendarSourceType =
   // Доп. №1 разд. 57.2 (срез-57): ЭПБ на ОПО, учения ГО, документы ТС.
   | "industrial_safety_epb"
   | "civil_defense_drill"
-  | "road_safety_vehicle";
+  | "road_safety_vehicle"
+  | "road_safety_driver";
 
 export const CALENDAR_SOURCE_TYPES: readonly CalendarSourceType[] = [
   "medical_exam",
@@ -39,6 +40,7 @@ export const CALENDAR_SOURCE_TYPES: readonly CalendarSourceType[] = [
   "industrial_safety_epb",
   "civil_defense_drill",
   "road_safety_vehicle",
+  "road_safety_driver",
 ] as const;
 
 export type CalendarSlaBand = "overdue" | "critical" | "warning" | "ok";
