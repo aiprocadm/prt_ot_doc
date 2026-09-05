@@ -141,6 +141,9 @@ SOURCE_DISCIPLINE: dict[str, Discipline] = {
     "industrial_safety_epb": Discipline.INDUSTRIAL_SAFETY,
     "civil_defense_drill": Discipline.CIVIL_DEFENSE,
     "road_safety_vehicle": Discipline.ROAD_SAFETY,
+    # Доп. №1 разд. 56.2 (срез-59): водительское удостоверение допущенного
+    # водителя — поимённый срок БДД.
+    "road_safety_driver": Discipline.ROAD_SAFETY,
 }
 
 #: Источники БЕЗ дисциплины — каждый с причиной. Причина уходит в ответ API:
@@ -176,6 +179,8 @@ PERSON_SCOPED_SOURCES: frozenset[str] = frozenset(
         "ppe_issue",
         "training_session",
         "briefing_entry",
+        # срез-59: карточка водителя привязана к человеку из ядра
+        "road_safety_driver",
     }
 )
 

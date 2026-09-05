@@ -41,6 +41,7 @@ from app.models.ecology import (
     WaterUsagePoint,
 )
 from app.models.industrial_safety import TechnicalDevice
+from app.models.master_data import Person
 from app.models.models import (
     BriefingEntry,
     BriefingTemplate,
@@ -58,7 +59,7 @@ from app.models.models import (
     TrainingSession,
     TrainingSessionStatus,
 )
-from app.models.road_safety import Vehicle
+from app.models.road_safety import Driver, Vehicle
 from app.schemas.calendar import (
     CalendarEventItem,
     CalendarEventsResponse,
@@ -95,6 +96,9 @@ ALL_SOURCES: tuple[str, ...] = (
     "industrial_safety_epb",
     "civil_defense_drill",
     "road_safety_vehicle",
+    # Доп. №1 разд. 56.2 (срез-59): водительское удостоверение — поимённый
+    # срок БДД, в отличие от документов машины
+    "road_safety_driver",
 )
 
 #: Сроки документов ТС: колонка → (код вида, подпись). Порядок — порядок
@@ -134,6 +138,7 @@ _SLA_THRESHOLDS: dict[str, tuple[int, int]] = {
     "industrial_safety_epb": (30, 90),
     "civil_defense_drill": (7, 30),
     "road_safety_vehicle": (7, 30),
+    "road_safety_driver": (7, 30),
 }
 
 
@@ -291,6 +296,22 @@ class CalendarAggregatorService:
             by_source.append(
                 CalendarSourceCount(
                     source_type="road_safety_vehicle", count=total, overdue_count=overdue
+                )
+            )
+
+        if "road_safety_driver" in sources:
+            collected, total, overdue = await self._build_driver_licenses(
+                from_at=from_at,
+                to_at=to_at,
+                person_id=person_id,
+                now=now,
+                include_fact=include_fact,
+                include_sla=include_sla,
+            )
+            items.extend(collected)
+            by_source.append(
+                CalendarSourceCount(
+                    source_type="road_safety_driver", count=total, overdue_count=overdue
                 )
             )
 
@@ -453,6 +474,98 @@ class CalendarAggregatorService:
     # ------------------------------------------------------------------
     # Per-source builders
     # ------------------------------------------------------------------
+
+    async def _build_driver_licenses(
+        self,
+        *,
+        from_at: datetime | None,
+        to_at: datetime | None,
+        person_id: str | None,
+        now: datetime,
+        include_fact: bool = False,
+        include_sla: bool = False,
+    ) -> tuple[list[CalendarEventItem], int, int]:
+        """Сроки водительских удостоверений — поимённый источник БДД.
+
+        Правило то же, что у готовности модуля БДД: считаются ТОЛЬКО допущенные
+        к управлению (``status == "admitted"``) — просроченные права
+        отстранённого или уволенного водителя ничего не блокируют. Пустая дата
+        — «сведений нет» (бессрочных удостоверений не бывает), это не срок и
+        в календарь не попадает. Источник поимённый: у рабочего в его личном
+        центре внимания — его удостоверение, и только оно.
+        """
+
+        today = now.date()
+        stmt = (
+            select(Driver, Person.last_name, Person.first_name)
+            .join(Person, Person.id == Driver.person_id)
+            .where(
+                Driver.tenant_id == self.tenant_id,
+                Driver.deleted_at.is_(None),
+                Driver.status == "admitted",
+                Driver.license_due.is_not(None),
+            )
+            .order_by(Driver.license_due.asc())
+            .limit(MAX_ITEMS_PER_SOURCE)
+        )
+        if person_id:
+            stmt = stmt.where(Driver.person_id == person_id)
+        if from_at is not None:
+            stmt = stmt.where(Driver.license_due >= from_at.date())
+        if to_at is not None:
+            stmt = stmt.where(Driver.license_due <= to_at.date())
+
+        items: list[CalendarEventItem] = []
+        for driver, last_name, first_name in (await self.db.execute(stmt)).all():
+            anchor = _coerce_dt(driver.license_due)
+            if anchor is None:
+                continue
+            is_overdue = driver.license_due < today
+            days_to_due = _days_to_due(anchor, now) if include_sla else None
+            person_name = " ".join(part for part in (last_name, first_name) if part)
+            items.append(
+                CalendarEventItem(
+                    id=f"road_safety_driver:{driver.id}",
+                    source_type="road_safety_driver",
+                    source_id=str(driver.id),
+                    title=f"Водительское удостоверение: {person_name or driver.license_number}",
+                    starts_at=anchor,
+                    ends_at=None,
+                    status="expired" if is_overdue else "valid",
+                    is_overdue=is_overdue,
+                    person_id=str(driver.person_id),
+                    site_id=None,
+                    expected_at=anchor if include_fact else None,
+                    actual_at=None,
+                    variance_days=None,
+                    days_to_due=days_to_due,
+                    sla_band=(
+                        _sla_band(
+                            "road_safety_driver", days_to_due=days_to_due, is_overdue=is_overdue
+                        )
+                        if include_sla
+                        else None
+                    ),
+                    extra={
+                        "license_number": driver.license_number,
+                        "categories": list(driver.categories or []),
+                        "license_due": driver.license_due.isoformat(),
+                    },
+                )
+            )
+
+        base_count = self._apply_window(
+            self._scoped_count(Driver, person_id=person_id).where(
+                Driver.status == "admitted", Driver.license_due.is_not(None)
+            ),
+            Driver.license_due,
+            from_at,
+            to_at,
+            as_date=True,
+        )
+        total = await self._count(base_count)
+        overdue = await self._count(base_count.where(Driver.license_due < today))
+        return items, total, overdue
 
     async def _build_medicals(
         self,

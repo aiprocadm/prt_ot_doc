@@ -28,7 +28,7 @@ from app.models.models import (
     PPEIssueStatus,
 )
 from app.models.obligations import Task, TaskPriority, TaskStatus
-from app.models.road_safety import Vehicle
+from app.models.road_safety import Driver, Vehicle
 
 
 @pytest.fixture()
@@ -612,6 +612,60 @@ async def test_attention_worker_sees_own_records_only(db_session) -> None:
         .scalars()
         .first()
     )
+
+
+@pytest.mark.asyncio
+async def test_attention_worker_sees_own_driver_license_only(db_session) -> None:
+    """Срез-59 (разд. 56.2): удостоверение — поимённый срок БДД.
+
+    Рабочая роль видит просроченное СВОЁ удостоверение в личном центре
+    внимания (строка «БДД», пункт с дисциплиной), а чужое — нет. Документы
+    машин при этом в личный список не входят вовсе: они про организацию.
+    """
+
+    tenant = SimpleNamespace(id="tenant-1", slug="tenant-a", name="Tenant A", is_active=True)
+    worker = _access("worker-1", "worker", tenant.id, tenant.slug)
+    today = datetime.now(timezone.utc).date()
+    await _grant_modules(db_session, tenant.id, ("road_safety",))
+
+    mine = _person(tenant.id, email=worker.user.email)
+    stranger = _person(tenant.id, email="stranger@tenant.test")
+    db_session.add_all([mine, stranger])
+    await db_session.flush()
+    db_session.add_all(
+        [
+            Driver(
+                tenant_id=tenant.id,
+                person_id=mine.id,
+                license_number="77 01",
+                categories=["B"],
+                license_due=today - timedelta(days=3),
+            ),
+            Driver(
+                tenant_id=tenant.id,
+                person_id=stranger.id,
+                license_number="77 02",
+                categories=["B"],
+                license_due=today - timedelta(days=3),
+            ),
+            Vehicle(
+                tenant_id=tenant.id,
+                plate_number="А123БВ77",
+                brand_model="ГАЗель",
+                kind="truck",
+                inspection_due=today - timedelta(days=3),
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    payload = await workspace_attention(tenant=tenant, session=db_session, access=worker)
+
+    road = [item for item in payload.items if item.discipline == "road_safety"]
+    assert [item.item_type for item in road] == ["road_safety_driver"]
+    assert road[0].title == "Водительское удостоверение: Иванов Иван"
+    by_code = {row.code: row for row in payload.disciplines}
+    assert by_code["road_safety"].overdue == 1, "своё — да, чужое и машина — нет"
 
 
 @pytest.mark.asyncio

@@ -69,6 +69,7 @@ const SOURCE_LABELS: Record<CalendarSourceType, string> = {
   industrial_safety_epb: "ПромБез: ЭПБ устройств",
   civil_defense_drill: "ГО и ЧС: учения",
   road_safety_vehicle: "БДД: документы ТС",
+  road_safety_driver: "БДД: водительские удостоверения",
 };
 
 const DRILL_DOWN: Partial<Record<CalendarSourceType, string>> = {
@@ -84,6 +85,7 @@ const DRILL_DOWN: Partial<Record<CalendarSourceType, string>> = {
   industrial_safety_epb: "/industrial-safety",
   civil_defense_drill: "/civil-defense",
   road_safety_vehicle: "/road-safety",
+  road_safety_driver: "/road-safety",
 };
 
 const SLA_BAND_LABELS: Record<CalendarSlaBand, string> = {

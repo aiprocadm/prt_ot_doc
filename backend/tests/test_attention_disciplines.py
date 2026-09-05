@@ -86,6 +86,9 @@ class TestCoverage:
         assert "industrial_safety_epb" not in personal
         assert "civil_defense_drill" not in personal
         assert "road_safety_vehicle" not in personal
+        # срез-59: а водительское удостоверение — про человека, оно в личном
+        # списке ЕСТЬ
+        assert "road_safety_driver" in personal
 
     def test_у_дисциплин_разд_57_2_есть_источник_сроков(self) -> None:
         """Разд. 57.2 (срез-57): ЭПБ на ОПО, учения ГО, техосмотр ТС — в центре.
