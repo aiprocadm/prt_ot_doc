@@ -4,6 +4,8 @@ import { Link, useSearchParams } from "react-router-dom";
 import {
   incidentsApi,
   type Incident,
+  INCIDENT_STATUS_LABELS,
+  OPEN_STATUS_FILTER,
   UNMARKED_DISCIPLINE_FILTER,
 } from "@/api/incidents";
 import { TRAINING_DISCIPLINE_TITLES } from "@/api/training";
@@ -57,11 +59,6 @@ const INCIDENT_TYPE_LABELS: Record<string, string> = {
   fire: "Пожар",
   environmental: "Экологический инцидент",
   other: "Прочее",
-};
-const INCIDENT_STATUS_LABELS: Record<string, string> = {
-  draft: "Черновик",
-  investigating: "Расследуется",
-  closed: "Закрыт",
 };
 const SEVERITY_LABELS: Record<string, string> = {
   low: "Низкая",
@@ -212,9 +209,12 @@ const IncidentsPage = () => {
             aria-label="Фильтр по статусу"
           >
             <option value="">Все статусы</option>
-            <option value="draft">Черновик</option>
-            <option value="investigating">Расследуется</option>
-            <option value="closed">Закрыт</option>
+            <option value={OPEN_STATUS_FILTER}>Открытые</option>
+            {Object.entries(INCIDENT_STATUS_LABELS).map(([code, label]) => (
+              <option key={code} value={code}>
+                {label}
+              </option>
+            ))}
           </select>
           <select
             value={disciplineFilter}

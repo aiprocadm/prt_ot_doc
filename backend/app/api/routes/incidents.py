@@ -36,6 +36,7 @@ from app.schemas.incidents import (
     IncidentUpdate,
 )
 from app.services.audit import AuditService
+from app.services.discipline_incidents import FINISHED_INCIDENT_STATUSES
 from app.services.outbox import OutboxService
 
 router = APIRouter(tags=["incidents"])
@@ -54,6 +55,14 @@ _DISCIPLINE_CODES = {d.value: DISCIPLINE_TITLES[d] for d in Discipline}
 #: неразмеченных, реестр обязан уметь показать ИХ, а не весь список. Только
 #: для фильтра — записать «none» дисциплиной нельзя, снятие разметки — null.
 UNMARKED_FILTER = "none"
+
+#: Значение фильтра списка «только открытые» (срез-68): отчёты (заказчику, по
+#: дисциплинам, разрез дашборда, плитка контура) считают ОТКРЫТЫЕ одной
+#: формулой ``open_incidents_where``; ссылка из них обязана показать те же
+#: записи, а не всё той же дисциплины вместе с закрытыми. Слово фильтра, не
+#: статус: записать «open» статусом нельзя.
+OPEN_FILTER = "open"
+_STATUS_CODES = tuple(s.value for s in IncidentStatus)
 
 
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
@@ -93,6 +102,16 @@ def _validate_discipline(discipline: str | None, *, allow_unmarked: bool = False
     allowed = [*_DISCIPLINE_CODES, *([UNMARKED_FILTER] if allow_unmarked else [])]
     raise _incident_bad_request(
         f"Неизвестная дисциплина {discipline!r}; допустимые: {', '.join(allowed)}"
+    )
+
+
+def _validate_status_filter(value: str | None) -> None:
+    """Фильтр статуса — код словаря или «open»; иное — ошибка запроса."""
+
+    if value is None or value in _STATUS_CODES or value == OPEN_FILTER:
+        return
+    raise _incident_bad_request(
+        f"Неизвестный статус {value!r}; допустимые: {', '.join([*_STATUS_CODES, OPEN_FILTER])}"
     )
 
 
@@ -139,7 +158,11 @@ async def list_incidents(
     _: ManagerAccess,
     company_id: str | None = Query(default=None, min_length=1, max_length=36),
     site_id: str | None = Query(default=None, min_length=1, max_length=36),
-    status_filter: IncidentStatus | None = Query(default=None),
+    status_filter: str | None = Query(
+        default=None,
+        max_length=32,
+        description="Статус происшествия; «open» — не закрытые и не отменённые.",
+    ),
     incident_type: IncidentType | None = Query(default=None),
     discipline: str | None = Query(
         default=None,
@@ -151,6 +174,7 @@ async def list_incidents(
 ) -> IncidentPage | Response:
     TenantContextValidator.ensure_tenant_context(tenant)
     _validate_discipline(discipline, allow_unmarked=True)
+    _validate_status_filter(status_filter)
 
     stmt = (
         select(Incident)
@@ -161,8 +185,10 @@ async def list_incidents(
         stmt = stmt.where(Incident.company_id == company_id)
     if site_id:
         stmt = stmt.where(Incident.site_id == site_id)
-    if status_filter:
-        stmt = stmt.where(Incident.status == status_filter)
+    if status_filter == OPEN_FILTER:
+        stmt = stmt.where(Incident.status.notin_(list(FINISHED_INCIDENT_STATUSES)))
+    elif status_filter:
+        stmt = stmt.where(Incident.status == IncidentStatus(status_filter))
     if incident_type:
         stmt = stmt.where(Incident.incident_type == incident_type)
     if discipline == UNMARKED_FILTER:
@@ -183,7 +209,7 @@ async def list_incidents(
             ("offset", offset),
             ("company", company_id or ""),
             ("site", site_id or ""),
-            ("status", status_filter.value if status_filter else ""),
+            ("status", status_filter or ""),
             ("type", incident_type.value if incident_type else ""),
             ("discipline", discipline or ""),
         ],

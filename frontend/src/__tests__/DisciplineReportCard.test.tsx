@@ -106,7 +106,7 @@ describe("DisciplineReportCard (Доп. №1 разд. 57.4, срез-50)", () =
     const road = rows[1];
     expect(within(road).getByRole("link", { name: "2" })).toHaveAttribute(
       "href",
-      "/incidents?discipline=road_safety",
+      "/incidents?discipline=road_safety&status=open",
     );
     expect(
       within(road).getByTitle("По этой дисциплине не считается"),
@@ -124,7 +124,7 @@ describe("DisciplineReportCard (Доп. №1 разд. 57.4, срез-50)", () =
     expect(screen.getByText(/Не размечено дисциплиной/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "1" })).toHaveAttribute(
       "href",
-      "/incidents?discipline=none",
+      "/incidents?discipline=none&status=open",
     );
   });
 

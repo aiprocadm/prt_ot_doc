@@ -7,6 +7,22 @@ import { apiClient } from "@/api/client";
  */
 export const UNMARKED_DISCIPLINE_FILTER = "none";
 
+/**
+ * Слово фильтра «только открытые» у сервера (срез-68): `?status_filter=open`
+ * отдаёт не закрытые и не отменённые — той же формулой, что отчёты считают
+ * «открытых происшествий». Ссылка из отчёта ведёт к тем же записям.
+ */
+export const OPEN_STATUS_FILTER = "open";
+
+/** Подписи статусов происшествия — словарь сервера (`IncidentStatus`). */
+export const INCIDENT_STATUS_LABELS: Record<string, string> = {
+  reported: "Сообщено",
+  investigating: "Расследуется",
+  corrective_actions: "Корректирующие действия",
+  closed: "Закрыт",
+  cancelled: "Отменён",
+};
+
 export type Incident = {
   id: string;
   title: string;

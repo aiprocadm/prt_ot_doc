@@ -9,7 +9,10 @@ import {
   type ManagedClient,
   type ManagedClientMode,
 } from "@/api/managedClients";
-import { UNMARKED_DISCIPLINE_FILTER } from "@/api/incidents";
+import {
+  OPEN_STATUS_FILTER,
+  UNMARKED_DISCIPLINE_FILTER,
+} from "@/api/incidents";
 import { TRAINING_DISCIPLINE_TITLES } from "@/api/training";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -55,18 +58,20 @@ const incidentLinks = (
   const incidents = report.payload.incidents;
   if (!incidents || !incidents.total) return [];
   const base = `/incidents?company_id=${encodeURIComponent(companyId)}`;
+  // Отчёт считает ОТКРЫТЫЕ (срез-52) — ссылка показывает их же (срез-68).
+  const open = `&status=${OPEN_STATUS_FILTER}`;
   const links = Object.entries(incidents.by_discipline ?? {})
     .filter(([, count]) => count > 0)
     .map(([code, count]) => ({
       key: code,
       label: `${TRAINING_DISCIPLINE_TITLES[code] ?? code} — ${count}`,
-      to: `${base}&discipline=${encodeURIComponent(code)}`,
+      to: `${base}&discipline=${encodeURIComponent(code)}${open}`,
     }));
   if (incidents.unmarked > 0) {
     links.push({
       key: "unmarked",
       label: `без разметки — ${incidents.unmarked}`,
-      to: `${base}&discipline=${UNMARKED_DISCIPLINE_FILTER}`,
+      to: `${base}&discipline=${UNMARKED_DISCIPLINE_FILTER}${open}`,
     });
   }
   return links;

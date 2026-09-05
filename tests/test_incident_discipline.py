@@ -15,7 +15,9 @@
 тихая запись; разметку можно поставить, сменить и снять; список фильтруется
 по дисциплине; чужие и неразмеченные в фильтр не попадают; ``discipline=none``
 отбирает ТОЛЬКО неразмеченные (срез-65: отчёты называют их число — реестр
-обязан их показать), но записать «none» дисциплиной нельзя.
+обязан их показать), но записать «none» дисциплиной нельзя; ``status_filter=open``
+отбирает не закрытые и не отменённые той же формулой, что считают отчёты
+(срез-68), а неизвестный статус — ошибка запроса.
 """
 
 from __future__ import annotations
@@ -216,3 +218,63 @@ class TestФильтр:
         headers = await make_auth_headers(RoleEnum.ADMIN)
         response = await async_client.get(_API, params={"discipline": "nope"}, headers=headers)
         assert response.status_code == 400, response.text
+
+    async def test_open_отбирает_только_открытые_как_считают_отчёты(
+        self, async_client, make_auth_headers, sessionmaker, data_factory
+    ) -> None:
+        """Срез-68: отчёты считают открытые — ссылка из них показывает ИХ.
+
+        Закрытое и отменённое в «open» не входят (формула
+        ``open_incidents_where``); «сообщено» и «расследуется» — входят.
+        Вместе с дисциплиной фильтр сужает, а не подменяет.
+        """
+
+        company_id, site_id = await _fixtures(sessionmaker, data_factory)
+        headers = await make_auth_headers(RoleEnum.ADMIN)
+        ids: dict[str, str] = {}
+        for key, discipline in (
+            ("reported", "ecology"),
+            ("investigating", "ecology"),
+            ("closed", "ecology"),
+            ("cancelled", None),
+        ):
+            created = await async_client.post(
+                _API, json=_payload(company_id, site_id, discipline=discipline), headers=headers
+            )
+            assert created.status_code == 201, created.text
+            ids[key] = created.json()["id"]
+        for key in ("investigating", "closed", "cancelled"):
+            moved = await async_client.patch(
+                f"{_API}/{ids[key]}", json={"status": key}, headers=headers
+            )
+            assert moved.status_code == 200, moved.text
+
+        opened = await async_client.get(_API, params={"status_filter": "open"}, headers=headers)
+        assert opened.status_code == 200, opened.text
+        assert {i["id"] for i in opened.json()["items"]} == {ids["reported"], ids["investigating"]}
+
+        # Дисциплина и статус — вместе: открытые ЭКОЛОГИИ, без отменённого без разметки.
+        both = await async_client.get(
+            _API, params={"status_filter": "open", "discipline": "ecology"}, headers=headers
+        )
+        assert {i["id"] for i in both.json()["items"]} == {ids["reported"], ids["investigating"]}
+        only_closed = await async_client.get(
+            _API, params={"status_filter": "closed"}, headers=headers
+        )
+        assert [i["id"] for i in only_closed.json()["items"]] == [ids["closed"]]
+
+        # Фильтр и полный список — разные ответы, а не один кэш (ETag).
+        everything = await async_client.get(_API, headers=headers)
+        assert everything.json()["total"] == 4
+        assert everything.headers["etag"] != opened.headers["etag"]
+
+    async def test_фильтр_по_неизвестному_статусу_отвергается(
+        self, async_client, make_auth_headers, sessionmaker, data_factory
+    ) -> None:
+        """«draft» у происшествий нет — ошибка запроса словами, а не 422 без причины."""
+
+        await _fixtures(sessionmaker, data_factory)
+        headers = await make_auth_headers(RoleEnum.ADMIN)
+        response = await async_client.get(_API, params={"status_filter": "draft"}, headers=headers)
+        assert response.status_code == 400, response.text
+        assert "open" in response.text

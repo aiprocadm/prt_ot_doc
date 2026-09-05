@@ -2,7 +2,10 @@ import { useCallback, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { analyticsApi } from "@/api/analyticsApi";
-import { UNMARKED_DISCIPLINE_FILTER } from "@/api/incidents";
+import {
+  OPEN_STATUS_FILTER,
+  UNMARKED_DISCIPLINE_FILTER,
+} from "@/api/incidents";
 import { DisciplineReportCard } from "@/components/analytics/DisciplineReportCard";
 import { TrendLineChart } from "@/components/analytics/TrendLineChart";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -425,7 +428,7 @@ export default function ManagementDashboardPage() {
                               // строка «— не размечено» (id=="") — тот же реестр
                               // с фильтром «без разметки» (срез-65)
                               <Link
-                                to={`/incidents?discipline=${encodeURIComponent(row.id || UNMARKED_DISCIPLINE_FILTER)}`}
+                                to={`/incidents?discipline=${encodeURIComponent(row.id || UNMARKED_DISCIPLINE_FILTER)}&status=${OPEN_STATUS_FILTER}`}
                                 className="text-primary underline"
                               >
                                 {row[k]}

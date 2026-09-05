@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 
+import { OPEN_STATUS_FILTER } from "@/api/incidents";
+
 /**
  * Плитка «Открытых происшествий» для шапки экрана дисциплины.
  *
@@ -9,6 +11,8 @@ import { Link } from "react-router-dom";
  * формулой, что разрез «по дисциплинам» у директора (поле `incidents_open`
  * сводки); здесь оно только показывается и ведёт в общий реестр с уже
  * выставленным фильтром — своего реестра происшествий контур не заводит.
+ * Фильтр — дисциплина И «только открытые» (срез-68): реестр показывает те
+ * же записи, что сосчитаны, а не всё той же дисциплины вместе с закрытыми.
  */
 export const disciplineIncidentsStat = (
   discipline: string,
@@ -17,9 +21,9 @@ export const disciplineIncidentsStat = (
   label: "Открытых происшествий",
   value: (
     <Link
-      to={`/incidents?discipline=${encodeURIComponent(discipline)}`}
+      to={`/incidents?discipline=${encodeURIComponent(discipline)}&status=${OPEN_STATUS_FILTER}`}
       className="underline"
-      title="Открыть реестр происшествий с фильтром по дисциплине"
+      title="Открыть реестр происшествий: открытые по дисциплине"
     >
       {count}
     </Link>

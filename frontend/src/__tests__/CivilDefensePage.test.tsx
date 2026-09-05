@@ -359,7 +359,7 @@ describe("CivilDefensePage", () => {
     // ссылка ведёт в ОБЩИЙ реестр с уже выставленным фильтром дисциплины
     expect(screen.getByRole("link", { name: "3" })).toHaveAttribute(
       "href",
-      "/incidents?discipline=civil_defense",
+      "/incidents?discipline=civil_defense&status=open",
     );
   });
 
