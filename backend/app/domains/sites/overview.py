@@ -11,6 +11,17 @@
 (``app/core/discipline_status.py``) — теми же, что у светофора клиента. Своего
 здесь ровно одно: **кто такие «люди площадки»**.
 
+## Пожарная безопасность — по объекту, не по людям (срез-82, разд. 54.1)
+
+У площадки есть свои сроки ПБ: перезарядка и поверка средств защиты,
+плановые тренировки, пересмотр документов. Считаются они той же формулой,
+что сводка готовности модуля ПБ (``app/services/discipline_fire_safety.py``),
+только по одной площадке; красятся общим правилом
+(``core/discipline_status.fire_safety_status``): просрочка — красный, срок
+в горизонте — жёлтый, порядок — «не измеряется» с фактом, зелёного не бывает.
+Средство без площадки к площадке не относится — как человек без рабочего
+места.
+
 ## Применимые дисциплины — по выданным модулям (срез-54, приёмка §58.3)
 
 Дисциплины, модуль которых арендатору не выдан или выключен, на карточке не
@@ -63,6 +74,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.discipline_status import (
     DisciplineStatus,
+    FireSafetyNumbers,
     TrafficLight,
     build_discipline_statuses,
     with_extra_reason,
@@ -81,6 +93,7 @@ from app.services.discipline_applicability import (
     collect_applicability,
     only_applicable,
 )
+from app.services.discipline_fire_safety import collect_fire_safety_numbers
 from app.services.discipline_numbers import DisciplineNumbers, collect_people_numbers
 
 __all__ = [
@@ -185,8 +198,13 @@ def build_site_overview(
     numbers: DisciplineNumbers,
     facts: SiteFacts,
     applicability: DisciplineApplicability = ALL_APPLICABLE,
+    fire_safety: FireSafetyNumbers | None = None,
 ) -> SiteOverview:
-    """Собрать карточку из чисел и фактов. Без базы — правила проверяемы построчно."""
+    """Собрать карточку из чисел и фактов. Без базы — правила проверяемы построчно.
+
+    ``fire_safety`` — сроки ПБ самой площадки (срез-82); без них строка ПБ
+    остаётся с причиной словаря, как у светофора клиента.
+    """
 
     rows = only_applicable(
         build_discipline_statuses(
@@ -194,6 +212,7 @@ def build_site_overview(
             ppe=numbers.ppe,
             training_overdue=numbers.training_overdue,
             road_safety=numbers.road_safety,
+            fire_safety=fire_safety,
         ),
         applicability,
     )
@@ -347,4 +366,13 @@ async def collect_site_overview(
         permits=await _permit_facts(session, tenant_id, site_id),
     )
     applicability = await collect_applicability(session, tenant_id)
-    return build_site_overview(site, numbers=numbers, facts=facts, applicability=applicability)
+    fire_safety = await collect_fire_safety_numbers(
+        session, tenant_id=tenant_id, site_id=site_id, today=today
+    )
+    return build_site_overview(
+        site,
+        numbers=numbers,
+        facts=facts,
+        applicability=applicability,
+        fire_safety=fire_safety,
+    )

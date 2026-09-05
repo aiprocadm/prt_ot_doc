@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from app.core.discipline_status import DisciplineCounts, TrafficLight
+from app.core.discipline_status import DisciplineCounts, FireSafetyNumbers, TrafficLight
 from app.core.disciplines import (
     PERMIT_WORK_TYPE_DISCIPLINE,
     UNMAPPED_PERMIT_WORK_TYPES,
@@ -84,9 +84,7 @@ class TestРазметкаНарядов:
 
 class TestСветофорПлощадки:
     def test_дисциплины_те_же_и_в_том_же_порядке(self) -> None:
-        overview = build_site_overview(
-            _site(), numbers=_numbers(), facts=SiteFacts()
-        )
+        overview = build_site_overview(_site(), numbers=_numbers(), facts=SiteFacts())
         assert [r.discipline for r in overview.disciplines] == list(Discipline)
 
     def test_разрыв_красит_красным(self) -> None:
@@ -102,9 +100,7 @@ class TestСветофорПлощадки:
         """Ни одной измеренной дисциплины — итог not_measured, а не зелёный:
         «норм нет» и «всё в порядке» — разные утверждения."""
 
-        overview = build_site_overview(
-            _site(), numbers=_numbers(), facts=SiteFacts()
-        )
+        overview = build_site_overview(_site(), numbers=_numbers(), facts=SiteFacts())
         assert overview.overall is TrafficLight.NOT_MEASURED
 
 
@@ -116,9 +112,7 @@ class TestФактыНеКрасятСветофор:
             _site(),
             numbers=_numbers(),
             facts=SiteFacts(
-                permits=PermitFacts(
-                    total=2, by_discipline={Discipline.FIRE_SAFETY: 2}
-                )
+                permits=PermitFacts(total=2, by_discipline={Discipline.FIRE_SAFETY: 2})
             ),
         )
         row = _row(overview, Discipline.FIRE_SAFETY)
@@ -130,9 +124,7 @@ class TestФактыНеКрасятСветофор:
             _site(),
             numbers=_numbers(),
             facts=SiteFacts(
-                permits=PermitFacts(
-                    total=5, by_discipline={Discipline.FIRE_SAFETY: 5}
-                )
+                permits=PermitFacts(total=5, by_discipline={Discipline.FIRE_SAFETY: 5})
             ),
         )
         assert _row(overview, Discipline.FIRE_SAFETY).light is TrafficLight.NOT_MEASURED
@@ -147,9 +139,43 @@ class TestФактыНеКрасятСветофор:
                 permits=PermitFacts(total=1, by_discipline={Discipline.FIRE_SAFETY: 1})
             ),
         )
-        assert _row(clean, Discipline.ECOLOGY).reason == _row(
-            withfire, Discipline.ECOLOGY
-        ).reason
+        assert _row(clean, Discipline.ECOLOGY).reason == _row(withfire, Discipline.ECOLOGY).reason
+
+
+class TestСрокиПБПлощадки:
+    """Срез-82 (разд. 54.1): сроки ПБ самой площадки — красят, наряды — нет."""
+
+    def test_просрочка_средства_защиты_красит_пб_и_итог(self) -> None:
+        overview = build_site_overview(
+            _site(),
+            numbers=_numbers(),
+            facts=SiteFacts(),
+            fire_safety=FireSafetyNumbers(units=3, overdue_recharge=1, without_maintenance=2),
+        )
+        row = _row(overview, Discipline.FIRE_SAFETY)
+        assert row.light is TrafficLight.RED
+        assert row.reason.startswith("Просрочено по ПБ — перезарядка средств защиты: 1; ")
+        assert "средств без записи о работах: 2" in row.reason
+        assert overview.overall is TrafficLight.RED, "просрочка объекта входит в итог"
+
+    def test_наряд_дописывается_к_срокам_и_цвет_не_меняет(self) -> None:
+        overview = build_site_overview(
+            _site(),
+            numbers=_numbers(),
+            facts=SiteFacts(
+                permits=PermitFacts(total=1, by_discipline={Discipline.FIRE_SAFETY: 1})
+            ),
+            fire_safety=FireSafetyNumbers(units=2, due_soon=1),
+        )
+        row = _row(overview, Discipline.FIRE_SAFETY)
+        assert row.light is TrafficLight.YELLOW
+        assert row.reason.endswith("К площадке привязано действующих нарядов-допусков: 1")
+
+    def test_без_чисел_пб_прежняя_причина(self) -> None:
+        overview = build_site_overview(_site(), numbers=_numbers(), facts=SiteFacts())
+        row = _row(overview, Discipline.FIRE_SAFETY)
+        assert row.light is TrafficLight.NOT_MEASURED
+        assert "не ведётся" in row.reason
 
 
 class TestПрименимостьОПО:
@@ -169,9 +195,7 @@ class TestПрименимостьОПО:
             numbers=_numbers(),
             facts=SiteFacts(),
         )
-        assert "без регистрационного номера" in _row(
-            overview, Discipline.INDUSTRIAL_SAFETY
-        ).reason
+        assert "без регистрационного номера" in _row(overview, Discipline.INDUSTRIAL_SAFETY).reason
 
     def test_не_опо_ничего_не_дописывает(self) -> None:
         overview = build_site_overview(_site(), numbers=_numbers(), facts=SiteFacts())
@@ -182,9 +206,7 @@ class TestПрименимостьОПО:
             _site(is_hazardous_production_facility=True, opo_register_number="А1"),
             numbers=_numbers(),
             facts=SiteFacts(
-                permits=PermitFacts(
-                    total=1, by_discipline={Discipline.INDUSTRIAL_SAFETY: 1}
-                )
+                permits=PermitFacts(total=1, by_discipline={Discipline.INDUSTRIAL_SAFETY: 1})
             ),
         )
         row = _row(overview, Discipline.INDUSTRIAL_SAFETY)

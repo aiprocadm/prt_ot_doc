@@ -65,6 +65,10 @@ from app.schemas.fire_safety import (
     FireReadinessRead,
 )
 from app.services.audit import AuditService, field_level_diff
+from app.services.discipline_fire_safety import (
+    FIRE_DUE_SOON_DAYS,
+    collect_fire_safety_numbers,
+)
 from app.services.discipline_incidents import open_incidents_count
 
 router = APIRouter(prefix="/fire-safety", tags=["fire-safety"])
@@ -86,8 +90,9 @@ Access = Annotated[
 
 _FEATURE_CODE = "fire_safety"
 
-#: горизонт «скоро истекает» для сводки готовности
-_DUE_SOON_DAYS = 30
+#: горизонт «скоро истекает» для сводки готовности — один с карточкой
+#: площадки (срез-82: ``services/discipline_fire_safety.py``)
+_DUE_SOON_DAYS = FIRE_DUE_SOON_DAYS
 
 
 async def _require_fire_safety(
@@ -945,26 +950,12 @@ async def fire_readiness(
 
     TenantContextValidator.ensure_tenant_context(tenant)
     today = date.today()
-    soon = today + timedelta(days=_DUE_SOON_DAYS)
+    # Срез-82: средства, тренировки и документы считаются ОБЩЕЙ формулой с
+    # карточкой площадки 360° (``services/discipline_fire_safety.py``) — здесь
+    # по всему арендатору, там по одному объекту. Правила счёта и границы
+    # (что не судится) описаны у формулы.
+    numbers = await collect_fire_safety_numbers(session, tenant_id=str(tenant.id), today=today)
 
-    base = select(FireSafetyEquipment).where(
-        FireSafetyEquipment.tenant_id == tenant.id,
-        FireSafetyEquipment.deleted_at.is_(None),
-        FireSafetyEquipment.status == "active",
-    )
-    rows = (await session.execute(base)).scalars().all()
-    overdue_recharge = sum(
-        1 for r in rows if r.recharge_due is not None and r.recharge_due < today
-    )
-    overdue_inspection = sum(
-        1 for r in rows if r.inspection_due is not None and r.inspection_due < today
-    )
-    due_soon = sum(
-        1
-        for r in rows
-        if (r.recharge_due is not None and today <= r.recharge_due <= soon)
-        or (r.inspection_due is not None and today <= r.inspection_due <= soon)
-    )
     # Разд. 54.1 «контроль сроков»: просроченный противопожарный инструктаж —
     # такое же нарушение к приходу МЧС, как непроверенный огнетушитель.
     fire_types = [
@@ -986,109 +977,19 @@ async def fire_readiness(
         or 0
     )
 
-    # Разд. 54.1 «Документы ПБ»: просроченный пересмотр инструкции или приказа —
-    # такое же нарушение к приходу инспектора, как непроверенный огнетушитель.
-    # ГРАНИЦА: сколько документов ОБЯЗАТЕЛЬНО, платформа не судит — декларация
-    # нужна не всем объектам, план эвакуации — не всем этажам, а признаков
-    # применимости в данных нет (тот же довод, что у интервала тренировок).
-    fire_documents = int(
-        await session.scalar(
-            select(func.count())
-            .select_from(FireSafetyDocument)
-            .where(
-                FireSafetyDocument.tenant_id == tenant.id,
-                FireSafetyDocument.deleted_at.is_(None),
-            )
-        )
-        or 0
-    )
-    overdue_documents = int(
-        await session.scalar(
-            select(func.count())
-            .select_from(FireSafetyDocument)
-            .where(
-                FireSafetyDocument.tenant_id == tenant.id,
-                FireSafetyDocument.deleted_at.is_(None),
-                FireSafetyDocument.review_due.is_not(None),
-                FireSafetyDocument.review_due < today,
-            )
-        )
-        or 0
-    )
-
-    # Разд. 54.1 «регламентные работы»: срок без единой записи о работе — это
-    # обещание, а не доказательство. Инспектор спрашивает не «когда следующая
-    # поверка», а «покажите, что предыдущая была», поэтому число средств без
-    # подтверждения стоит в сводке рядом с просрочками.
-    confirmed_ids = set(
-        (
-            await session.execute(
-                select(FireMaintenanceRecord.equipment_id.distinct()).where(
-                    FireMaintenanceRecord.tenant_id == tenant.id,
-                    FireMaintenanceRecord.deleted_at.is_(None),
-                )
-            )
-        )
-        .scalars()
-        .all()
-    )
-    units_without_maintenance = sum(1 for r in rows if r.id not in confirmed_ids)
-
-    # Разд. 54.1 «Тренировки и учения»: просроченный план тренировки — такое же
-    # нарушение к приходу инспектора, как непроверенный огнетушитель.
-    # ГРАНИЦА: интервал «не реже раза в полгода» (ППР РФ) здесь НЕ судится —
-    # норма обязательна для объектов с массовым пребыванием людей, а признака
-    # массового пребывания у площадки в данных нет. Отдаём факт (дата последней
-    # и сколько дней прошло), вывод делает специалист; иначе платформа красила
-    # бы в нарушение по угаданной применимости нормы.
-    overdue_drills = int(
-        await session.scalar(
-            select(func.count())
-            .select_from(FireDrill)
-            .where(
-                FireDrill.tenant_id == tenant.id,
-                FireDrill.deleted_at.is_(None),
-                FireDrill.held_on.is_(None),
-                FireDrill.planned_on < today,
-            )
-        )
-        or 0
-    )
-    planned_drills = int(
-        await session.scalar(
-            select(func.count())
-            .select_from(FireDrill)
-            .where(
-                FireDrill.tenant_id == tenant.id,
-                FireDrill.deleted_at.is_(None),
-                FireDrill.held_on.is_(None),
-                FireDrill.planned_on >= today,
-            )
-        )
-        or 0
-    )
-    last_drill_on = await session.scalar(
-        select(func.max(FireDrill.held_on)).where(
-            FireDrill.tenant_id == tenant.id,
-            FireDrill.deleted_at.is_(None),
-            FireDrill.held_on.is_not(None),
-        )
-    )
     return FireReadinessRead(
-        fire_documents=fire_documents,
-        overdue_documents=overdue_documents,
-        units_without_maintenance=units_without_maintenance,
-        overdue_drills=overdue_drills,
-        planned_drills=planned_drills,
-        last_drill_on=last_drill_on,
-        days_since_last_drill=(
-            (today - last_drill_on).days if last_drill_on is not None else None
-        ),
-        total_units=len(rows),
-        overdue_recharge=overdue_recharge,
-        overdue_inspection=overdue_inspection,
-        due_soon=due_soon,
-        due_soon_days=_DUE_SOON_DAYS,
+        fire_documents=numbers.documents,
+        overdue_documents=numbers.overdue_documents,
+        units_without_maintenance=numbers.without_maintenance,
+        overdue_drills=numbers.overdue_drills,
+        planned_drills=numbers.planned_drills,
+        last_drill_on=numbers.last_drill_on,
+        days_since_last_drill=numbers.days_since_last_drill,
+        total_units=numbers.units,
+        overdue_recharge=numbers.overdue_recharge,
+        overdue_inspection=numbers.overdue_inspection,
+        due_soon=numbers.due_soon,
+        due_soon_days=numbers.due_soon_days,
         overdue_fire_briefings=overdue_briefings,
         # Доп. №1 разд. 57.4: открытые происшествия контура — той же формулой,
         # что разрез «по дисциплинам» у директора (срез-49).
