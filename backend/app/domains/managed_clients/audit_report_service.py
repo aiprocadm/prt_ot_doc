@@ -174,6 +174,7 @@ async def run_tenant_audit(
                 ppe=numbers.ppe,
                 training_overdue=numbers.training_overdue,
                 road_safety=numbers.road_safety,
+                fire_safety=numbers.fire_safety,
             ),
             applicability,
         )

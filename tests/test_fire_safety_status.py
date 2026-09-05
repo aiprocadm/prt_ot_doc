@@ -19,6 +19,9 @@
 цвет: истёкший — красный наравне с огнетушителем, истекающий — жёлтый,
 действующий — факт в расшифровке; зелёного по-прежнему нет, потому что
 сколько людям положено инструктажей, платформа не судит.
+
+Срез-86: та же формула считает ПБ клиента — по списку его площадок и его
+людям; одна площадка и список вместе не задаются.
 """
 
 from __future__ import annotations
@@ -224,6 +227,17 @@ class TestОдинЧеловек:
     )
     def test_у_человека_пб_тоже_не_зелёная(self, numbers: FireSafetyNumbers) -> None:
         assert fire_safety_status(numbers).light is not TrafficLight.GREEN
+
+
+class TestОбластьСчёта:
+    """Срез-86: одна площадка ИЛИ список площадок клиента — не вместе."""
+
+    @pytest.mark.anyio
+    async def test_одна_площадка_и_список_вместе_это_ошибка(self) -> None:
+        from app.services.discipline_fire_safety import collect_fire_safety_numbers
+
+        with pytest.raises(ValueError, match="site_id и site_ids"):
+            await collect_fire_safety_numbers(None, tenant_id="t", site_id="s1", site_ids=["s2"])
 
 
 class TestВСветофоре:

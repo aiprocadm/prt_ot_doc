@@ -50,6 +50,12 @@
 привязано к пожарным видам: вкладка инструктажей карточки сотрудника считает
 им «просрочено» по всем видам и помечает перекрытые записи, — иначе строка
 ПБ и вкладка на одной карточке говорили бы разное про одну и ту же запись.
+
+Светофор клиента (срез-86, разд. 51.3) — та же формула по СПИСКУ площадок
+(``site_ids`` — площадки организации клиента) и его людям: у клиента
+площадок много, а сводка арендатора приписала бы ему огнетушители всех
+клиентов сразу. Средство без площадки к клиенту не относится — как и к
+одной площадке: чьё оно, платформа не угадывает.
 """
 
 from __future__ import annotations
@@ -136,15 +142,21 @@ async def collect_fire_safety_numbers(
     *,
     tenant_id: str,
     site_id: str | None = None,
+    site_ids: Sequence[str] | None = None,
     person_ids: Sequence[str] | None = None,
     today: date | None = None,
     now: datetime | None = None,
 ) -> FireSafetyNumbers:
-    """Числа ПБ по арендатору (``site_id=None``) или по одной площадке.
+    """Числа ПБ по арендатору, по одной площадке или по списку площадок.
 
-    ``person_ids`` — чьи противопожарные инструктажи считать: ``None`` — всех
-    людей арендатора, список — только этих (люди площадки), ``[]`` — никого.
+    ``site_id`` — одна площадка (карточка 360°); ``site_ids`` — площадки
+    клиента (светофор клиента, срез-86), ``[]`` — ни одной; вместе их не
+    задают. ``person_ids`` — чьи противопожарные инструктажи считать:
+    ``None`` — всех людей арендатора, список — только этих, ``[]`` — никого.
     """
+
+    if site_id is not None and site_ids is not None:
+        raise ValueError("site_id и site_ids вместе не задают: одна площадка или список")
 
     today = today or date.today()
     now = now or datetime.now(tz=timezone.utc)
@@ -154,6 +166,8 @@ async def collect_fire_safety_numbers(
         stmt = stmt.where(model.tenant_id == tenant_id, model.deleted_at.is_(None))
         if site_id is not None:
             stmt = stmt.where(model.site_id == site_id)
+        if site_ids is not None:
+            stmt = stmt.where(model.site_id.in_(list(site_ids)))
         return stmt
 
     rows = (

@@ -1898,6 +1898,7 @@ async def get_client_readiness(
             ppe=numbers.ppe,
             training_overdue=numbers.training_overdue,
             road_safety=numbers.road_safety,
+            fire_safety=numbers.fire_safety,
         ),
         applicability,
     )
