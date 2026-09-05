@@ -24,7 +24,6 @@ from app.models.finance import Contract, ContractStatus
 from app.models.models import (
     ComplianceDeadline,
     Incident,
-    IncidentStatus,
     Inspection,
     InspectionStatus,
     OfflineSyncBatch,
@@ -40,6 +39,7 @@ from app.models.obligations import Task, TaskStatus
 from app.schemas.calendar import CalendarEventItem
 from app.services.discipline_applicability import collect_applicability, describe_hidden
 from app.services.discipline_attention import attention_events, overdue_by_discipline
+from app.services.discipline_incidents import open_incidents_where
 from app.services.person_link import resolve_person_id
 
 router = APIRouter(prefix="/workspace", tags=["workspace"])
@@ -777,7 +777,9 @@ async def role_workspace_summary(
     open_tasks = int((await session.execute(task_stmt)).scalar_one() or 0)
     overdue_tasks = int((await session.execute(overdue_task_stmt)).scalar_one() or 0)
 
-    # Incidents (open/investigating) — relevant for safety roles
+    # Открытые происшествия — одна формула на платформу (срез-69): раньше
+    # рабочий стол не считал «корректирующие действия», и у одного человека
+    # здесь и на дашборде были разные числа
     open_incidents = 0
     if role in _SAFETY_ROLES:
         open_incidents = int(
@@ -785,13 +787,7 @@ async def role_workspace_summary(
                 await session.execute(
                     select(func.count())
                     .select_from(Incident)
-                    .where(
-                        Incident.tenant_id == tenant.id,
-                        Incident.deleted_at.is_(None),
-                        Incident.status.in_(
-                            [IncidentStatus.REPORTED, IncidentStatus.INVESTIGATING]
-                        ),
-                    )
+                    .where(*open_incidents_where(str(tenant.id)))
                 )
             ).scalar_one()
             or 0

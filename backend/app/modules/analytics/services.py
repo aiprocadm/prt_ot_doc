@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.models import (
     Incident,
-    IncidentStatus,
     Inspection,
     InspectionStatus,
     PPEIssue,
@@ -32,6 +31,7 @@ from app.modules.projections.models import (
     SiteSafetyReadModel,
 )
 from app.modules.workflow.models import WorkflowTask, WorkflowTaskStatus
+from app.services.discipline_incidents import open_incidents_where
 
 
 @dataclass(slots=True)
@@ -199,11 +199,7 @@ class AnalyticsAggregationService:
             await self.session.scalar(
                 select(func.count())
                 .select_from(Incident)
-                .where(
-                    Incident.tenant_id == self.tenant_id,
-                    Incident.deleted_at.is_(None),
-                    Incident.status.notin_([IncidentStatus.CLOSED, IncidentStatus.CANCELLED]),
-                )
+                .where(*open_incidents_where(self.tenant_id))
             )
             or 0
         )

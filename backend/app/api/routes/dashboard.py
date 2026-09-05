@@ -14,7 +14,7 @@ from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.models.document_core import PipelineRun, PipelineRunStatus, Template
-from app.models.models import Incident, IncidentStatus, TrainingPlan
+from app.models.models import Incident, TrainingPlan
 from app.models.obligations import Task, TaskPriority, TaskStatus
 from app.models.risk import RiskAssessment
 from app.models.safety_ops import InspectionPrepGap, InspectionPrepPackage
@@ -27,6 +27,7 @@ from app.schemas.dashboard import (
     DashboardTaskInboxItem,
     DashboardTrainingSummary,
 )
+from app.services.discipline_incidents import open_incidents_where
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -106,13 +107,9 @@ async def dashboard_summary(
             Task.due_at <= now + timedelta(days=7),
         )
     )
+    # «Открытое» — одна формула на платформу (срез-69): удалённые не считаются
     incidents_open_stmt = (
-        select(func.count())
-        .select_from(Incident)
-        .where(
-            Incident.tenant_id == tenant.id,
-            Incident.status.notin_([IncidentStatus.CLOSED, IncidentStatus.CANCELLED]),
-        )
+        select(func.count()).select_from(Incident).where(*open_incidents_where(str(tenant.id)))
     )
     risks_total_stmt = (
         select(func.count())
