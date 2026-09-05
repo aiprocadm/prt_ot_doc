@@ -35,6 +35,15 @@
 «всё положенное по БДД действует» — предрейсовые, стажировки и инструктажи
 эталоном не заданы. Это тот же приём, что у обучения: просрочка — красный,
 её отсутствие — не зелёный, а «не измеряется» с фактом в расшифровке.
+
+**5. ПБ: сроки объекта — факт, а не эталон (срез-82).** У площадки есть свои
+сроки пожарной безопасности — перезарядка и поверка средств защиты, плановая
+тренировка, пересмотр документов, — и просроченный срок красит ПБ красным так
+же честно, как истёкшее удостоверение красит БДД. Но зелёной ПБ не бывает:
+сколько средств защиты, документов и тренировок объекту ПОЛОЖЕНО, платформа
+не судит (признаков применимости норм у площадки нет), и «сроки в порядке»
+не значит «всё положенное есть». Средства без единой записи о работах и
+давность последней тренировки — факты в расшифровке, цвет они не трогают.
 """
 
 from __future__ import annotations
@@ -52,10 +61,12 @@ from app.core.disciplines import (
 __all__ = [
     "DisciplineCounts",
     "DisciplineStatus",
+    "FireSafetyNumbers",
     "RoadSafetyNumbers",
     "TrafficLight",
     "build_discipline_statuses",
     "evaluate_counts",
+    "fire_safety_status",
     "road_safety_status",
     "training_status",
     "with_extra_reason",
@@ -234,20 +245,167 @@ def road_safety_status(numbers: RoadSafetyNumbers) -> DisciplineStatus:
     )
 
 
+@dataclass(frozen=True)
+class FireSafetyNumbers:
+    """Сроки пожарной безопасности ОДНОГО объекта — факт ПБ (срез-82).
+
+    Считаются так же, как в сводке готовности модуля ПБ
+    (``/fire-safety/readiness``): одна формула на сводку и карточку площадки
+    (``services/discipline_fire_safety.py``). Средства — только действующие
+    (``status == "active"``); тренировка без протокола — срок, проведённая —
+    факт; документ без даты пересмотра — бессрочный, не срок.
+    """
+
+    #: действующих средств защиты
+    units: int = 0
+    #: перезарядка просрочена
+    overdue_recharge: int = 0
+    #: поверка/ТО просрочены
+    overdue_inspection: int = 0
+    #: перезарядка или поверка в горизонте «скоро»
+    due_soon: int = 0
+    #: горизонт «скоро» в днях — чтобы число в расшифровке не требовало пояснений
+    due_soon_days: int = 30
+    #: средств без единой записи о выполненной работе — срок стоит, а
+    #: подтвердить его нечем; факт, не просрочка
+    without_maintenance: int = 0
+    #: тренировок по плану-графику, не проведённых к плановой дате
+    overdue_drills: int = 0
+    #: назначенных вперёд
+    planned_drills: int = 0
+    #: дата последней ПРОВЕДЁННОЙ тренировки; None — не проводилась ни разу
+    last_drill_on: date | None = None
+    #: сколько дней прошло с последней тренировки; интервал нормы не судится
+    days_since_last_drill: int | None = None
+    #: карточек документов ПБ
+    documents: int = 0
+    #: у скольких просрочен пересмотр
+    overdue_documents: int = 0
+
+    @property
+    def overdue(self) -> int:
+        """Все просрочки объекта — те же четыре слагаемых, что у строки
+        «Пожарная безопасность» Центра внимания (срез-80)."""
+
+        return (
+            self.overdue_recharge
+            + self.overdue_inspection
+            + self.overdue_drills
+            + self.overdue_documents
+        )
+
+    @property
+    def has_objects(self) -> bool:
+        """Есть ли у объекта хоть что-то по ПБ; без этого — прежняя причина."""
+
+        return bool(
+            self.units
+            or self.overdue_drills
+            or self.planned_drills
+            or self.last_drill_on is not None
+            or self.documents
+        )
+
+
+def _fire_safety_facts(numbers: FireSafetyNumbers) -> list[str]:
+    """Факты, которые цвет не трогают, но инспектор спросит первыми."""
+
+    facts: list[str] = []
+    if numbers.without_maintenance:
+        facts.append(f"средств без записи о работах: {numbers.without_maintenance}")
+    if numbers.last_drill_on is not None:
+        when = numbers.last_drill_on.strftime("%d.%m.%Y")
+        ago = (
+            f" ({numbers.days_since_last_drill} дн. назад)"
+            if numbers.days_since_last_drill is not None
+            else ""
+        )
+        facts.append(f"последняя тренировка {when}{ago}")
+    else:
+        facts.append("проведённых тренировок нет")
+    if numbers.planned_drills:
+        facts.append(f"тренировок назначено: {numbers.planned_drills}")
+    return facts
+
+
+def fire_safety_status(numbers: FireSafetyNumbers) -> DisciplineStatus:
+    """ПБ по срокам объекта: просрочка — красный, остальное — не зелёный.
+
+    Без средств, тренировок и документов — прежняя причина словаря. С ними
+    просроченный срок красит красным, срок в горизонте — жёлтым, порядок в
+    сроках — «не измеряется» с фактом: см. решение 5 в докстринге модуля.
+    """
+
+    base = UNMEASURED_DISCIPLINES[Discipline.FIRE_SAFETY]
+    title = DISCIPLINE_TITLES[Discipline.FIRE_SAFETY]
+    if not numbers.has_objects:
+        return DisciplineStatus(
+            discipline=Discipline.FIRE_SAFETY,
+            title=title,
+            light=TrafficLight.NOT_MEASURED,
+            reason=base,
+        )
+    counts = DisciplineCounts(
+        required=numbers.units, lapsed=numbers.overdue, expiring=numbers.due_soon
+    )
+    facts = "; ".join(_fire_safety_facts(numbers))
+    if numbers.overdue > 0:
+        parts = [
+            f"{label}: {amount}"
+            for label, amount in (
+                ("перезарядка средств защиты", numbers.overdue_recharge),
+                ("поверка/ТО", numbers.overdue_inspection),
+                ("тренировки", numbers.overdue_drills),
+                ("пересмотр документов", numbers.overdue_documents),
+            )
+            if amount
+        ]
+        return DisciplineStatus(
+            discipline=Discipline.FIRE_SAFETY,
+            title=title,
+            light=TrafficLight.RED,
+            reason=f"Просрочено по ПБ — {', '.join(parts)}; {facts}",
+            counts=counts,
+        )
+    if numbers.due_soon > 0:
+        return DisciplineStatus(
+            discipline=Discipline.FIRE_SAFETY,
+            title=title,
+            light=TrafficLight.YELLOW,
+            reason=(
+                f"Перезарядка или поверка средств защиты в ближайшие "
+                f"{numbers.due_soon_days} дн.: {numbers.due_soon}; {facts}"
+            ),
+            counts=counts,
+        )
+    return DisciplineStatus(
+        discipline=Discipline.FIRE_SAFETY,
+        title=title,
+        light=TrafficLight.NOT_MEASURED,
+        reason=(
+            f"Сроки ПБ не просрочены (средств защиты: {numbers.units}, "
+            f"документов: {numbers.documents}); {facts}. {base}"
+        ),
+        counts=counts,
+    )
+
+
 def build_discipline_statuses(
     *,
     medical: DisciplineCounts,
     ppe: DisciplineCounts,
     training_overdue: int,
     road_safety: RoadSafetyNumbers | None = None,
+    fire_safety: FireSafetyNumbers | None = None,
 ) -> list[DisciplineStatus]:
     """Полный светофор: измеримое + дисциплины с причиной.
 
     Порядок фиксированный (как в ТЗ), а не «красное сверху»: светофор читают
     регулярно, и скачущие местами строки мешают сравнивать неделю с неделей.
 
-    ``road_safety`` необязателен: кто удостоверения не считал (светофор
-    клиента), получает прежнюю причину словаря, а не выдуманные нули.
+    ``road_safety`` и ``fire_safety`` необязательны: кто удостоверения или
+    сроки объекта не считал (светофор клиента, карточка сотрудника), получает
+    прежнюю причину словаря, а не выдуманные нули.
     """
 
     rows: list[DisciplineStatus] = []
@@ -269,6 +427,9 @@ def build_discipline_statuses(
     for discipline, reason in UNMEASURED_DISCIPLINES.items():
         if discipline is Discipline.ROAD_SAFETY and road_safety is not None:
             rows.append(road_safety_status(road_safety))
+            continue
+        if discipline is Discipline.FIRE_SAFETY and fire_safety is not None:
+            rows.append(fire_safety_status(fire_safety))
             continue
         rows.append(
             DisciplineStatus(

@@ -19,6 +19,12 @@ from sqlalchemy import delete, select
 
 from app.db.session import AsyncSessionLocal
 from app.models.feature import Feature, FeatureEnablement
+from app.models.fire_safety import (
+    FireDrill,
+    FireMaintenanceRecord,
+    FireSafetyDocument,
+    FireSafetyEquipment,
+)
 from app.models.master_data import Company, Site, Workplace
 from app.models.medical import MedicalExamKind, MedicalNorm
 from app.models.models import Position, RoleEnum, Tenant
@@ -247,6 +253,117 @@ class TestSiteOverview:
         fire = _row(body, "fire_safety")
         assert fire["light"] == "not_measured"
         assert "нарядов-допусков: 1" in fire["reason"]
+
+    async def test_сроки_пб_площадки_красят_её_строку_а_чужие_и_без_площадки_нет(
+        self, async_client: AsyncClient, make_auth_headers, site_with_people, sessionmaker
+    ) -> None:
+        """Срез-82 (разд. 54.1): просрочка объекта — красный, с фактами; сводка
+        модуля считает то же самое по всему арендатору."""
+
+        from datetime import date, timedelta
+
+        tenant, site_id = site_with_people
+        today = date.today()
+        async with sessionmaker() as session:
+            company_id = (
+                await session.execute(select(Site.company_id).where(Site.id == site_id))
+            ).scalar_one()
+            other = Site(tenant_id=tenant.id, company_id=company_id, name="Цех №2")
+            session.add(other)
+            await session.flush()
+            ok_unit = FireSafetyEquipment(
+                tenant_id=tenant.id,
+                site_id=site_id,
+                kind="extinguisher",
+                label="ОП-4 №1",
+                recharge_due=today + timedelta(days=200),
+            )
+            session.add_all(
+                [
+                    # своя площадка: просроченная перезарядка — красный
+                    FireSafetyEquipment(
+                        tenant_id=tenant.id,
+                        site_id=site_id,
+                        kind="extinguisher",
+                        label="ОП-4 №2",
+                        recharge_due=today - timedelta(days=3),
+                    ),
+                    ok_unit,
+                    # чужая площадка и без площадки — не сюда
+                    FireSafetyEquipment(
+                        tenant_id=tenant.id,
+                        site_id=other.id,
+                        kind="extinguisher",
+                        label="ОП-4 №3",
+                        recharge_due=today - timedelta(days=30),
+                    ),
+                    FireSafetyEquipment(
+                        tenant_id=tenant.id,
+                        kind="extinguisher",
+                        label="ОП-4 №4",
+                        inspection_due=today - timedelta(days=30),
+                    ),
+                    FireDrill(
+                        tenant_id=tenant.id,
+                        site_id=site_id,
+                        kind="evacuation",
+                        title="Эвакуация",
+                        planned_on=today - timedelta(days=40),
+                        held_on=today - timedelta(days=40),
+                        outcome="satisfactory",
+                    ),
+                    FireSafetyDocument(
+                        tenant_id=tenant.id,
+                        site_id=site_id,
+                        kind="evacuation_plan",
+                        title="План эвакуации",
+                        review_due=today - timedelta(days=1),
+                    ),
+                ]
+            )
+            await session.flush()
+            session.add(
+                FireMaintenanceRecord(
+                    tenant_id=tenant.id,
+                    equipment_id=ok_unit.id,
+                    kind="recharge",
+                    performed_on=today - timedelta(days=10),
+                    result="passed",
+                )
+            )
+            await session.commit()
+        headers = await make_auth_headers(RoleEnum.ADMIN)
+
+        body = await _overview(async_client, headers, site_id)
+
+        fire = _row(body, "fire_safety")
+        assert fire["light"] == "red", fire
+        assert fire["reason"].startswith(
+            "Просрочено по ПБ — перезарядка средств защиты: 1, пересмотр документов: 1; "
+            "средств без записи о работах: 1; последняя тренировка "
+        ), fire["reason"]
+        assert "(40 дн. назад)" in fire["reason"]
+        assert fire["required"] == 2 and fire["lapsed"] == 2
+        assert body["overall"] == "red"
+
+        # соседняя площадка видит только своё, средство без площадки — ничьё
+        neighbour = _row(await _overview(async_client, headers, str(other.id)), "fire_safety")
+        assert neighbour["light"] == "red"
+        assert neighbour["reason"].startswith(
+            "Просрочено по ПБ — перезарядка средств защиты: 1; "
+            "средств без записи о работах: 1; проведённых тренировок нет"
+        ), neighbour["reason"]
+
+        # сводка модуля — та же формула по всему арендатору
+        readiness = await async_client.get("/api/v1/fire-safety/readiness", headers=headers)
+        assert readiness.status_code == 200, readiness.text
+        summary = readiness.json()
+        assert summary["total_units"] == 4
+        assert summary["overdue_recharge"] == 2
+        assert summary["overdue_inspection"] == 1
+        assert summary["units_without_maintenance"] == 3
+        assert summary["overdue_documents"] == 1
+        assert summary["days_since_last_drill"] == 40
 
     async def test_непосчитанное_названо_с_причиной(
         self, async_client: AsyncClient, make_auth_headers, site_with_people
