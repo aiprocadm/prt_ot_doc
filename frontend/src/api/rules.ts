@@ -8,6 +8,7 @@ import type {
   DryRunIn,
   DryRunOut,
   EventTypePage,
+  RuleLibraryInstallOut,
   RuleLibraryPage,
   RuleTestOut,
   TriggerPage,
@@ -29,6 +30,12 @@ export const rulesApi = {
   /** Библиотека предустановленных правил по дисциплинам (BIZ-54-57 срез-4). */
   async library(): Promise<RuleLibraryPage> {
     return (await apiClient.get<RuleLibraryPage>(`${BASE}/library`)).data;
+  },
+  /** Выдать недостающие правила библиотеки существующему арендатору (срез-63). */
+  async installLibrary(): Promise<RuleLibraryInstallOut> {
+    return (
+      await apiClient.post<RuleLibraryInstallOut>(`${BASE}/library/install`)
+    ).data;
   },
   async list(
     params: { limit?: number; offset?: number } = {},

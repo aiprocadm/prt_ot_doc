@@ -978,6 +978,7 @@
     "POST /api/v1/road-safety/waybills",
     "POST /api/v1/rules",
     "POST /api/v1/rules/dry-run",
+    "POST /api/v1/rules/library/install",
     "POST /api/v1/rules/{rule_id}/test",
     "POST /api/v1/safety-ops/prescriptions",
     "POST /api/v1/search/reindex",
@@ -1653,6 +1654,7 @@
     "inspect_template_version_api_v1_templates__template_id__versions__version_id__inspect_post",
     "inspections_dashboard_api_v1_analytics_dashboard_inspections_get",
     "inspections_trends_api_v1_analytics_trends_inspections_get",
+    "install_library_api_v1_rules_library_install_post",
     "install_marketplace_item_api_v1_marketplace__item_id__install_post",
     "internal_request_by_id_api_v1_portal_requests__request_id__get",
     "internal_request_message_api_v1_portal_requests__request_id__messages_post",
@@ -3036,6 +3038,7 @@
     "RoleWorkspaceSummary",
     "RowErrorOut",
     "RuleLibraryDiscipline",
+    "RuleLibraryInstallOut",
     "RuleLibraryPage",
     "RuleTestIn",
     "RuleTestOut",
@@ -4118,7 +4121,8 @@
     "CalendarSourceCount": {
       "source_type": "string",
       "count": "integer",
-      "overdue_count": "integer"
+      "overdue_count": "integer",
+      "overdue_by_kind": "null|object"
     },
     "CalendarSummary": {
       "events_total": "integer",
@@ -4349,7 +4353,8 @@
       "aggregation": "string",
       "reason": "null|string",
       "overall": "null|string",
-      "directions": "array"
+      "directions": "array",
+      "not_applicable": "null|string"
     },
     "CommitteeCreate": {
       "kind": "CommitteeKind",
@@ -4953,6 +4958,7 @@
       "created": "boolean",
       "report": "DisciplineReportRead",
       "notified": "integer",
+      "mailed": "integer",
       "summary": "string"
     },
     "DocGeneratePipelineRequest": {
@@ -5473,7 +5479,8 @@
     "EmployeeDisciplinesSection": {
       "overall": "string",
       "rows": "array",
-      "note": "null|string"
+      "note": "null|string",
+      "not_applicable": "null|string"
     },
     "EmployeeDocumentItem": {
       "id": "string",
@@ -9487,10 +9494,17 @@
       "rules": "integer",
       "reason": "string"
     },
+    "RuleLibraryInstallOut": {
+      "created": "array",
+      "kept_deleted": "array",
+      "installed": "integer",
+      "total": "integer"
+    },
     "RuleLibraryPage": {
       "items": "array",
       "total": "integer",
-      "installed": "integer"
+      "installed": "integer",
+      "removed": "integer"
     },
     "RuleTestIn": {
       "limit": "integer"
@@ -11043,7 +11057,8 @@
       "recommendations": "array",
       "disciplines": "array",
       "unclassified_sources": "array",
-      "items_truncated": "boolean"
+      "items_truncated": "boolean",
+      "not_applicable": "null|string"
     },
     "WorkspaceConfig": {
       "role": "string",

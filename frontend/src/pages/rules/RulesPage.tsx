@@ -81,6 +81,11 @@ const RulesPage = () => {
   });
 
   const reloadRules = () => void rulesRes.reload().catch(() => undefined);
+  // Выдача библиотеки меняет и реестр правил, и счётчик «выдано N из M».
+  const reloadAfterInstall = () => {
+    reloadRules();
+    void libraryRes.reload().catch(() => undefined);
+  };
 
   const toggleRule = async (rule: AutomationRuleRead, next: boolean) => {
     try {
@@ -261,7 +266,10 @@ const RulesPage = () => {
       ) : null}
 
       {/* Панели не гейтим на loading: перемонтирование TriggerLogPanel дублировало бы запрос триггеров. */}
-      <RuleLibraryPanel library={libraryRes.data} />
+      <RuleLibraryPanel
+        library={libraryRes.data}
+        onInstalled={reloadAfterInstall}
+      />
       <DryRunPanel eventTypes={eventTypesRes.data} rules={rulesRes.data} />
       <TriggerLogPanel rules={rulesRes.data} />
     </div>

@@ -9,7 +9,6 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
-from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
@@ -24,7 +23,6 @@ from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.db.session import rearm_session_tenant_context
 from app.models.models import Tenant
-from app.models.rules_engine import AutomationRule
 from app.modules.rules_engine.actions import ActionsError
 from app.modules.rules_engine.catalog import event_catalog
 from app.modules.rules_engine.conditions import ConditionsError
@@ -39,6 +37,7 @@ from app.modules.rules_engine.schemas import (
     EventTypeMeta,
     EventTypePage,
     RuleLibraryDiscipline,
+    RuleLibraryInstallOut,
     RuleLibraryPage,
     RuleTestIn,
     RuleTestOut,
@@ -53,9 +52,10 @@ from app.modules.rules_engine.service import (
 )
 from app.services.audit import AuditService
 from app.services.rules_library_seed import (
+    install_rule_library,
     library_coverage,
-    library_rule_names,
     library_size,
+    library_state,
 )
 
 router = APIRouter(prefix="/rules", tags=["rules-engine"])
@@ -177,25 +177,56 @@ async def rule_library(tenant: TenantDep, session: SessionDep, access: Access) -
 
     TenantContextValidator.ensure_tenant_context(tenant)
     _ = access
-    names = library_rule_names()
-    installed = int(
-        (
-            await session.execute(
-                select(func.count())
-                .select_from(AutomationRule)
-                .where(
-                    AutomationRule.tenant_id == str(tenant.id),
-                    AutomationRule.deleted_at.is_(None),
-                    AutomationRule.name.in_(names),
-                )
-            )
-        ).scalar_one()
-        or 0
-    )
+    alive, deleted = await library_state(session, tenant_id=str(tenant.id))
     return RuleLibraryPage(
         items=[RuleLibraryDiscipline(**row) for row in library_coverage()],
         total=library_size(),
-        installed=installed,
+        installed=len(alive),
+        removed=len(deleted),
+    )
+
+
+@router.post(
+    "/library/install",
+    response_model=RuleLibraryInstallOut,
+    dependencies=[FeatureGate],
+)
+async def install_library(
+    request: Request, tenant: TenantDep, session: SessionDep, access: Access
+) -> RuleLibraryInstallOut:
+    """Выдать арендатору недостающие правила библиотеки (срез-63).
+
+    Библиотека растёт (срез-62 добавил шесть правил по срокам дисциплин), а
+    посев шёл только при создании арендатора — у существующих новые правила не
+    появлялись. Ручка идемпотентна по имени: повторный вызов ничего не плодит.
+    Удалённые специалистом правила НЕ возвращаются и называются в ответе
+    отдельно — удаление было решением, а не потерей.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    outcome = await install_rule_library(session, tenant_id=str(tenant.id))
+    if outcome.created:
+        await _audit(
+            session,
+            request,
+            access,
+            str(tenant.id),
+            action="library_install",
+            object_id=str(tenant.id),
+            details={
+                "created": list(outcome.created),
+                "kept_deleted": list(outcome.kept_deleted),
+            },
+        )
+        await session.commit()
+        # commit() drops the transaction-local RLS GUCs — re-arm before
+        # further session work (SEC-65)
+        await rearm_session_tenant_context(session)
+    return RuleLibraryInstallOut(
+        created=list(outcome.created),
+        kept_deleted=list(outcome.kept_deleted),
+        installed=outcome.installed,
+        total=outcome.total,
     )
 
 
