@@ -104,7 +104,9 @@ export interface DisciplineReportPageDto {
 export interface DisciplineReportRunDto {
   created: boolean;
   report: DisciplineReportDto;
-  /** Сколько уведомлений ушло получателям (срез-51); у повторного запуска 0. */
+  /** Сколько карточек ушло получателям в приложение (срез-51); у повторного запуска 0. */
   notified: number;
+  /** Сколько писем поставлено в очередь доставщику (срез-60). */
+  mailed: number;
   summary: string;
 }

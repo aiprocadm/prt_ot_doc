@@ -23,11 +23,28 @@
 уведомления — сводка отчёта: она уже отвечает «что, что изменилось, что
 делать», второй пересказ разошёлся бы с ней.
 
-**4. Канал — только приложение.** Письмо требует согласия и настроек
-доставки (у аутсорсинга — ``client_report_mail``); это отдельный шаг.
+**4. Письмо — вторым уведомлением, канал «почта» (срез-60).** ТЗ зовёт
+отчёт «авто-отчётом для клиента при аренде»: клиент аренды — директор, а его
+рабочее место не всегда открыто, письмо же доходит и в закрытое. Три условия
+те же, что у письма клиенту аутсорсинга (``client_report_mail``): согласие,
+настройка, доставка. Согласие — настройка почты у самого получателя
+(``email_enabled``: выключил — письма нет, карточка в приложении остаётся;
+выключил приложение — письмо всё равно уходит: два канала, два согласия).
+Настройка — SMTP у администратора платформы. Доставка — штатный контур
+уведомлений: письмо не отдаётся почтовому серверу «мимо журнала», как у
+аутсорсинга (там клиент не пользователь), а лежит в журнале уведомлений
+рядом с карточкой и получает честный итог доставщика: без SMTP —
+«пропущено» с причиной, а не «отправлено». Ключ дедупликации — тот же с
+суффиксом ``:email``: повтор тика не шлёт второе письмо.
+
+**5. Текст письма — не копия карточки.** У карточки есть ссылка «открыть
+дашборд», у письма её нет; поэтому письмо называет период целиком, несёт ту
+же сводку и говорит словами, где искать подробности.
 """
 
 from __future__ import annotations
+
+from dataclasses import dataclass
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,8 +62,11 @@ from app.services.notifications import send_notification
 __all__ = [
     "REPORT_DEEPLINK",
     "REPORT_RECIPIENT_ROLES",
+    "ReportDelivery",
+    "build_report_letter",
     "deliver_discipline_report",
     "report_dedup_key",
+    "report_letter_dedup_key",
 ]
 
 #: Кому уходит отчёт обо всём предприятии (см. решение 1 в докстринге модуля).
@@ -64,6 +84,47 @@ def report_dedup_key(report_id: str, user_id: str) -> str:
     return f"discipline_report:{report_id}:{user_id}"
 
 
+def report_letter_dedup_key(report_id: str, user_id: str) -> str:
+    return f"{report_dedup_key(report_id, user_id)}:email"
+
+
+@dataclass(frozen=True)
+class ReportDelivery:
+    """Сколько уведомлений создано по каналам: карточек в приложении и писем.
+
+    Письмо здесь — поставлено в очередь, а не доставлено: отправляет
+    доставщик уведомлений, и итог (ушло / пропущено без SMTP) он пишет на
+    самой записи.
+    """
+
+    in_app: int = 0
+    email: int = 0
+
+
+def _report_title(report: DisciplineStatusReport) -> str:
+    return f"Отчёт о состоянии по дисциплинам за {report.period_end.strftime('%d.%m.%Y')}"
+
+
+def build_report_letter(report: DisciplineStatusReport) -> tuple[str, str]:
+    """Тема и текст письма. Отдельно от отправки — чтобы проверять без SMTP."""
+
+    period = (
+        f"{report.period_start.strftime('%d.%m.%Y')} — {report.period_end.strftime('%d.%m.%Y')}"
+    )
+    lines = [
+        f"Отчёт о состоянии по дисциплинам за период {period}.",
+        "",
+        report.summary,
+        "",
+        "Подробности по каждой дисциплине — на управленческом дашборде "
+        f"в приложении ({REPORT_DEEPLINK}).",
+        "",
+        "Письмо сформировано автоматически по данным вашей организации. "
+        "Отключить его можно в настройках уведомлений (канал «почта»).",
+    ]
+    return _report_title(report), "\n".join(lines)
+
+
 def _priority(report: DisciplineStatusReport) -> NotificationPriority:
     delta = ((report.payload or {}).get("totals") or {}).get("delta")
     if isinstance(delta, int) and delta > 0:
@@ -71,11 +132,14 @@ def _priority(report: DisciplineStatusReport) -> NotificationPriority:
     return NotificationPriority.MEDIUM
 
 
-async def deliver_discipline_report(session: AsyncSession, report: DisciplineStatusReport) -> int:
-    """Отправить отчёт получателям. Возвращает число созданных уведомлений.
+async def deliver_discipline_report(
+    session: AsyncSession, report: DisciplineStatusReport
+) -> ReportDelivery:
+    """Отправить отчёт получателям: карточку в приложении и письмо каждому.
 
     Ничего не коммитит — транзакцией владеет вызывающий. Получатель, который
-    выключил канал приложения, честно не считается: уведомления у него нет.
+    выключил канал, честно не считается: уведомления в этом канале у него
+    нет; каналы независимы (см. решение 4 в докстринге модуля).
     """
 
     users = (
@@ -92,11 +156,20 @@ async def deliver_discipline_report(session: AsyncSession, report: DisciplineSta
         .scalars()
         .all()
     )
-    title = f"Отчёт о состоянии по дисциплинам за {report.period_end.strftime('%d.%m.%Y')}"
+    title = _report_title(report)
+    subject, letter = build_report_letter(report)
     priority = _priority(report)
-    sent = 0
+    payload = {
+        "entity_type": "discipline_status_report",
+        "entity_id": str(report.id),
+        "deeplink": REPORT_DEEPLINK,
+        "period_end": report.period_end.isoformat(),
+        "total_issues": int(report.total_issues),
+    }
+    in_app = 0
+    email = 0
     for user in users:
-        created = await send_notification(
+        card = await send_notification(
             session,
             tenant_id=report.tenant_id,
             user_id=str(user.id),
@@ -104,15 +177,24 @@ async def deliver_discipline_report(session: AsyncSession, report: DisciplineSta
             type=NotificationType.DISCIPLINE_REPORT,
             title=title,
             body=report.summary,
-            payload={
-                "entity_type": "discipline_status_report",
-                "entity_id": str(report.id),
-                "deeplink": REPORT_DEEPLINK,
-                "period_end": report.period_end.isoformat(),
-                "total_issues": int(report.total_issues),
-            },
+            payload=payload,
             dedup_key=report_dedup_key(str(report.id), str(user.id)),
             priority=priority,
         )
-        sent += int(created is not None)
-    return sent
+        in_app += int(card is not None)
+        # Адрес у пользователя есть всегда (это его логин); доставщик возьмёт
+        # его сам или адрес из настроек уведомлений, если тот указан.
+        mail = await send_notification(
+            session,
+            tenant_id=report.tenant_id,
+            user_id=str(user.id),
+            channel=NotificationChannel.EMAIL,
+            type=NotificationType.DISCIPLINE_REPORT,
+            title=subject,
+            body=letter,
+            payload=payload,
+            dedup_key=report_letter_dedup_key(str(report.id), str(user.id)),
+            priority=priority,
+        )
+        email += int(mail is not None)
+    return ReportDelivery(in_app=in_app, email=email)

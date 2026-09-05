@@ -73,13 +73,15 @@ class DisciplineReportContent:
 class DisciplineReportOutcome:
     """Честный итог: создан новый отчёт или за эту дату уже был.
 
-    ``notified`` — сколько уведомлений ушло; у повторного запуска ноль:
-    отчёт тот же, второй раз о нём не говорят.
+    ``notified`` — сколько карточек ушло в приложение, ``mailed`` — сколько
+    писем поставлено в очередь (срез-60); у повторного запуска нули: отчёт
+    тот же, второй раз о нём не говорят.
     """
 
     created: bool
     report: DisciplineStatusReport
     notified: int = 0
+    mailed: int = 0
 
 
 def _plural(count: int, forms: tuple[str, str, str]) -> str:
@@ -287,8 +289,10 @@ async def run_discipline_report(
     )
     session.add(report)
     await session.flush()
-    notified = await deliver_discipline_report(session, report)
-    return DisciplineReportOutcome(created=True, report=report, notified=notified)
+    delivery = await deliver_discipline_report(session, report)
+    return DisciplineReportOutcome(
+        created=True, report=report, notified=delivery.in_app, mailed=delivery.email
+    )
 
 
 async def list_reports(

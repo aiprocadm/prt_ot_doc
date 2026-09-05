@@ -155,8 +155,10 @@ describe("DisciplineReportCard (Доп. №1 разд. 57.4, срез-50)", () =
       created: true,
       report: latest,
       notified: 2,
+      mailed: 2,
       // текст итога — с сервера: там же считают, кому ушло уведомление
-      summary: "Отчёт собран, уведомление ушло 2 получателям",
+      summary:
+        "Отчёт собран, уведомление ушло 2 получателям, письмо поставлено в очередь 2 получателям",
     });
     renderCard();
     expect(await screen.findByText("Отчётов ещё нет")).toBeInTheDocument();
