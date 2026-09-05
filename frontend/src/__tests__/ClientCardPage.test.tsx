@@ -251,18 +251,21 @@ describe("Происшествия клиента из отчёта (срез-61
       within(links).getByRole("link", { name: "БДД — 2" }),
     ).toHaveAttribute(
       "href",
-      "/incidents?company_id=comp-a&discipline=road_safety",
+      "/incidents?company_id=comp-a&discipline=road_safety&status=open",
     );
     expect(
       within(links).getByRole("link", { name: "Экология — 1" }),
     ).toHaveAttribute(
       "href",
-      "/incidents?company_id=comp-a&discipline=ecology",
+      "/incidents?company_id=comp-a&discipline=ecology&status=open",
     );
     // неразмеченные — тот же реестр клиента с фильтром «без разметки» (срез-65)
     expect(
       within(links).getByRole("link", { name: "без разметки — 1" }),
-    ).toHaveAttribute("href", "/incidents?company_id=comp-a&discipline=none");
+    ).toHaveAttribute(
+      "href",
+      "/incidents?company_id=comp-a&discipline=none&status=open",
+    );
     // отчёт без происшествий ссылок не показывает — нечего открывать
     expect(
       within(rows[1]).queryByTestId("incident-links"),

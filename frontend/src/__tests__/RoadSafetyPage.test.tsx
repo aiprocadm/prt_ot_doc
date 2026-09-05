@@ -787,7 +787,7 @@ describe("RoadSafetyPage", () => {
     // ссылка ведёт в ОБЩИЙ реестр с уже выставленным фильтром дисциплины
     expect(screen.getByRole("link", { name: "3" })).toHaveAttribute(
       "href",
-      "/incidents?discipline=road_safety",
+      "/incidents?discipline=road_safety&status=open",
     );
   });
 

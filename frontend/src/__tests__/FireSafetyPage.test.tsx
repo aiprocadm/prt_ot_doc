@@ -309,7 +309,7 @@ describe("FireSafetyPage", () => {
     // ссылка ведёт в ОБЩИЙ реестр с уже выставленным фильтром дисциплины
     expect(screen.getByRole("link", { name: "3" })).toHaveAttribute(
       "href",
-      "/incidents?discipline=fire_safety",
+      "/incidents?discipline=fire_safety&status=open",
     );
   });
 

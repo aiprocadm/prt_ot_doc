@@ -25,6 +25,14 @@ const mockIncident = {
 
 vi.mock("@/api/incidents", () => ({
   UNMARKED_DISCIPLINE_FILTER: "none",
+  OPEN_STATUS_FILTER: "open",
+  INCIDENT_STATUS_LABELS: {
+    reported: "Сообщено",
+    investigating: "Расследуется",
+    corrective_actions: "Корректирующие действия",
+    closed: "Закрыт",
+    cancelled: "Отменён",
+  },
   incidentsApi: {
     list: listMock,
     create: createMock,
@@ -187,6 +195,48 @@ describe("IncidentsPage", () => {
       expect(listMock).toHaveBeenCalledWith({
         limit: 100,
         status_filter: "closed",
+      });
+    });
+  });
+
+  it("ссылка из отчёта «только открытые» — фильтр «Открытые» и запрос с open (срез-68)", async () => {
+    listMock.mockResolvedValue({ items: [mockIncident], total: 1 });
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter initialEntries={["/incidents?status=open"]}>
+        <IncidentsPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(listMock).toHaveBeenCalledWith({
+        limit: 100,
+        status_filter: "open",
+      });
+    });
+    const select = screen.getByLabelText("Фильтр по статусу");
+    expect(select).toHaveValue("open");
+    // Статусы — словарь сервера: «черновика» у происшествий нет, а
+    // «сообщено», «корректирующие действия» и «отменён» — есть.
+    const options = Array.from(select.querySelectorAll("option")).map(
+      (o) => o.value,
+    );
+    expect(options).toEqual([
+      "",
+      "open",
+      "reported",
+      "investigating",
+      "corrective_actions",
+      "closed",
+      "cancelled",
+    ]);
+
+    await user.selectOptions(select, "corrective_actions");
+    await waitFor(() => {
+      expect(listMock).toHaveBeenLastCalledWith({
+        limit: 100,
+        status_filter: "corrective_actions",
       });
     });
   });

@@ -685,7 +685,7 @@ describe("EcologyPage", () => {
     // ссылка ведёт в ОБЩИЙ реестр с уже выставленным фильтром дисциплины
     expect(screen.getByRole("link", { name: "3" })).toHaveAttribute(
       "href",
-      "/incidents?discipline=ecology",
+      "/incidents?discipline=ecology&status=open",
     );
   });
 

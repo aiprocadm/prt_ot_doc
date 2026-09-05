@@ -2,7 +2,10 @@ import { useCallback, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { analyticsApi } from "@/api/analyticsApi";
-import { UNMARKED_DISCIPLINE_FILTER } from "@/api/incidents";
+import {
+  OPEN_STATUS_FILTER,
+  UNMARKED_DISCIPLINE_FILTER,
+} from "@/api/incidents";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { Button } from "@/components/ui/button";
@@ -174,7 +177,7 @@ export function DisciplineReportCard() {
                       <td className="py-2 pr-4">
                         {row.incidents_open > 0 ? (
                           <Link
-                            to={`/incidents?discipline=${encodeURIComponent(row.discipline)}`}
+                            to={`/incidents?discipline=${encodeURIComponent(row.discipline)}&status=${OPEN_STATUS_FILTER}`}
                             className="text-primary underline"
                           >
                             {row.incidents_open}
@@ -215,7 +218,7 @@ export function DisciplineReportCard() {
               <p className="text-sm text-muted-foreground">
                 Не размечено дисциплиной:{" "}
                 <Link
-                  to={`/incidents?discipline=${UNMARKED_DISCIPLINE_FILTER}`}
+                  to={`/incidents?discipline=${UNMARKED_DISCIPLINE_FILTER}&status=${OPEN_STATUS_FILTER}`}
                   className="text-primary underline"
                 >
                   {report.payload.unmarked_incidents}
