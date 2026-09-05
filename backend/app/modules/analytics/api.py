@@ -322,20 +322,38 @@ async def run_discipline_report_now(
         created=outcome.created,
         report=DisciplineReportRead.model_validate(outcome.report),
         notified=outcome.notified,
-        summary=_run_summary(outcome.created, outcome.notified),
+        mailed=outcome.mailed,
+        summary=_run_summary(outcome.created, outcome.notified, outcome.mailed),
     )
 
 
-def _run_summary(created: bool, notified: int) -> str:
+def _recipients(count: int) -> str:
+    tail = count % 100
+    word = "получателю" if count % 10 == 1 and tail != 11 else "получателям"
+    return f"{count} {word}"
+
+
+def _run_summary(created: bool, notified: int, mailed: int = 0) -> str:
     if not created:
         return "Отчёт за сегодня уже есть — показан он, второй не пишется"
-    if notified == 0:
-        # Получателей нет (или все выключили канал) — это надо увидеть, а не
-        # прочитать «собран» и решить, что директор уже в курсе.
+    if notified == 0 and mailed == 0:
+        # Получателей нет (или все выключили оба канала) — это надо увидеть,
+        # а не прочитать «собран» и решить, что директор уже в курсе.
         return "Отчёт собран, уведомление отправлять некому"
-    tail = notified % 100
-    word = "получателю" if notified % 10 == 1 and tail != 11 else "получателям"
-    return f"Отчёт собран, уведомление ушло {notified} {word}"
+    # Срез-60: письмо — второй канал со своим согласием, поэтому итог по
+    # каждому каналу свой. «Поставлено в очередь», а не «ушло»: отправляет
+    # доставщик уведомлений, и без SMTP он честно пометит письмо пропущенным.
+    card = (
+        f"уведомление ушло {_recipients(notified)}"
+        if notified
+        else "уведомление в приложении отправлять некому"
+    )
+    letter = (
+        f"письмо поставлено в очередь {_recipients(mailed)}"
+        if mailed
+        else "письмо никому не ушло: почта у получателей выключена"
+    )
+    return f"Отчёт собран, {card}, {letter}"
 
 
 @router.post("/recompute", dependencies=[_AdminGuard])
