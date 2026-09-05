@@ -44,6 +44,12 @@
 ``collect_fire_briefing_numbers``: те же инструктажи, но без объектов
 (``objects_counted=False``): средства, тренировки и документы — сроки
 площадки, у человека их нет.
+
+Само правило «человек × вид по самой поздней дате действия» живёт в
+``services/briefing_validity.latest_briefing_validity`` (срез-85) и не
+привязано к пожарным видам: вкладка инструктажей карточки сотрудника считает
+им «просрочено» по всем видам и помечает перекрытые записи, — иначе строка
+ПБ и вкладка на одной карточке говорили бы разное про одну и ту же запись.
 """
 
 from __future__ import annotations
@@ -56,14 +62,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.discipline_status import FireSafetyNumbers
 from app.core.disciplines import BRIEFING_TYPE_DISCIPLINE, Discipline
-from app.core.feature_flags import as_utc
-from app.models.briefings import BriefingEntry
 from app.models.fire_safety import (
     FireDrill,
     FireMaintenanceRecord,
     FireSafetyDocument,
     FireSafetyEquipment,
 )
+from app.services.briefing_validity import latest_briefing_validity
 
 __all__ = [
     "FIRE_BRIEFING_TYPES",
@@ -93,26 +98,12 @@ async def _fire_briefing_numbers(
 ) -> tuple[int, int, int]:
     """(просрочено, скоро истекает, действует) — по человеку × виду, не по записи."""
 
-    if person_ids is not None and not person_ids:
-        return 0, 0, 0
-    # ключ — человек, а без человека — сама запись: перекрыть её нечем
-    owner = func.coalesce(BriefingEntry.person_id, BriefingEntry.id)
-    stmt = (
-        select(func.max(BriefingEntry.valid_until))
-        .where(
-            BriefingEntry.tenant_id == tenant_id,
-            BriefingEntry.deleted_at.is_(None),
-            BriefingEntry.briefing_type.in_(FIRE_BRIEFING_TYPES),
-            BriefingEntry.valid_until.is_not(None),
-        )
-        .group_by(owner, BriefingEntry.briefing_type)
+    latest = await latest_briefing_validity(
+        session, tenant_id=tenant_id, person_ids=person_ids, briefing_types=FIRE_BRIEFING_TYPES
     )
-    if person_ids is not None:
-        stmt = stmt.where(BriefingEntry.person_id.in_(list(person_ids)))
-    latest = [as_utc(value) for value in (await session.execute(stmt)).scalars()]
     soon = now + timedelta(days=FIRE_DUE_SOON_DAYS)
-    overdue = sum(1 for value in latest if value is not None and value < now)
-    due_soon = sum(1 for value in latest if value is not None and now <= value <= soon)
+    overdue = sum(1 for value in latest.values() if value < now)
+    due_soon = sum(1 for value in latest.values() if now <= value <= soon)
     return overdue, due_soon, len(latest) - overdue - due_soon
 
 

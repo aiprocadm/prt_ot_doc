@@ -5472,7 +5472,8 @@
       "briefing_date": "string",
       "valid_until": "null|string",
       "status": "string",
-      "is_expired": "boolean"
+      "is_expired": "boolean",
+      "is_superseded": "boolean"
     },
     "EmployeeBriefingsSection": {
       "count": "integer",

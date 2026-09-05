@@ -247,11 +247,17 @@ class EmployeeBriefingItem(BaseSchema):
     briefing_date: datetime
     valid_until: datetime | None = None
     status: str
+    #: срок ЭТОЙ записи прошёл (факт записи)
     is_expired: bool = False
+    #: у человека есть запись того же вида с более поздним сроком (срез-85):
+    #: истёкшая перекрытая запись — не нарушение, и «Просрочен» о ней не говорят
+    is_superseded: bool = False
 
 
 class EmployeeBriefingsSection(BaseSchema):
     count: int
+    #: видов инструктажа, у которых САМАЯ ПОЗДНЯЯ запись истекла (человек × вид,
+    #: срез-85) — то же правило, что у строки ПБ светофора; не число записей
     expired_count: int
     items: list[EmployeeBriefingItem] = Field(default_factory=list)
 

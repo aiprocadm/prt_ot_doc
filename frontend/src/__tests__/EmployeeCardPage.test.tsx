@@ -242,7 +242,8 @@ const sampleCard: EmployeeCardDto = {
     ],
   },
   briefings: {
-    count: 2,
+    count: 3,
+    // видов с истёкшей последней записью — один (целевой); старый первичный перекрыт
     expired_count: 1,
     items: [
       {
@@ -254,6 +255,7 @@ const sampleCard: EmployeeCardDto = {
         valid_until: "2027-04-01T00:00:00Z",
         status: "signed",
         is_expired: false,
+        is_superseded: false,
       },
       {
         id: "brf-2",
@@ -264,6 +266,18 @@ const sampleCard: EmployeeCardDto = {
         valid_until: "2025-12-31T00:00:00Z",
         status: "signed",
         is_expired: true,
+        is_superseded: false,
+      },
+      {
+        id: "brf-0",
+        briefing_template_id: "btmpl-1",
+        briefing_template_title: "Первичный инструктаж (прошлогодний)",
+        briefing_type: "primary",
+        briefing_date: "2025-04-01T08:00:00Z",
+        valid_until: "2026-04-01T00:00:00Z",
+        status: "signed",
+        is_expired: true,
+        is_superseded: true,
       },
     ],
   },
@@ -629,6 +643,31 @@ describe("EmployeeCardPage", () => {
     expect(
       within(targetedRow as HTMLElement).getByText("Просрочен"),
     ).toBeInTheDocument();
+  });
+
+  it("marks a superseded briefing as history, not as overdue (срез-85)", async () => {
+    const user = userEvent.setup();
+    getCardMock.mockResolvedValueOnce(sampleCard);
+
+    renderPage();
+
+    await screen.findByRole("heading", {
+      level: 1,
+      name: "Иванов Иван Иванович",
+    });
+
+    await user.click(screen.getByRole("tab", { name: /Инструктажи/ }));
+
+    const oldRow = (
+      await screen.findByText("Первичный инструктаж (прошлогодний)")
+    ).closest("tr");
+    expect(oldRow).not.toBeNull();
+    expect(
+      within(oldRow as HTMLElement).getByText("Перекрыт"),
+    ).toBeInTheDocument();
+    expect(
+      within(oldRow as HTMLElement).queryByText("Просрочен"),
+    ).not.toBeInTheDocument();
   });
 
   it("opens the Deadlines tab with overdue badge for medical exam", async () => {

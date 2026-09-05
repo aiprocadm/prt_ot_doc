@@ -787,7 +787,10 @@ const BriefingsTab = ({ card }: { card: EmployeeCardDto }) => {
                   {formatDateTime(entry.valid_until)}
                 </TableCell>
                 <TableCell>
-                  {entry.is_expired ? (
+                  {entry.is_superseded ? (
+                    // перекрыта свежей записью того же вида: история, не просрочка (срез-85)
+                    <Badge variant="outline">Перекрыт</Badge>
+                  ) : entry.is_expired ? (
                     <Badge variant="destructive">Просрочен</Badge>
                   ) : (
                     <Badge variant="secondary">

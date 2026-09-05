@@ -118,6 +118,7 @@ from app.schemas.employee import (
     EmployeeTrainingSection,
     EmployeeUserAccount,
 )
+from app.services.briefing_validity import latest_briefing_validity
 from app.services.discipline_applicability import (
     DisciplineApplicability,
     collect_applicability,
@@ -803,7 +804,17 @@ class EmployeeCardService:
         return EmployeeDocumentsSection(count=total, signed_count=signed, items=items)
 
     async def _build_briefings(self, person: Person) -> EmployeeBriefingsSection:
+        """Записи журнала — все; «просрочено» — по человеку × виду (срез-85).
+
+        Старая запись, которую перекрыла свежая того же вида, помечается
+        ``is_superseded`` и в ``expired_count`` не входит — тем же правилом,
+        что красит строку ПБ светофора (``services/briefing_validity``).
+        """
+
         now = _utcnow()
+        latest = await latest_briefing_validity(
+            self.db, tenant_id=self.tenant_id, person_ids=[str(person.id)]
+        )
         stmt = (
             select(BriefingEntry, BriefingTemplate.title)
             .outerjoin(
@@ -819,23 +830,27 @@ class EmployeeCardService:
             .limit(self.max_items_per_section)
         )
         rows = (await self.db.execute(stmt)).all()
-        items = [
-            EmployeeBriefingItem(
-                id=str(entry.id),
-                briefing_template_id=(
-                    str(entry.briefing_template_id) if entry.briefing_template_id else None
-                ),
-                briefing_template_title=template_title,
-                briefing_type=entry.briefing_type,
-                briefing_date=entry.briefing_date,
-                valid_until=entry.valid_until,
-                status=entry.status,
-                is_expired=bool(
-                    entry.valid_until is not None and (as_utc(entry.valid_until) or now) < now
-                ),
+        items: list[EmployeeBriefingItem] = []
+        for entry, template_title in rows:
+            valid_until = as_utc(entry.valid_until)
+            newest = latest.get((str(person.id), str(entry.briefing_type)))
+            items.append(
+                EmployeeBriefingItem(
+                    id=str(entry.id),
+                    briefing_template_id=(
+                        str(entry.briefing_template_id) if entry.briefing_template_id else None
+                    ),
+                    briefing_template_title=template_title,
+                    briefing_type=entry.briefing_type,
+                    briefing_date=entry.briefing_date,
+                    valid_until=entry.valid_until,
+                    status=entry.status,
+                    is_expired=bool(valid_until is not None and valid_until < now),
+                    is_superseded=bool(
+                        valid_until is not None and newest is not None and valid_until < newest
+                    ),
+                )
             )
-            for entry, template_title in rows
-        ]
         total = await self._count(
             select(func.count())
             .select_from(BriefingEntry)
@@ -845,17 +860,7 @@ class EmployeeCardService:
                 BriefingEntry.deleted_at.is_(None),
             )
         )
-        expired = await self._count(
-            select(func.count())
-            .select_from(BriefingEntry)
-            .where(
-                BriefingEntry.tenant_id == self.tenant_id,
-                BriefingEntry.person_id == person.id,
-                BriefingEntry.deleted_at.is_(None),
-                BriefingEntry.valid_until.is_not(None),
-                BriefingEntry.valid_until < now,
-            )
-        )
+        expired = sum(1 for moment in latest.values() if moment < now)
         return EmployeeBriefingsSection(count=total, expired_count=expired, items=items)
 
     async def _build_compliance_deadlines(
