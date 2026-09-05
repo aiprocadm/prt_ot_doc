@@ -10,20 +10,26 @@
 * дисциплины без поимённого учёта отданы с причиной, а не выкрашены;
 * БДД у клиента считается тем же правилом, что у сотрудника и площадки
   (срез-64): истёкшее удостоверение водителя — красный, а не «не ведётся»;
+* ПБ у клиента (срез-86) — той же формулой, что у площадки 360°: средства
+  на площадках его организации и инструктажи его людей; чужие площадки,
+  чужие люди и средство без площадки — не его;
 * Dedicated-клиент — честное ``not_aggregated``, не нули;
 * выключенный модуль — 404.
 """
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from httpx import AsyncClient
 
 from app.db.session import AsyncSessionLocal
 from app.domains.managed_clients.lifecycle import ContractStatus, ManagedClientMode
+from app.models.briefings import BriefingEntry, BriefingJournal
+from app.models.fire_safety import FireSafetyEquipment
 from app.models.managed_clients import ManagedClient
+from app.models.master_data import Site
 from app.models.medical import MedicalExam, MedicalExamKind, MedicalNorm
 from app.models.models import Position, RoleEnum
 from app.models.road_safety import Driver
@@ -41,6 +47,7 @@ DISCIPLINE_MODULES = (
 )
 
 TODAY = date.today()
+NOW = datetime.now(tz=timezone.utc)
 
 
 @pytest.fixture(autouse=True)
@@ -223,6 +230,124 @@ class TestClientReadiness:
         assert after["reason"] == "Истекло водительское удостоверение: 1"
         assert after["required"] == 1
         assert after["lapsed"] == 1
+
+    async def test_сроки_пб_площадок_и_инструктажи_людей_клиента_красят_пб(
+        self, async_client: AsyncClient, make_auth_headers, served_client, data_factory
+    ) -> None:
+        """Срез-86: ПБ клиента — та же формула, что у площадки 360° и сводки МЧС.
+
+        Чужая организация с её площадкой и людьми, а также огнетушитель без
+        площадки — не клиента: приписать их значило бы угадать.
+        """
+
+        tenant, person, mcid = served_client
+        headers = await make_auth_headers(RoleEnum.ADMIN)
+        before = _direction(await _readiness(async_client, headers, mcid), "fire_safety")
+        assert before["light"] == "not_measured"
+        assert "не ведётся" in before["reason"]
+
+        async with await _trusted() as session:
+            other_company = await data_factory.create_company(
+                tenant=tenant, name="ООО Чужие", session=session
+            )
+            stranger = await data_factory.create_person(
+                tenant=tenant, company=other_company, last_name="Чужаков", session=session
+            )
+            own_site = Site(tenant_id=tenant.id, company_id=person.company_id, name="Склад")
+            other_site = Site(tenant_id=tenant.id, company_id=other_company.id, name="Чужой цех")
+            journal = BriefingJournal(
+                tenant_id=tenant.id, code="J-FIRE", title="Журнал ПБ", journal_type="fire"
+            )
+            session.add_all([own_site, other_site, journal])
+            await session.flush()
+
+            def _unit(site_id, label, days):
+                return FireSafetyEquipment(
+                    tenant_id=tenant.id,
+                    site_id=site_id,
+                    kind="extinguisher",
+                    label=label,
+                    recharge_due=TODAY + timedelta(days=days),
+                )
+
+            def _ptm(person_id, days):
+                return BriefingEntry(
+                    tenant_id=tenant.id,
+                    briefing_journal_id=journal.id,
+                    person_id=person_id,
+                    briefing_type="fire_ptm",
+                    briefing_date=TODAY - timedelta(days=400),
+                    valid_until=NOW + timedelta(days=days),
+                    status="completed",
+                )
+
+            session.add_all(
+                [
+                    # своя площадка: просрочка и действующий
+                    _unit(own_site.id, "ОП-4 №1", -3),
+                    _unit(own_site.id, "ОП-4 №2", 200),
+                    # чужая площадка и без площадки — не клиента
+                    _unit(other_site.id, "ОП-4 №3", -30),
+                    _unit(None, "ОП-4 №4", -30),
+                    # ПТМ своего человека истёк; чужого — не считается
+                    _ptm(person.id, -35),
+                    _ptm(stranger.id, -35),
+                ]
+            )
+            await session.commit()
+
+        after = _direction(await _readiness(async_client, headers, mcid), "fire_safety")
+        assert after["light"] == "red"
+        assert after["reason"] == (
+            "Просрочено по ПБ — перезарядка средств защиты: 1, противопожарные инструктажи: 1; "
+            "средств без записи о работах: 2; проведённых тренировок нет"
+        )
+        # два средства своей площадки + один ПТМ; просрочено — по одному
+        assert (after["required"], after["lapsed"], after["expiring"]) == (3, 2, 0)
+
+    async def test_клиент_без_площадок_считает_только_инструктажи_людей(
+        self, async_client: AsyncClient, make_auth_headers, served_client
+    ) -> None:
+        """Площадок нет — средства арендатора клиенту не приписываются, но
+        истёкший ПТМ его человека — просрочка."""
+
+        tenant, person, mcid = served_client
+        headers = await make_auth_headers(RoleEnum.ADMIN)
+
+        async with await _trusted() as session:
+            journal = BriefingJournal(
+                tenant_id=tenant.id, code="J-FIRE-0", title="Журнал ПБ", journal_type="fire"
+            )
+            session.add(journal)
+            await session.flush()
+            session.add_all(
+                [
+                    # огнетушитель арендатора без площадки — не клиента
+                    FireSafetyEquipment(
+                        tenant_id=tenant.id,
+                        kind="extinguisher",
+                        label="ОП-4 №0",
+                        recharge_due=TODAY - timedelta(days=30),
+                    ),
+                    BriefingEntry(
+                        tenant_id=tenant.id,
+                        briefing_journal_id=journal.id,
+                        person_id=person.id,
+                        briefing_type="fire_ptm",
+                        briefing_date=TODAY - timedelta(days=400),
+                        valid_until=NOW - timedelta(days=35),
+                        status="completed",
+                    ),
+                ]
+            )
+            await session.commit()
+
+        row = _direction(await _readiness(async_client, headers, mcid), "fire_safety")
+        assert row["light"] == "red"
+        assert row["reason"] == (
+            "Просрочено по ПБ — противопожарные инструктажи: 1; проведённых тренировок нет"
+        )
+        assert (row["required"], row["lapsed"]) == (1, 1)
 
     async def test_дисциплина_вне_редакции_исполнителя_скрыта_и_названа(
         self,
