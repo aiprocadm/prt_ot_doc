@@ -14,6 +14,8 @@ export type CalendarSourceType =
   | "training_session"
   // Доп. №1 разд. 57.2 (срез-75): истёкшие удостоверения по обучению.
   | "training_certificate"
+  // Срез-77: срок назначения обучения (контур обучение-next)
+  | "training_enrollment"
   | "inspection"
   | "compliance_deadline"
   | "briefing_entry"
@@ -36,6 +38,7 @@ export const CALENDAR_SOURCE_TYPES: readonly CalendarSourceType[] = [
   "permit",
   "training_session",
   "training_certificate",
+  "training_enrollment",
   "inspection",
   "compliance_deadline",
   "briefing_entry",

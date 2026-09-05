@@ -16,6 +16,7 @@ from app.modules.operational_dashboard.schemas import (
     AlertSeverity,
     OperationalDashboardResponse,
 )
+from app.services.discipline_training import overdue_training_enrollment_where
 
 logger = logging.getLogger("app.modules.operational_dashboard")
 
@@ -105,15 +106,9 @@ class OperationalDashboardService:
 
         try:
             await _add_count(
-                select(func.count())
-                .select_from(TrainingEnrollment)
-                .where(
-                    TrainingEnrollment.tenant_id == tenant_id,
-                    TrainingEnrollment.deleted_at.is_(None),
-                    TrainingEnrollment.status.in_(["assigned", "in_progress"]),
-                    TrainingEnrollment.due_at.is_not(None),
-                    TrainingEnrollment.due_at < now,
-                ),
+                select(func.count()).select_from(TrainingEnrollment)
+                # Формула одна с календарём и Центром внимания (срез-77).
+                .where(*overdue_training_enrollment_where(tenant_id, now)),
                 "training_enrollment",
             )
             await _add_count(

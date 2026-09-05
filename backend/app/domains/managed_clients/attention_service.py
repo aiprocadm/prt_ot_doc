@@ -34,6 +34,7 @@ from app.models.master_data import Person
 from app.models.medical import MedicalExam
 from app.models.ppe import PPEIssue
 from app.models.training import TrainingEnrollment
+from app.services.discipline_training import overdue_training_enrollment_where
 
 __all__ = ["DEDICATED_REASON", "collect_portfolio_attention"]
 
@@ -41,8 +42,6 @@ DEDICATED_REASON = (
     "Данные ведутся в отдельном контуре клиента; сводка станет доступна "
     "после подключения делегированного доступа"
 )
-
-_ACTIVE_TRAINING_STATUSES = ("assigned", "in_progress")
 
 
 async def _count_by_company(session: AsyncSession, stmt) -> dict[str, int]:
@@ -123,11 +122,8 @@ async def collect_portfolio_attention(
             .select_from(TrainingEnrollment)
             .join(Person, Person.id == TrainingEnrollment.person_id)
             .where(
-                TrainingEnrollment.tenant_id == tenant_id,
-                TrainingEnrollment.deleted_at.is_(None),
-                TrainingEnrollment.status.in_(_ACTIVE_TRAINING_STATUSES),
-                TrainingEnrollment.due_at.is_not(None),
-                TrainingEnrollment.due_at < now,
+                # Формула просрочки одна с общим календарём (срез-77).
+                *overdue_training_enrollment_where(tenant_id, now),
                 Person.company_id.in_(company_ids),
                 Person.deleted_at.is_(None),
             )

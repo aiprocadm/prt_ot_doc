@@ -27,6 +27,7 @@ from app.models.models import (
     PPEIssue,
     PPEIssueStatus,
     TrainingCertificate,
+    TrainingEnrollment,
     TrainingProgram,
 )
 from app.models.obligations import Task, TaskPriority, TaskStatus
@@ -770,6 +771,55 @@ async def test_attention_worker_sees_own_training_certificate_only(db_session) -
 
     training = [item for item in payload.items if item.item_type == "training_certificate"]
     assert [item.title for item in training] == ["Удостоверение: Охрана труда — Иванов Иван"]
+    assert training[0].discipline == "training"
+    by_code = {row.code: row for row in payload.disciplines}
+    assert by_code["training"].overdue == 1, "своё — да, чужое — нет"
+
+
+@pytest.mark.asyncio
+async def test_attention_worker_sees_own_training_enrollment_only(db_session) -> None:
+    """Разд. 57.2 (срез-77): просроченное назначение обучения — событие «Обучение».
+
+    Та же формула, что у блокера готовности ``training_overdue``. Рабочий видит
+    только своё назначение; чужое того же арендатора в ленту и в итог строки
+    не попадает (``PERSON_SCOPED_SOURCES``).
+    """
+
+    tenant = SimpleNamespace(id="tenant-1", slug="tenant-a", name="Tenant A", is_active=True)
+    worker = _access("worker-1", "worker", tenant.id, tenant.slug)
+    now = datetime.now(timezone.utc)
+
+    mine = _person(tenant.id, email=worker.user.email)
+    stranger = _person(tenant.id, email="stranger@tenant.test")
+    program = TrainingProgram(
+        tenant_id=tenant.id, code="ОТ-1", title="Охрана труда", category="ot", kind="program"
+    )
+    db_session.add_all([mine, stranger, program])
+    await db_session.flush()
+    db_session.add_all(
+        [
+            TrainingEnrollment(
+                tenant_id=tenant.id,
+                training_program_id=program.id,
+                person_id=mine.id,
+                status="assigned",
+                due_at=now - timedelta(days=3),
+            ),
+            TrainingEnrollment(
+                tenant_id=tenant.id,
+                training_program_id=program.id,
+                person_id=stranger.id,
+                status="in_progress",
+                due_at=now - timedelta(days=3),
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    payload = await workspace_attention(tenant=tenant, session=db_session, access=worker)
+
+    training = [item for item in payload.items if item.item_type == "training_enrollment"]
+    assert [item.title for item in training] == ["Назначение: Охрана труда — Иванов Иван"]
     assert training[0].discipline == "training"
     by_code = {row.code: row for row in payload.disciplines}
     assert by_code["training"].overdue == 1, "своё — да, чужое — нет"

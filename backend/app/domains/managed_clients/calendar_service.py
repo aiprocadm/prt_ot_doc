@@ -31,10 +31,10 @@ from app.models.master_data import Person
 from app.models.medical import MedicalExam
 from app.models.ppe import PPEIssue
 from app.models.training import TrainingEnrollment
+from app.services.discipline_training import pending_training_enrollment_where
 
 __all__ = ["collect_portfolio_deadlines"]
 
-_ACTIVE_TRAINING_STATUSES = ("assigned", "in_progress")
 #: Насколько глубоко в прошлое собираем просрочку. Без потолка выборка тянула бы
 #: годы мёртвых записей, а человеку нужны те, что ещё можно закрыть.
 OVERDUE_LOOKBACK_DAYS = 365
@@ -165,10 +165,8 @@ async def collect_portfolio_deadlines(
                 select(TrainingEnrollment, Person)
                 .join(Person, Person.id == TrainingEnrollment.person_id)
                 .where(
-                    TrainingEnrollment.tenant_id == tenant_id,
-                    TrainingEnrollment.deleted_at.is_(None),
-                    TrainingEnrollment.status.in_(_ACTIVE_TRAINING_STATUSES),
-                    TrainingEnrollment.due_at.is_not(None),
+                    # «Живое назначение со сроком» — одна формула с общим календарём (срез-77).
+                    *pending_training_enrollment_where(tenant_id),
                     TrainingEnrollment.due_at
                     >= datetime.combine(since, datetime.min.time()).replace(tzinfo=timezone.utc),
                     TrainingEnrollment.due_at

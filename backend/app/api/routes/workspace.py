@@ -41,6 +41,7 @@ from app.services.calendar_aggregator import overdue_compliance_deadline_where
 from app.services.discipline_applicability import collect_applicability, describe_hidden
 from app.services.discipline_attention import attention_events, overdue_by_discipline
 from app.services.discipline_incidents import open_incidents_where
+from app.services.discipline_training import overdue_training_enrollment_where
 from app.services.person_link import resolve_person_id
 
 router = APIRouter(prefix="/workspace", tags=["workspace"])
@@ -324,18 +325,13 @@ async def _readiness_blockers(
             )
         )
 
+    # Формула одна с календарём и Центром внимания (срез-77).
     overdue_training = int(
         (
             await session.execute(
                 select(func.count())
                 .select_from(TrainingEnrollment)
-                .where(
-                    TrainingEnrollment.tenant_id == tenant.id,
-                    TrainingEnrollment.deleted_at.is_(None),
-                    TrainingEnrollment.status.in_(["assigned", "in_progress"]),
-                    TrainingEnrollment.due_at.is_not(None),
-                    TrainingEnrollment.due_at < now,
-                )
+                .where(*overdue_training_enrollment_where(tenant.id, now))
             )
         ).scalar_one()
         or 0
@@ -848,18 +844,13 @@ async def role_workspace_summary(
     # Overdue training — HR roles
     overdue_training = 0
     if role in _HR_ROLES:
+        # Формула одна с календарём и Центром внимания (срез-77).
         overdue_training = int(
             (
                 await session.execute(
                     select(func.count())
                     .select_from(TrainingEnrollment)
-                    .where(
-                        TrainingEnrollment.tenant_id == tenant.id,
-                        TrainingEnrollment.deleted_at.is_(None),
-                        TrainingEnrollment.status.in_(["assigned", "in_progress"]),
-                        TrainingEnrollment.due_at.is_not(None),
-                        TrainingEnrollment.due_at < now,
-                    )
+                    .where(*overdue_training_enrollment_where(tenant.id, now))
                 )
             ).scalar_one()
             or 0
