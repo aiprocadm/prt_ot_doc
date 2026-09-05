@@ -1,15 +1,19 @@
 """«Открытое происшествие» — одна формула на всю платформу (срез-69).
 
-ЗАЧЕМ. Число «открытых происшествий» показывают шесть мест: сводка дашборда,
+ЗАЧЕМ. Число «открытых происшествий» показывают семь мест: сводка дашборда,
 KPI отчётов, рабочий стол роли, проекции площадок, сводка аналитики, отчёты
-по дисциплинам. Формула была написана в каждом заново: две копии считали
-удалённые, рабочий стол не считал «корректирующие действия» — и один и тот
-же человек видел на дашборде одно число, на рабочем столе другое. Теперь все
-берут ``open_incidents_where`` из ``services/discipline_incidents.py``.
+по дисциплинам, сводка карты рисков. Формула была написана в каждом заново:
+две копии считали удалённые, рабочий стол не считал «корректирующие
+действия» — и один и тот же человек видел на дашборде одно число, на рабочем
+столе другое. Сводка карты рисков (срез-74) и вовсе считала строки
+``IncidentCase`` — таблицы, которую ни одна ручка не заполняет, — и её
+«давление происшествий» было нулём всегда. Теперь все берут
+``open_incidents_where`` из ``services/discipline_incidents.py``.
 
 ЧТО ПРОВЕРЯЕТСЯ: сторож — никто в ``backend/app`` не пишет условие по статусу
 происшествия сам; живьём — рабочий стол считает «корректирующие действия»
-открытым, а сводка дашборда и KPI отчётов не считают удалённое.
+открытым, сводка дашборда и KPI отчётов не считают удалённое, сводка карты
+рисков видит живые происшествия.
 """
 
 from __future__ import annotations
@@ -113,3 +117,42 @@ async def test_сводка_дашборда_и_kpi_не_считают_удал
     assert kpi.status_code == 200, kpi.text
     assert summary.json()["incidents_open"] == 1
     assert kpi.json()["incidents_open"] == 1
+
+
+@pytest.mark.asyncio
+async def test_сводка_карты_рисков_считает_живые_происшествия(
+    async_client, sessionmaker, data_factory, make_auth_headers
+) -> None:
+    """Раньше «давление происшествий» считало пустую таблицу ``IncidentCase`` (срез-74)."""
+
+    await _tenant_with_incidents(sessionmaker, data_factory)
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+
+    methodology = await async_client.post(
+        "/api/v1/risk/advanced/methodologies",
+        json={
+            "code": "fk-open-incidents",
+            "name": "Fine Kinney",
+            "type": "fine_kinney",
+            "formula_json": {"ranges": [{"min": 0, "max": 10000, "level": "low"}]},
+        },
+        headers=headers,
+    )
+    assert methodology.status_code == 201, methodology.text
+    risk_map = await async_client.post(
+        "/api/v1/risk/advanced/maps",
+        json={
+            "entity_type": "site",
+            "entity_id": "site-1",
+            "risk_methodology_id": methodology.json()["id"],
+        },
+        headers=headers,
+    )
+    assert risk_map.status_code == 201, risk_map.text
+
+    summary = await async_client.get(
+        f"/api/v1/risk/advanced/maps/{risk_map.json()['id']}/summary", headers=headers
+    )
+
+    assert summary.status_code == 200, summary.text
+    assert summary.json()["incident_pressure"] == 1
