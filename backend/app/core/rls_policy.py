@@ -99,6 +99,8 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "dashboard_kpi_snapshots",
         "department",
         "departments",
+        # срез-53 (разд. 57.4) завёл таблицу без RLS; поймано полным прогоном
+        "discipline_status_report",
         "document",
         "document_artifacts",
         "document_batch_item",

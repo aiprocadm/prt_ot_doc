@@ -1,5 +1,34 @@
 # CHANGELOG
 
+## 2026-09-05 (fix/rls-discipline-status-report — RLS для таблицы отчёта директору по дисциплинам)
+
+### Что нашёл полный прогон
+
+Полный прогон бэкенда (долг волн 50–54, `main` `ecc75a9c`, 6734 passed / 65
+skipped) упал в одном тесте: `tests/test_rls_coverage.py::
+test_rls_coverage_registry_consistent` — таблица `discipline_status_report`
+(отчёт директору по дисциплинам, срез-53, разд. 57.4) заведена миграцией
+`dr01` без RLS и не записана в реестр `rls_policy.py`. Это дефект изоляции
+арендаторов: защиту держал только tenant-фильтр в запросах. Воспроизведено
+на `main`.
+
+### Сделано
+
+- Миграция `20260905_sec65_rls_discipline_status_report` (за `dr02`):
+  ENABLE + FORCE ROW LEVEL SECURITY + policy `tenant_isolation` с общим
+  предикатом SEC-65 (PG-only, SQLite пропускается).
+- `RLS_ENABLED_TABLES` += `discipline_status_report`.
+- `backend/tests/test_rls_discipline_report.py`: без базы — таблица в реестре,
+  миграция целит в неё, стоит за `dr02`, предикат совпадает с соседями
+  (`cd_drill`); на PostgreSQL (`TEST_PG_ADMIN_URL`) — таблица реально
+  вооружена (по образцу `test_rls_medical.py`).
+
+### Верификация
+
+- `tests/test_rls_coverage.py` — зелёный (был красный); новый тест 1/1 без
+  базы, PG-часть пропущена честно (локального PostgreSQL нет).
+- Alembic: новая ревизия стала головой цепочки отчётов, `dr02` — нет.
+
 ## 2026-09-04 (feat/attention-driver-license — водительские удостоверения как поимённый источник БДД в календаре и центре внимания)
 
 ### Что нашла сверка
