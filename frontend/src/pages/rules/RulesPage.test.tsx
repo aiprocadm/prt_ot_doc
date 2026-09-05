@@ -114,12 +114,16 @@ const LIBRARY = {
       title: "Пожарная безопасность",
       rules: 1,
       reason: "",
+      missing: [],
+      removed: [],
     },
     {
       discipline: "ecology",
       title: "Экология",
       rules: 0,
       reason: "в системе нет ни одного события экологии",
+      missing: [],
+      removed: [],
     },
   ],
 };
@@ -408,6 +412,57 @@ describe("RulesPage", () => {
     ).not.toBeInTheDocument();
     // Событие сроков названо словами, а не кодом.
     expect(screen.getByText(/«Срок дисциплины просрочен»/)).toBeInTheDocument();
+  });
+
+  it("в строке дисциплины названы имена не выданных и удалённых правил (срез-66)", async () => {
+    vi.mocked(rulesApi.library).mockResolvedValue({
+      ...LIBRARY,
+      total: 12,
+      installed: 10,
+      removed: 1,
+      items: [
+        {
+          discipline: "road_safety",
+          title: "БДД",
+          rules: 2,
+          reason: "",
+          missing: ["БДД: истёк срок водительского удостоверения"],
+          removed: [],
+        },
+        {
+          discipline: "medical",
+          title: "Медосмотры",
+          rules: 2,
+          reason: "",
+          missing: [],
+          removed: ["Медосмотр: заключение «не годен» — отстранить"],
+        },
+      ],
+    });
+    renderPage();
+
+    await screen.findByTestId("rule-library");
+    // Не выдано — это заведёт кнопка; число в кнопке сходится с именами.
+    expect(
+      screen.getByTestId("rule-library-missing-road_safety"),
+    ).toHaveTextContent(
+      "не выдано: БДД: истёк срок водительского удостоверения",
+    );
+    expect(
+      screen.getByRole("button", { name: /Выдать недостающие \(1\)/ }),
+    ).toBeInTheDocument();
+    // Удалено вами — кнопка не тронет; у строки без удалённых подписи нет.
+    expect(
+      screen.getByTestId("rule-library-removed-medical"),
+    ).toHaveTextContent(
+      "удалено вами: Медосмотр: заключение «не годен» — отстранить",
+    );
+    expect(
+      screen.queryByTestId("rule-library-missing-medical"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("rule-library-removed-road_safety"),
+    ).not.toBeInTheDocument();
   });
 
   it("ошибка библиотеки не гасит реестр правил", async () => {

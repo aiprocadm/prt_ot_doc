@@ -45,6 +45,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -423,13 +424,21 @@ def rules_for(discipline: Discipline) -> tuple[LibraryRule, ...]:
     return tuple(rule for rule in LIBRARY_RULES if rule.discipline is discipline)
 
 
-def coverage() -> list[dict[str, Any]]:
+def coverage(*, alive: Collection[str] = (), deleted: Collection[str] = ()) -> list[dict[str, Any]]:
     """Покрытие по ВСЕМ дисциплинам ТЗ: сколько правил или почему их нет.
 
     Порядок — как в словаре дисциплин: список читают регулярно, и скачущие
     строки мешают сравнивать.
+
+    ``alive`` / ``deleted`` — имена правил библиотеки, которые у арендатора
+    живут / удалены специалистом (срез-66). По ним строка называет ИМЕНА:
+    ``missing`` — ни разу не выданные, ``removed`` — убранные самим
+    специалистом. Число «выдано 10 из 12» без имён заставляло гадать, каких
+    двух не хватает и вернёт ли их кнопка.
     """
 
+    alive_names = set(alive)
+    deleted_names = set(deleted)
     rows: list[dict[str, Any]] = []
     for discipline in Discipline:
         rules = rules_for(discipline)
@@ -439,6 +448,12 @@ def coverage() -> list[dict[str, Any]]:
                 "title": DISCIPLINE_TITLES[discipline],
                 "rules": len(rules),
                 "reason": "" if rules else DISCIPLINES_WITHOUT_RULES.get(discipline, ""),
+                "missing": [
+                    rule.name
+                    for rule in rules
+                    if rule.name not in alive_names and rule.name not in deleted_names
+                ],
+                "removed": [rule.name for rule in rules if rule.name in deleted_names],
             }
         )
     return rows

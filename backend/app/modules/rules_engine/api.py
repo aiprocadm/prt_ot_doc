@@ -179,7 +179,9 @@ async def rule_library(tenant: TenantDep, session: SessionDep, access: Access) -
     _ = access
     alive, deleted = await library_state(session, tenant_id=str(tenant.id))
     return RuleLibraryPage(
-        items=[RuleLibraryDiscipline(**row) for row in library_coverage()],
+        items=[
+            RuleLibraryDiscipline(**row) for row in library_coverage(alive=alive, deleted=deleted)
+        ],
         total=library_size(),
         installed=len(alive),
         removed=len(deleted),

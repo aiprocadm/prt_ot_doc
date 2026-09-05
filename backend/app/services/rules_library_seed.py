@@ -30,6 +30,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import dataclass
 
 from sqlalchemy import select
@@ -53,10 +54,11 @@ __all__ = [
 # ``app.modules.* → app.domains.*``, а ``modules → services`` разрешён (тот же
 # приём, что у сигналов ленты изменений в BIZ-51 срезе-2). Копии данных здесь
 # нет — только проброс, иначе библиотека разошлась бы сама с собой.
-def library_coverage() -> list[dict]:
-    """Покрытие дисциплин библиотекой: числа и причины отсутствия."""
+def library_coverage(*, alive: Collection[str] = (), deleted: Collection[str] = ()) -> list[dict]:
+    """Покрытие дисциплин библиотекой: числа, причины отсутствия и имена
+    не выданных / удалённых у арендатора правил (срез-66)."""
 
-    return coverage()
+    return coverage(alive=alive, deleted=deleted)
 
 
 def library_rule_names() -> list[str]:

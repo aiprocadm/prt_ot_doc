@@ -93,6 +93,24 @@ class TestПокрытиеДисциплин:
     def test_в_покрытии_ВСЕ_дисциплины_тз(self) -> None:
         assert {row["discipline"] for row in coverage()} == {d.value for d in Discipline}
 
+    def test_имена_не_выданных_и_удалённых_по_своим_строкам(self) -> None:
+        """Срез-66: без состояния арендатора всё «не выдано»; удалённое — не «не выдано»."""
+
+        blank = coverage()
+        assert all(row["removed"] == [] for row in blank)
+        assert sum(len(row["missing"]) for row in blank) == len(LIBRARY_RULES)
+        for row in blank:
+            assert row["missing"] == [
+                r.name for r in LIBRARY_RULES if r.discipline.value == row["discipline"]
+            ]
+
+        first, second = LIBRARY_RULES[0].name, LIBRARY_RULES[1].name
+        others = {r.name for r in LIBRARY_RULES} - {first, second}
+        rows = {row["discipline"]: row for row in coverage(alive=others, deleted={second})}
+        assert sum(len(row["missing"]) for row in rows.values()) == 1
+        assert rows[LIBRARY_RULES[0].discipline.value]["missing"] == [first]
+        assert rows[LIBRARY_RULES[1].discipline.value]["removed"] == [second]
+
     def test_причины_только_у_дисциплин_без_правил(self) -> None:
         """Сторож против протухшей причины: появились правила — причина уходит."""
 

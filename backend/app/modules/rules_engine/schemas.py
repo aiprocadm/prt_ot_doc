@@ -67,6 +67,11 @@ class RuleLibraryDiscipline(BaseModel):
     #: ПОЧЕМУ правил нет. Пустая строка у дисциплин, где правила есть. Ноль без
     #: причины прочитали бы как «забыли завести», а не как решение.
     reason: str = ""
+    #: Имена правил дисциплины, которые арендатору ни разу не выдавали —
+    #: их и заведёт «Выдать недостающие» (срез-66).
+    missing: list[str] = Field(default_factory=list)
+    #: Имена правил дисциплины, удалённых специалистом: выдача их НЕ вернёт.
+    removed: list[str] = Field(default_factory=list)
 
 
 class RuleLibraryPage(BaseModel):

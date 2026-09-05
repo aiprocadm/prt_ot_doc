@@ -260,6 +260,15 @@ async def test_выдача_недостающих_правил_существу
     after = await async_client.get(f"{RULES}/library", headers=headers)
     assert after.json()["installed"] == 12
     assert after.json()["removed"] == 0
+    # срез-66: до выдачи каждая строка называла имена по своей дисциплине,
+    # после — не выдано нечего
+    rows_before = {row["discipline"]: row for row in before.json()["items"]}
+    assert rows_before["road_safety"]["missing"] == [
+        name for name in body["created"] if "БДД" in name or "рейс" in name
+    ]
+    assert sum(len(row["missing"]) for row in rows_before.values()) == 12
+    assert all(row["missing"] == [] for row in after.json()["items"])
+    assert all(row["removed"] == [] for row in after.json()["items"])
 
 
 @pytest.mark.asyncio
@@ -301,6 +310,11 @@ async def test_удалённое_специалистом_правило_не_�
     catalog = await async_client.get(f"{RULES}/library", headers=headers)
     assert catalog.json()["installed"] == 11
     assert catalog.json()["removed"] == 1
+    # срез-66: удалённое названо по имени в своей строке и НЕ числится «не выданным»
+    rows = [row for row in catalog.json()["items"] if row["removed"]]
+    assert len(rows) == 1
+    assert rows[0]["removed"] == [name]
+    assert all(row["missing"] == [] for row in catalog.json()["items"])
 
     async with sessionmaker() as session:
         assert await seed_rule_library(session, tenant_id=str(tenant.id)) == 0
