@@ -108,6 +108,13 @@ celery_app.conf.beat_schedule = {
         "task": "permits.expiry.tick",
         "schedule": crontab(hour=4, minute=30),
     },
+    # BIZ-54-57 срез-62: просроченные сроки экологии, ПромБеза, ГО и БДД →
+    # события DisciplineDeadlineOverdue для библиотеки правил. После СИЗ и
+    # допусков тем же утром: одна и та же ночная полоса «что истекло».
+    "disciplines-deadlines-daily": {
+        "task": "disciplines.deadlines.tick",
+        "schedule": crontab(hour=4, minute=45),
+    },
 }
 
 if settings.outbox_dispatch_schedule_enabled:
