@@ -246,6 +246,45 @@ LIBRARY_RULES: tuple[LibraryRule, ...] = (
         ],
         priority=20,
     ),
+    LibraryRule(
+        discipline=Discipline.TRAINING,
+        name="Обучение: истёк срок инструктажа по охране труда — провести повторный",
+        description=(
+            "Повторный инструктаж по охране труда проводится не реже одного раза "
+            "в полгода, а работник, не прошедший инструктаж, к работе не допускается "
+            "(ТК РФ ст. 76, 214; ПП РФ № 2464 п. 8, 13). Срок действия записи "
+            "в журнале истёк у конкретного человека (срез-81) — правило ставит "
+            "задачу провести инструктаж заново и предупреждает специалиста по ОТ "
+            "и кадры. Только инструктажи по ОТ: противопожарные и по БДД — свои "
+            "правила в своих дисциплинах."
+        ),
+        event_type="DisciplineDeadlineOverdue",
+        conditions={
+            "match": "all",
+            "conditions": [
+                {"field": "source_type", "op": "eq", "value": "briefing_entry"},
+                {"field": "discipline", "op": "eq", "value": "training"},
+            ],
+        },
+        actions=[
+            {
+                "type": "create_task",
+                "title_template": "{title}: срок истёк — провести повторный инструктаж",
+                "priority": "high",
+                "due_in_days": 3,
+                "assignee_mode": "none",
+            },
+            {
+                "type": "notify",
+                "title_template": "Истёк срок инструктажа по охране труда",
+                "body_template": "{title} — срок истёк, просрочка {days_overdue} дн.; провести инструктаж и оформить запись в журнале.",
+                "recipient_mode": "role",
+                "roles": ["ot_specialist", "hr"],
+                "priority": "high",
+            },
+        ],
+        priority=20,
+    ),
     # ── Пожарная безопасность ───────────────────────────────────────────────
     LibraryRule(
         discipline=Discipline.FIRE_SAFETY,
@@ -384,6 +423,44 @@ LIBRARY_RULES: tuple[LibraryRule, ...] = (
             },
         ],
         priority=25,
+    ),
+    LibraryRule(
+        discipline=Discipline.FIRE_SAFETY,
+        name="ПБ: истёк срок противопожарного инструктажа — провести повторный",
+        description=(
+            "Противопожарный инструктаж и ПТМ проводятся в установленные сроки; "
+            "работник без действующего инструктажа к работе не допускается "
+            "(ПП РФ № 1479 п. 3; приказ МЧС № 806). Срок записи в журнале истёк у "
+            "конкретного человека (срез-81) — правило ставит задачу провести "
+            "инструктаж заново и предупреждает ответственного за ПБ. Просроченный "
+            "ПТМ — такое же нарушение к приходу МЧС, как непроверенный огнетушитель."
+        ),
+        event_type="DisciplineDeadlineOverdue",
+        conditions={
+            "match": "all",
+            "conditions": [
+                {"field": "source_type", "op": "eq", "value": "briefing_entry"},
+                {"field": "discipline", "op": "eq", "value": "fire_safety"},
+            ],
+        },
+        actions=[
+            {
+                "type": "create_task",
+                "title_template": "{title}: срок истёк — провести противопожарный инструктаж",
+                "priority": "high",
+                "due_in_days": 3,
+                "assignee_mode": "none",
+            },
+            {
+                "type": "notify",
+                "title_template": "Истёк срок противопожарного инструктажа",
+                "body_template": "{title} — срок истёк, просрочка {days_overdue} дн.; провести инструктаж и оформить запись в журнале.",
+                "recipient_mode": "role",
+                "roles": ["pb_engineer"],
+                "priority": "high",
+            },
+        ],
+        priority=20,
     ),
     # ── Промышленная безопасность ───────────────────────────────────────────
     LibraryRule(
@@ -611,6 +688,45 @@ LIBRARY_RULES: tuple[LibraryRule, ...] = (
                 "due_in_days": 0,
                 "assignee_mode": "none",
             }
+        ],
+        priority=15,
+    ),
+    LibraryRule(
+        discipline=Discipline.ROAD_SAFETY,
+        name="БДД: истёк срок инструктажа по БДД — провести до выпуска в рейс",
+        description=(
+            "Водитель без действующего инструктажа по безопасности дорожного "
+            "движения (вводного, предрейсового, сезонного, специального) к рейсу "
+            "не допускается (приказ Минтранса № 145 разд. III; ФЗ № 196-ФЗ ст. 20). "
+            "Срок записи в журнале истёк у конкретного водителя (срез-81) — "
+            "правило ставит задачу провести инструктаж до выпуска в рейс и "
+            "предупреждает специалиста по ОТ и кадры. Срок — день: без инструктажа "
+            "машина не выходит."
+        ),
+        event_type="DisciplineDeadlineOverdue",
+        conditions={
+            "match": "all",
+            "conditions": [
+                {"field": "source_type", "op": "eq", "value": "briefing_entry"},
+                {"field": "discipline", "op": "eq", "value": "road_safety"},
+            ],
+        },
+        actions=[
+            {
+                "type": "create_task",
+                "title_template": "{title}: срок истёк — провести инструктаж по БДД до выпуска в рейс",
+                "priority": "high",
+                "due_in_days": 1,
+                "assignee_mode": "none",
+            },
+            {
+                "type": "notify",
+                "title_template": "Истёк срок инструктажа по БДД",
+                "body_template": "{title} — срок истёк, просрочка {days_overdue} дн.; до инструктажа в рейс не выпускать.",
+                "recipient_mode": "role",
+                "roles": ["ot_specialist", "hr"],
+                "priority": "high",
+            },
         ],
         priority=15,
     ),

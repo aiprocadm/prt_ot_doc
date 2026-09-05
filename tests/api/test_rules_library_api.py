@@ -160,13 +160,13 @@ async def test_каталог_называет_дисциплины_без_пр�
 
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["total"] == 18
-    assert body["installed"] == 18
+    assert body["total"] == 21
+    assert body["installed"] == 21
     rows = {row["discipline"]: row for row in body["items"]}
     assert len(rows) == 8, "в каталоге обязаны быть ВСЕ дисциплины ТЗ"
     assert (
-        rows["fire_safety"]["rules"] == 4
-    ), "наряд на огневые + срок средства защиты (срез-79) + тренировка и документ (срез-80)"
+        rows["fire_safety"]["rules"] == 5
+    ), "огневые + средства защиты (срез-79) + тренировка и документ (срез-80) + инструктаж (срез-81)"
     # срез-62: событие сроков закрыло три пустые клетки — причин больше нет,
     # но поле остаётся: пустая клетка без причины по-прежнему запрещена
     for code in ("ecology", "civil_defense", "road_safety"):
@@ -562,6 +562,82 @@ async def test_тренировка_и_документ_пб_доходят_до
 
 
 @pytest.mark.asyncio
+async def test_истёкшие_инструктажи_доходят_до_задач_своей_дисциплины_и_один_раз(
+    tenant_with_library, sessionmaker, data_factory
+):
+    """Срез-81 живьём: истёкший инструктаж → обход → событие по виду → правило своей дисциплины.
+
+    Три записи одного человека — ПТМ, повторный по ОТ, предрейсовый — дают три
+    задачи трёх разных правил; действующий инструктаж молчит; повторный обход
+    в тот же день вторых задач не даёт.
+    """
+
+    from datetime import datetime, timedelta, timezone
+
+    from app.models.briefings import BriefingEntry, BriefingJournal
+    from app.models.master_data import Person
+    from app.models.models import Company
+    from app.services.discipline_deadline_events import emit_overdue_deadline_events
+
+    tenant, _ = tenant_with_library
+    tid = str(tenant.id)
+    now = datetime.now(timezone.utc)
+    async with sessionmaker() as session:
+        await data_factory.set_modules(session, tenant.id, ("fire_safety", "road_safety"))
+        company = Company(tenant_id=tid, name="ООО Автобаза")
+        session.add(company)
+        await session.flush()
+        person = Person(
+            tenant_id=tid, company_id=company.id, first_name="Олег", last_name="Кузнецов"
+        )
+        journal = BriefingJournal(tenant_id=tid, code="J-1", title="Журнал", journal_type="fire")
+        session.add_all([person, journal])
+        await session.flush()
+
+        def entry(kind: str, *, days_ago: int) -> BriefingEntry:
+            return BriefingEntry(
+                tenant_id=tid,
+                briefing_journal_id=journal.id,
+                person_id=person.id,
+                briefing_type=kind,
+                briefing_date=now - timedelta(days=400),
+                valid_until=now - timedelta(days=days_ago),
+                status="done",
+            )
+
+        session.add_all(
+            [
+                entry("fire_ptm", days_ago=35),
+                entry("repeat", days_ago=20),
+                entry("road_pre_trip", days_ago=1),
+                entry("fire_repeat", days_ago=-30),
+            ]
+        )
+        await session.commit()
+
+    for _ in range(2):
+        async with sessionmaker() as session:
+            await emit_overdue_deadline_events(session, tenant_id=tid)
+            await session.commit()
+
+    async with sessionmaker() as session:
+        titles = sorted(
+            str(title)
+            for title in (
+                await session.execute(select(Task.title).where(Task.tenant_id == tid))
+            ).scalars()
+            if str(title).startswith("Инструктаж: ")
+        )
+    assert titles == [
+        "Инструктаж: Повторный — Кузнецов Олег: срок истёк — провести повторный инструктаж",
+        "Инструктаж: Пожарно-технический минимум (ПТМ) — Кузнецов Олег: "
+        "срок истёк — провести противопожарный инструктаж",
+        "Инструктаж: Предрейсовый инструктаж — Кузнецов Олег: "
+        "срок истёк — провести инструктаж по БДД до выпуска в рейс",
+    ], titles
+
+
+@pytest.mark.asyncio
 async def test_выдача_недостающих_правил_существующему_арендатору(
     async_client, make_auth_headers, sessionmaker, data_factory
 ):
@@ -583,18 +659,18 @@ async def test_выдача_недостающих_правил_существу
     first = await async_client.post(f"{RULES}/library/install", headers=headers)
     assert first.status_code == 200, first.text
     body = first.json()
-    assert len(body["created"]) == body["total"] == 18
-    assert body["installed"] == 18
+    assert len(body["created"]) == body["total"] == 21
+    assert body["installed"] == 21
     assert body["kept_deleted"] == []
     assert any("отстранить от рейсов" in name or "БДД" in name for name in body["created"])
 
     second = await async_client.post(f"{RULES}/library/install", headers=headers)
     assert second.status_code == 200, second.text
     assert second.json()["created"] == []
-    assert second.json()["installed"] == 18
+    assert second.json()["installed"] == 21
 
     after = await async_client.get(f"{RULES}/library", headers=headers)
-    assert after.json()["installed"] == 18
+    assert after.json()["installed"] == 21
     assert after.json()["removed"] == 0
     # срез-66: до выдачи каждая строка называла имена по своей дисциплине,
     # после — не выдано нечего
@@ -602,7 +678,7 @@ async def test_выдача_недостающих_правил_существу
     assert rows_before["road_safety"]["missing"] == [
         name for name in body["created"] if "БДД" in name or "рейс" in name
     ]
-    assert sum(len(row["missing"]) for row in rows_before.values()) == 18
+    assert sum(len(row["missing"]) for row in rows_before.values()) == 21
     assert all(row["missing"] == [] for row in after.json()["items"])
     assert all(row["removed"] == [] for row in after.json()["items"])
 
@@ -641,10 +717,10 @@ async def test_удалённое_специалистом_правило_не_�
     body = response.json()
     assert body["created"] == []
     assert body["kept_deleted"] == [name]
-    assert body["installed"] == 17
+    assert body["installed"] == 20
 
     catalog = await async_client.get(f"{RULES}/library", headers=headers)
-    assert catalog.json()["installed"] == 17
+    assert catalog.json()["installed"] == 20
     assert catalog.json()["removed"] == 1
     # срез-66: удалённое названо по имени в своей строке и НЕ числится «не выданным»
     rows = [row for row in catalog.json()["items"] if row["removed"]]

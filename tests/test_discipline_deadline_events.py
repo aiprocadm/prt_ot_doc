@@ -23,7 +23,10 @@
 - (срез-79) перезарядка и поверка средств ПБ (срез-79): два срока одной
   единицы — два события с видом в ключе; списанное и без модуля ПБ молчат;
 - (срез-80) не проведённая к дате тренировка по ПБ и просроченный пересмотр
-  документа ПБ; проведённая тренировка и бессрочный документ молчат.
+  документа ПБ; проведённая тренировка и бессрочный документ молчат;
+- (срез-81) истёкший инструктаж: дисциплина и применимость — по ВИДУ записи
+  (ПТМ → ПБ, повторный → обучение, предрейсовый → БДД); без модуля БДД
+  предрейсовый молчит, а повторный по ОТ — нет; незнакомый вид молчит.
 """
 
 from __future__ import annotations
@@ -35,6 +38,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.disciplines import Discipline
+from app.models.briefings import BriefingEntry, BriefingJournal
 from app.models.civil_defense import CivilDefenseDrill
 from app.models.ecology import EcologyReportingDeadline
 from app.models.fire_safety import FireDrill, FireSafetyDocument, FireSafetyEquipment
@@ -124,8 +128,9 @@ def test_ядро_в_обходе_только_по_названной_прич�
     """Ядро (медосмотры, СИЗ) сюда не входит — у него свои события просрочки.
 
     Исключение одно — ``CORE_DEADLINE_SOURCES`` (срез-76: у срока удостоверения
-    по обучению события нет). Новый источник ядра в обходе без записи в этом
-    списке — ошибка: две задачи на одну просрочку.
+    по обучению события нет; срез-78 — назначения; срез-81 — инструктажи).
+    Новый источник ядра в обходе без записи в этом списке — ошибка: две
+    задачи на одну просрочку.
     """
 
     from app.core.disciplines import SOURCE_DISCIPLINE
@@ -135,7 +140,11 @@ def test_ядро_в_обходе_только_по_названной_прич�
         if SOURCE_DISCIPLINE[source] in core:
             assert source in CORE_DEADLINE_SOURCES, source
     assert CORE_DEADLINE_SOURCES <= set(DEADLINE_EVENT_SOURCES)
-    assert CORE_DEADLINE_SOURCES == {"training_certificate", "training_enrollment"}
+    assert CORE_DEADLINE_SOURCES == {
+        "training_certificate",
+        "training_enrollment",
+        "briefing_entry",
+    }
 
 
 async def test_просрочки_становятся_событиями_один_раз(sessionmaker, data_factory):
@@ -574,6 +583,76 @@ async def test_тренировка_и_документ_пб_становятс�
     assert document.payload["days_overdue"] == 9
     assert document.payload["kind"] == "order"
     assert all(row.payload["discipline"] == "fire_safety" for row in rows)
+
+    assert (await _run(sessionmaker, tenant_id)).emitted == 0, "тот же день — ничего нового"
+
+
+async def test_инструктажи_становятся_событиями_по_дисциплине_вида_а_без_модуля_вид_молчит(
+    sessionmaker, data_factory
+):
+    """Срез-81: у инструктажа дисциплина — по виду, и применимость — по ней же.
+
+    Арендатор с «ПБ», но без «БДД»: ПТМ → событие пожарной безопасности,
+    повторный по ОТ → событие обучения (ядро, применимо всегда), предрейсовый
+    → молчит и БДД названа в пропущенных. Действующий и незнакомый вид молчат.
+    """
+
+    tenant_id = await _tenant(sessionmaker, data_factory, modules=("fire_safety",))
+    now = datetime.now(timezone.utc)
+    async with sessionmaker() as session:
+        company = Company(tenant_id=tenant_id, name="ООО Склад")
+        session.add(company)
+        await session.flush()
+        person = Person(
+            tenant_id=tenant_id, company_id=company.id, first_name="Иван", last_name="Иванов"
+        )
+        journal = BriefingJournal(
+            tenant_id=tenant_id, code="J-1", title="Журнал", journal_type="fire"
+        )
+        session.add_all([person, journal])
+        await session.flush()
+
+        def entry(kind: str, *, days_ago: int) -> BriefingEntry:
+            return BriefingEntry(
+                tenant_id=tenant_id,
+                briefing_journal_id=journal.id,
+                person_id=person.id,
+                briefing_type=kind,
+                briefing_date=now - timedelta(days=400),
+                valid_until=now - timedelta(days=days_ago),
+                status="done",
+            )
+
+        session.add_all(
+            [
+                entry("fire_ptm", days_ago=35),
+                entry("repeat", days_ago=20),
+                entry("road_pre_trip", days_ago=1),
+                entry("fire_repeat", days_ago=-30),  # действует
+                entry("teleport", days_ago=5),  # незнакомый вид — не наш
+            ]
+        )
+        await session.commit()
+
+    outcome = await _run(sessionmaker, tenant_id)
+    assert outcome.emitted == 2, outcome
+    assert Discipline.ROAD_SAFETY in outcome.skipped
+    assert Discipline.FIRE_SAFETY not in outcome.skipped
+
+    rows = await _events(sessionmaker, tenant_id)
+    by_kind = {row.payload["kind"]: row for row in rows}
+    assert set(by_kind) == {"fire_ptm", "repeat"}
+    assert by_kind["fire_ptm"].payload["discipline"] == "fire_safety"
+    assert by_kind["fire_ptm"].payload["days_overdue"] == 35
+    assert (
+        by_kind["fire_ptm"].payload["title"]
+        == "Инструктаж: Пожарно-технический минимум (ПТМ) — Иванов Иван"
+    )
+    assert by_kind["repeat"].payload["discipline"] == "training"
+    assert by_kind["repeat"].payload["title"] == "Инструктаж: Повторный — Иванов Иван"
+    assert all(row.payload["source_type"] == "briefing_entry" for row in rows)
+    assert all(row.payload["person_id"] == str(person.id) for row in rows)
+    assert ":fire_ptm:" in by_kind["fire_ptm"].idempotency_key
 
     assert (await _run(sessionmaker, tenant_id)).emitted == 0, "тот же день — ничего нового"
 

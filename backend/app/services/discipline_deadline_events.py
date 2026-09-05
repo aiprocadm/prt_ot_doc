@@ -25,8 +25,13 @@
   — там намеренно ежедневное напоминание, здесь оно плодило бы задачи.)
 * **Ядро — только по названной причине.** У медосмотров и СИЗ события
   просрочки свои, второе дало бы две задачи. У сроков обучения — удостоверения
-  (срез-76) и назначения (срез-78) — событий нет, поэтому они в обходе;
-  список ``CORE_DEADLINE_SOURCES`` закрытый.
+  (срез-76), назначения (срез-78) и инструктажи (срез-81) — событий нет,
+  поэтому они в обходе; список ``CORE_DEADLINE_SOURCES`` закрытый.
+* **Дисциплина — у записи, не у таблицы** (срез-81). Инструктажи размечены по
+  виду: ПТМ — пожарная безопасность, предрейсовый — БДД. Обход берёт
+  дисциплину той же формулой, что Центр внимания (``discipline_of_event``),
+  и применимость проверяет по ней: арендатор без «БДД» событий по
+  предрейсовым не получает, а по повторным по ОТ — получает.
 * **Только применимые дисциплины.** Библиотека выдаётся всем арендаторам,
   движок правил проверяет лишь свой модуль. Без этой границы арендатор без
   «Экологии», но с внесёнными разрешениями получал бы задачи эколога — то
@@ -49,7 +54,13 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.disciplines import SOURCE_DISCIPLINE, Discipline
+from app.core.disciplines import (
+    KIND_DISCIPLINE,
+    SOURCE_DISCIPLINE,
+    SOURCE_KIND_FIELD,
+    Discipline,
+    discipline_of_event,
+)
 from app.models.models import Outbox
 from app.services.calendar_aggregator import CalendarAggregatorService
 from app.services.discipline_applicability import collect_applicability
@@ -74,9 +85,16 @@ __all__ = [
 #: даёт. Второй задачи на ту же просрочку взяться неоткуда. Срок назначения
 #: на обучение (``TrainingEnrollment.due_at``, срез-77/78) — та же история:
 #: ``TrainingAssigned`` рождается в момент назначения, об истечении срока
-#: никто не сообщает. Список закрытый: новый источник ядра сюда попадает
-#: только с названной причиной.
-CORE_DEADLINE_SOURCES: frozenset[str] = frozenset({"training_certificate", "training_enrollment"})
+#: никто не сообщает. Инструктажи (``BriefingEntry.valid_until``, срез-81):
+#: у истечения срока события тоже нет — ``notify_overdue`` шлёт
+#: псевдо-``TaskOverdue`` только по кнопке ``remind-overdue`` и только по
+#: незавершённым записям, библиотека правил на ``TaskOverdue`` не держит.
+#: Умолчание источника — «обучение» (ядро), но противопожарный и по БДД
+#: инструктажи уходят в свои дисциплины по виду записи. Список закрытый:
+#: новый источник ядра сюда попадает только с названной причиной.
+CORE_DEADLINE_SOURCES: frozenset[str] = frozenset(
+    {"training_certificate", "training_enrollment", "briefing_entry"}
+)
 
 #: Источники календаря, чьи просрочки становятся событиями. Это сроки пяти
 #: дисциплин Доп. №1: у их контуров нет своих событий просрочки. Ядро
@@ -110,11 +128,22 @@ DEADLINE_EVENT_SOURCES: tuple[str, ...] = (
     # просроченный пересмотр документа ПБ. Событий у модуля ПБ нет.
     "fire_safety_drill",
     "fire_safety_document",
+    # срез-81: истёкший срок инструктажа. Единственный источник, размеченный
+    # ПО ВИДУ записи (срез-58): повторный по ОТ — «обучение», ПТМ — «пожарная
+    # безопасность», предрейсовый — «БДД». Дисциплина события и применимость
+    # берутся по виду (``discipline_of_event``), а не по таблице — иначе
+    # противопожарный инструктаж уходил бы в «обучение» и правило ПБ молчало.
+    "briefing_entry",
 )
 
 #: Дисциплины, у которых обход вообще есть — для честного «пропущено».
+#: У источника с видами — все дисциплины его видов, не только умолчание.
 DEADLINE_DISCIPLINES: frozenset[Discipline] = frozenset(
     SOURCE_DISCIPLINE[source] for source in DEADLINE_EVENT_SOURCES
+) | frozenset(
+    discipline
+    for source in DEADLINE_EVENT_SOURCES
+    for discipline in KIND_DISCIPLINE.get(source, {}).values()
 )
 
 #: Потолок строк на источник за один обход.
@@ -157,11 +186,15 @@ async def emit_overdue_deadline_events(
 
     now = now or datetime.now(tz=timezone.utc)
     applicability = await collect_applicability(session, tenant_id)
-    sources = tuple(
-        source
-        for source in DEADLINE_EVENT_SOURCES
-        if applicability.applies(SOURCE_DISCIPLINE[source])
-    )
+
+    def _source_applies(source: str) -> bool:
+        # источник с видами обходится, если применима хоть одна его дисциплина;
+        # неприменимые виды отсеиваются ниже, по каждой записи
+        if applicability.applies(SOURCE_DISCIPLINE[source]):
+            return True
+        return any(applicability.applies(d) for d in KIND_DISCIPLINE.get(source, {}).values())
+
+    sources = tuple(source for source in DEADLINE_EVENT_SOURCES if _source_applies(source))
     skipped = tuple(d for d in applicability.hidden if d in DEADLINE_DISCIPLINES)
     if not sources:
         return DeadlineEventsOutcome(skipped=skipped)
@@ -181,8 +214,13 @@ async def emit_overdue_deadline_events(
     for item in response.items:
         if not item.is_overdue:
             continue
-        discipline = SOURCE_DISCIPLINE[item.source_type]
-        kind = item.extra.get("kind")
+        # срез-81: дисциплина ЗАПИСИ — по виду, где источник размечен по видам
+        # (инструктажи), иначе по таблице; та же формула, что у Центра внимания.
+        # Незнакомый вид — не наша запись, а не «обучение по умолчанию».
+        discipline = discipline_of_event(item.source_type, item.extra)
+        if discipline is None or not applicability.applies(discipline):
+            continue
+        kind = item.extra.get(SOURCE_KIND_FIELD.get(item.source_type, "kind"))
         due_on = item.starts_at.date()
         key = discipline_deadline_key(
             source_type=item.source_type,

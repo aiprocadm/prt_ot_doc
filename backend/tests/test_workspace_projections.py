@@ -479,11 +479,12 @@ async def test_attention_fire_briefing_counts_as_fire_safety_not_training(db_ses
     by_kind = {
         item.title: item.discipline for item in payload.items if item.item_type == "briefing_entry"
     }
+    # срез-81: вид — словами, человек — в заголовке (раньше на экране был код)
     assert by_kind == {
-        "Инструктаж: fire_ptm": "fire_safety",
-        "Инструктаж: fire_repeat": "fire_safety",
-        "Инструктаж: repeat": "training",
-        "Инструктаж: road_pre_trip": "road_safety",
+        "Инструктаж: Пожарно-технический минимум (ПТМ) — Иванов Иван": "fire_safety",
+        "Инструктаж: Противопожарный повторный — Иванов Иван": "fire_safety",
+        "Инструктаж: Повторный — Иванов Иван": "training",
+        "Инструктаж: Предрейсовый инструктаж — Иванов Иван": "road_safety",
     }
     rec = next(r for r in payload.recommendations if r.startswith("Просрочено по дисциплинам"))
     assert "Пожарная безопасность" in rec, rec

@@ -34,6 +34,7 @@ from typing import Any, Iterable
 from sqlalchemy import Select, and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.disciplines import BRIEFING_TYPE_TITLES
 from app.models.civil_defense import CivilDefenseDrill
 from app.models.ecology import (
     REPORTING_KINDS,
@@ -2505,11 +2506,12 @@ class CalendarAggregatorService:
         # `briefing_date`.
         anchor_col = func.coalesce(BriefingEntry.valid_until, BriefingEntry.briefing_date)
         stmt = (
-            select(BriefingEntry, BriefingTemplate.title)
+            select(BriefingEntry, BriefingTemplate.title, Person.last_name, Person.first_name)
             .outerjoin(
                 BriefingTemplate,
                 BriefingTemplate.id == BriefingEntry.briefing_template_id,
             )
+            .outerjoin(Person, Person.id == BriefingEntry.person_id)
             .where(
                 BriefingEntry.tenant_id == self.tenant_id,
                 BriefingEntry.deleted_at.is_(None),
@@ -2528,17 +2530,20 @@ class CalendarAggregatorService:
 
         rows = (await self.db.execute(stmt)).all()
         items: list[CalendarEventItem] = []
-        for entry, template_title in rows:
+        for entry, template_title, last_name, first_name in rows:
             anchor = _coerce_dt(entry.valid_until or entry.briefing_date)
             if anchor is None:
                 continue
             valid_until_dt = _coerce_dt(entry.valid_until)
             is_overdue = bool(valid_until_dt is not None and valid_until_dt < now)
-            title = (
-                f"Инструктаж: {template_title}"
-                if template_title
-                else f"Инструктаж: {entry.briefing_type}"
-            )
+            # срез-81: вид — словами из закрытого словаря, а не кодом
+            # (``fire_ptm`` на экране и в задаче по правилу — не подпись);
+            # человек — в заголовке, как у назначений на обучение.
+            kind_title = BRIEFING_TYPE_TITLES.get(entry.briefing_type, entry.briefing_type)
+            title = f"Инструктаж: {template_title or kind_title}"
+            person_name = " ".join(part for part in (last_name, first_name) if part)
+            if person_name:
+                title = f"{title} — {person_name}"
             expected_at = anchor if include_fact else None
             actual_at = _coerce_dt(entry.briefing_date) if include_fact else None
             days_to_due = _days_to_due(anchor, now) if include_sla else None

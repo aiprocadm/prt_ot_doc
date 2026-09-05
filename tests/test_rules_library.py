@@ -181,6 +181,7 @@ class TestСрокиДисциплин:
         срок: без условия по источнику «отстранить водителя» срабатывало бы
         на просроченный замер ПЭК."""
 
+        from app.core.disciplines import KIND_DISCIPLINE
         from app.services.discipline_deadline_events import DEADLINE_EVENT_SOURCES
 
         seen: set[str] = set()
@@ -188,9 +189,18 @@ class TestСрокиДисциплин:
             if rule.event_type != "DisciplineDeadlineOverdue":
                 continue
             conditions = rule.conditions["conditions"]
-            assert len(conditions) == 1 and conditions[0]["field"] == "source_type", rule.name
+            assert conditions and conditions[0]["field"] == "source_type", rule.name
             source = conditions[0]["value"]
             assert source in DEADLINE_EVENT_SOURCES, rule.name
+            # срез-81: источник с видами (инструктажи) размечен по дисциплине
+            # ЗАПИСИ — правило обязано сузить и её, иначе правило ПБ ловило бы
+            # повторный по охране труда; у остальных источников второго условия нет
+            extra = conditions[1:]
+            if source in KIND_DISCIPLINE:
+                assert [c["field"] for c in extra] == ["discipline"], rule.name
+                assert rule.discipline.value == extra[0]["value"], rule.name
+            else:
+                assert extra == [], rule.name
             seen.add(source)
         # каждый обходимый источник закрыт правилом — иначе событие есть, а
         # экспертизы по нему нет
