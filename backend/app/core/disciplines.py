@@ -128,6 +128,9 @@ SOURCE_DISCIPLINE: dict[str, Discipline] = {
     "medical_referral": Discipline.MEDICAL,
     "ppe_issue": Discipline.PPE,
     "training_session": Discipline.TRAINING,
+    # Доп. №1 разд. 57.2 (срез-75): истёкшее удостоверение по обучению —
+    # поимённый срок, источник целиком принадлежит обучению.
+    "training_certificate": Discipline.TRAINING,
     # Инструктаж БОЛЬШЕ не размечается одной дисциплиной: с разд. 54.1 виды
     # разделились — противопожарный инструктаж и ПТМ относятся к пожарной
     # безопасности, остальные к обучению. Дисциплину конкретной записи даёт
@@ -184,6 +187,9 @@ PERSON_SCOPED_SOURCES: frozenset[str] = frozenset(
         "medical_referral",
         "ppe_issue",
         "training_session",
+        # срез-75: удостоверение выдано человеку — в личном центре внимания
+        # рабочего только его удостоверения
+        "training_certificate",
         "briefing_entry",
         # срез-59: карточка водителя привязана к человеку из ядра
         "road_safety_driver",

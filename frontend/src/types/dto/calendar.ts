@@ -12,6 +12,8 @@ export type CalendarSourceType =
   | "ppe_issue"
   | "permit"
   | "training_session"
+  // Доп. №1 разд. 57.2 (срез-75): истёкшие удостоверения по обучению.
+  | "training_certificate"
   | "inspection"
   | "compliance_deadline"
   | "briefing_entry"
@@ -33,6 +35,7 @@ export const CALENDAR_SOURCE_TYPES: readonly CalendarSourceType[] = [
   "ppe_issue",
   "permit",
   "training_session",
+  "training_certificate",
   "inspection",
   "compliance_deadline",
   "briefing_entry",
