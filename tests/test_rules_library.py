@@ -134,3 +134,46 @@ class TestПокрытиеДисциплин:
             assert rule.conditions["conditions"] == [
                 {"field": "work_type", "op": "eq", "value": work_type}
             ]
+
+
+class TestСрокиДисциплин:
+    """Срез-62: событие «срок дисциплины просрочен» закрыло три пустые клетки."""
+
+    def test_у_каждой_дисциплины_есть_правило(self) -> None:
+        """Приёмка §58.3 буквально: «для КАЖДОЙ дисциплины есть библиотека»."""
+
+        for discipline in Discipline:
+            assert rules_for(discipline), discipline.value
+        assert not DISCIPLINES_WITHOUT_RULES
+
+    def test_бывшие_пустые_клетки_висят_на_событии_сроков(self) -> None:
+        """Экология, ГО и ЧС, БДД получили правила ровно на новом событии —
+        не на свободном тексте и не на чужом событии."""
+
+        for discipline in (
+            Discipline.ECOLOGY,
+            Discipline.CIVIL_DEFENSE,
+            Discipline.ROAD_SAFETY,
+        ):
+            for rule in rules_for(discipline):
+                assert rule.event_type == "DisciplineDeadlineOverdue", rule.name
+
+    def test_правила_сроков_различают_источник(self) -> None:
+        """Одно событие на все сроки — значит, правило обязано сказать, ЧЕЙ
+        срок: без условия по источнику «отстранить водителя» срабатывало бы
+        на просроченный замер ПЭК."""
+
+        from app.services.discipline_deadline_events import DEADLINE_EVENT_SOURCES
+
+        seen: set[str] = set()
+        for rule in LIBRARY_RULES:
+            if rule.event_type != "DisciplineDeadlineOverdue":
+                continue
+            conditions = rule.conditions["conditions"]
+            assert len(conditions) == 1 and conditions[0]["field"] == "source_type", rule.name
+            source = conditions[0]["value"]
+            assert source in DEADLINE_EVENT_SOURCES, rule.name
+            seen.add(source)
+        # каждый обходимый источник закрыт правилом — иначе событие есть, а
+        # экспертизы по нему нет
+        assert seen == set(DEADLINE_EVENT_SOURCES)

@@ -69,9 +69,7 @@ async def test_выдача_наряда_на_огневые_работы_соз
         titles = [
             str(title)
             for title in (
-                await session.execute(
-                    select(Task.title).where(Task.tenant_id == str(tenant.id))
-                )
+                await session.execute(select(Task.title).where(Task.tenant_id == str(tenant.id)))
             ).scalars()
         ]
     assert any("Огневые работы" in title for title in titles), titles
@@ -100,9 +98,7 @@ async def test_правило_промбеза_на_огневой_наряд_н
         titles = [
             str(title)
             for title in (
-                await session.execute(
-                    select(Task.title).where(Task.tenant_id == str(tenant.id))
-                )
+                await session.execute(select(Task.title).where(Task.tenant_id == str(tenant.id)))
             ).scalars()
         ]
     assert not any("Газоопасные" in title for title in titles), titles
@@ -127,18 +123,14 @@ async def test_черновик_наряда_ничего_не_запускае�
         titles = [
             str(title)
             for title in (
-                await session.execute(
-                    select(Task.title).where(Task.tenant_id == str(tenant.id))
-                )
+                await session.execute(select(Task.title).where(Task.tenant_id == str(tenant.id)))
             ).scalars()
         ]
     assert not any("Огневые работы" in title for title in titles), titles
 
 
 @pytest.mark.asyncio
-async def test_повторная_выдача_библиотеки_не_плодит_копий(
-    tenant_with_library, sessionmaker
-):
+async def test_повторная_выдача_библиотеки_не_плодит_копий(tenant_with_library, sessionmaker):
     tenant, first = tenant_with_library
     assert first > 0, "первая выдача обязана что-то завести"
 
@@ -160,11 +152,71 @@ async def test_каталог_называет_дисциплины_без_пр�
 
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["total"] == 6
-    assert body["installed"] == 6
+    assert body["total"] == 12
+    assert body["installed"] == 12
     rows = {row["discipline"]: row for row in body["items"]}
     assert len(rows) == 8, "в каталоге обязаны быть ВСЕ дисциплины ТЗ"
     assert rows["fire_safety"]["rules"] == 1
+    # срез-62: событие сроков закрыло три пустые клетки — причин больше нет,
+    # но поле остаётся: пустая клетка без причины по-прежнему запрещена
     for code in ("ecology", "civil_defense", "road_safety"):
-        assert rows[code]["rules"] == 0
-        assert rows[code]["reason"].strip(), code
+        assert rows[code]["rules"] >= 1, code
+        assert rows[code]["reason"] == "", code
+
+
+@pytest.mark.asyncio
+async def test_просроченные_права_водителя_доходят_до_задачи_и_один_раз(
+    tenant_with_library, sessionmaker, data_factory
+):
+    """Срез-62 живьём: обход сроков → событие → правило БДД → задача.
+
+    И ровно одна: повторный обход в тот же день события не заводит, а
+    значит, и второй задачи «отстранить от рейсов» не будет.
+    """
+
+    from datetime import date, timedelta
+
+    from app.models.master_data import Person
+    from app.models.models import Company
+    from app.models.road_safety import Driver
+    from app.services.discipline_deadline_events import emit_overdue_deadline_events
+
+    tenant, _ = tenant_with_library
+    tid = str(tenant.id)
+    async with sessionmaker() as session:
+        await data_factory.set_modules(session, tenant.id, ("road_safety",))
+        company = Company(tenant_id=tid, name="ООО Автобаза")
+        session.add(company)
+        await session.flush()
+        person = Person(tenant_id=tid, company_id=company.id, first_name="Иван", last_name="Рулёв")
+        session.add(person)
+        await session.flush()
+        session.add(
+            Driver(
+                tenant_id=tid,
+                person_id=person.id,
+                license_number="77 АА 123456",
+                categories=["B", "C"],
+                license_due=date.today() - timedelta(days=3),
+                status="admitted",
+            )
+        )
+        await session.commit()
+
+    for _ in range(2):
+        async with sessionmaker() as session:
+            await emit_overdue_deadline_events(session, tenant_id=tid)
+            await session.commit()
+
+    async with sessionmaker() as session:
+        titles = [
+            str(title)
+            for title in (
+                await session.execute(select(Task.title).where(Task.tenant_id == tid))
+            ).scalars()
+        ]
+    matching = [t for t in titles if "отстранить от рейсов" in t]
+    assert len(matching) == 1, titles
+    assert "Рулёв" in matching[0]
+    # правило другой дисциплины на том же событии молчит
+    assert not any("ЭПБ" in t or "разрешение" in t for t in titles), titles

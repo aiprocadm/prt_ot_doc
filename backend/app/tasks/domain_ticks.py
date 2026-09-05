@@ -6,6 +6,7 @@ registration is unchanged. Re-exported from _core for back-compat.
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 
 from sqlalchemy import select
@@ -23,6 +24,7 @@ from app.tasks._shared import (
 )
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 
 @celery_app.task(
@@ -277,6 +279,47 @@ async def _ppe_expiry_tick() -> int:
                 # по (issue, status, day), поэтому autoretry безопасен.
                 total += await notify_replacement_due(session, tenant_id=tenant_id)
                 await session.commit()
+    return total
+
+
+@celery_app.task(
+    name="disciplines.deadlines.tick",
+    autoretry_for=RETRYABLE_EXCEPTIONS,
+    retry_backoff=True,
+    retry_jitter=True,
+    max_retries=5,
+)
+def disciplines_deadlines_tick() -> int:
+    """BIZ-54-57 срез-62: просроченные сроки дисциплин → события для правил."""
+
+    return _run_coroutine(_disciplines_deadlines_tick())
+
+
+async def _disciplines_deadlines_tick() -> int:
+    from app.services.discipline_deadline_events import emit_overdue_deadline_events
+
+    async with AsyncSessionLocal(tenant=settings.default_tenant_slug) as session:
+        tenants = list(
+            (await session.execute(select(Tenant).where(Tenant.is_active.is_(True))))
+            .scalars()
+            .all()
+        )
+    total = 0
+    for tenant in tenants:
+        with tenant_context(tenant.slug):
+            ensure_tenant_schema(tenant.slug)
+            async with session_scope(tenant=tenant.slug) as session:
+                tenant_id, _scope = await _resolve_task_tenant_scope(session, tenant.slug)
+                # Ключ события — (запись, срок), поэтому autoretry и повтор
+                # обхода в тот же день безопасны: второй раз ничего не заводится.
+                outcome = await emit_overdue_deadline_events(session, tenant_id=tenant_id)
+                await session.commit()
+                if outcome.truncated:
+                    logger.warning(
+                        "disciplines.deadlines.truncated",
+                        extra={"tenant": tenant.slug, "sources": list(outcome.truncated)},
+                    )
+                total += outcome.emitted
     return total
 
 

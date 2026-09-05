@@ -32,6 +32,13 @@ class EventType(str, enum.Enum):
     # у наряда закрытый, и у двух видов дисциплина следует из закона (огневые →
     # ПБ, газоопасные → ПромБез). Это единственные события этих двух дисциплин.
     WORK_PERMIT_ISSUED = "WorkPermitIssued"
+    # BIZ-54-57 срез-62 (разд. 57.3, приёмка §58.3): срок дисциплины просрочен.
+    # Экология, ГО и ЧС и БДД не испускали ни одного события, и библиотека
+    # правил по ним была пуста «с причиной». Событие сквозное, ядра: его
+    # порождает ежедневный обход общего календаря по размеченным источникам
+    # (services/discipline_deadline_events.py), а не какой-то один модуль —
+    # поэтому оно не числится ни за одним модулем в MODULE_EVENT_TYPES.
+    DISCIPLINE_DEADLINE_OVERDUE = "DisciplineDeadlineOverdue"
     INSPECTION_CREATED = "InspectionCreated"
     PRESCRIPTION_OVERDUE = "PrescriptionOverdue"
     MEDICAL_EXAM_RECORDED = "MedicalExamRecorded"
@@ -267,6 +274,30 @@ class WorkPermitIssuedPayload(BaseEventPayload):
     zone_text: str | None = None
 
 
+class DisciplineDeadlineOverduePayload(BaseEventPayload):
+    """Срок дисциплины просрочен (BIZ-54-57 срез-62).
+
+    Строка общего календаря, у которой ``is_overdue`` стало истиной:
+    ``discipline`` и ``source_type`` — закрытые словари
+    (``core/disciplines.py``, ``calendar_aggregator.ALL_SOURCES``), поэтому
+    условие правила по ним точное. ``kind`` — вид срока внутри источника
+    (техосмотр / ОСАГО / лицензия / тахограф у документов ТС), у остальных
+    источников пусто. ``due_at`` — сам просроченный срок; событие одно на
+    (запись, срок): продлили и снова просрочили — новое событие.
+    """
+
+    discipline: str
+    source_type: str
+    source_id: str
+    title: str
+    due_at: datetime
+    days_overdue: int = 0
+    kind: str | None = None
+    person_id: str | None = None
+    site_id: str | None = None
+    company_id: str | None = None
+
+
 class TaskDuePayload(BaseEventPayload):
     task_id: str
     title: str
@@ -330,6 +361,7 @@ _PAYLOADS: dict[EventType, type[BaseEventPayload]] = {
     EventType.EDO_STATUS_CHANGED: InternalEventPayload,
     EventType.INCIDENT_CREATED: IncidentCreatedPayload,
     EventType.WORK_PERMIT_ISSUED: WorkPermitIssuedPayload,
+    EventType.DISCIPLINE_DEADLINE_OVERDUE: DisciplineDeadlineOverduePayload,
     EventType.INSPECTION_CREATED: InspectionCreatedPayload,
     EventType.PRESCRIPTION_OVERDUE: PrescriptionOverduePayload,
     EventType.MEDICAL_EXAM_RECORDED: MedicalExamRecordedPayload,
@@ -373,6 +405,19 @@ def normalize_payload(
     return parsed, parsed.model_dump(mode="json")
 
 
+def discipline_deadline_key(
+    *, source_type: str, source_id: str, kind: str | None, due_on: date
+) -> str:
+    """Личность события «срок просрочен»: запись + вид срока + сам срок.
+
+    Без даты в ключе продлённый и снова просроченный срок молчал бы навсегда;
+    с датой ДНЯ вместо срока — событие плодилось бы каждое утро (у СИЗ так и
+    задумано, у просрочки — нет: она наступает один раз).
+    """
+
+    return f"discipline-deadline:{source_type}:{source_id}:{kind or '-'}:{due_on.isoformat()}"
+
+
 def dedupe_key_for(event_type: EventType, payload: BaseEventPayload) -> str:
     if isinstance(payload, DocumentCreatedPayload):
         return f"{payload.document_id}:{payload.document_version_id}"
@@ -414,6 +459,13 @@ def dedupe_key_for(event_type: EventType, payload: BaseEventPayload) -> str:
         return payload.exam_id
     if isinstance(payload, (PersonSuspendedPayload, PersonReinstatedPayload)):
         return payload.suspension_id
+    if isinstance(payload, DisciplineDeadlineOverduePayload):
+        return discipline_deadline_key(
+            source_type=payload.source_type,
+            source_id=payload.source_id,
+            kind=payload.kind,
+            due_on=payload.due_at.date(),
+        )
     if isinstance(payload, WorkPermitIssuedPayload):
         # Наряд выдаётся один раз: возобновление после приостановки идёт другой
         # ручкой и события не порождает — работа там не начинается заново.

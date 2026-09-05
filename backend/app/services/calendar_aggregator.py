@@ -198,9 +198,16 @@ def _sla_band(source_type: str, *, days_to_due: int | None, is_overdue: bool) ->
 class CalendarAggregatorService:
     """Build a tenant-scoped `CalendarEventsResponse`."""
 
-    def __init__(self, *, tenant_id: str, db: AsyncSession) -> None:
+    def __init__(
+        self, *, tenant_id: str, db: AsyncSession, limit: int = MAX_ITEMS_PER_SOURCE
+    ) -> None:
         self.tenant_id = str(tenant_id)
         self.db = db
+        # Потолок строк на источник. По умолчанию — экранный (календарь и
+        # Центр внимания показывают первые 50, остальное — числом). Обход
+        # сроков ради событий (срез-62) поднимает его: ему нужна каждая
+        # просроченная строка, а не первые полсотни.
+        self._limit = max(int(limit), 1)
 
     async def list_events(
         self,
@@ -506,7 +513,7 @@ class CalendarAggregatorService:
                 Driver.license_due.is_not(None),
             )
             .order_by(Driver.license_due.asc())
-            .limit(MAX_ITEMS_PER_SOURCE)
+            .limit(self._limit)
         )
         if person_id:
             stmt = stmt.where(Driver.person_id == person_id)
@@ -585,7 +592,7 @@ class CalendarAggregatorService:
                 MedicalExam.deleted_at.is_(None),
             )
             .order_by(MedicalExam.valid_until.asc())
-            .limit(MAX_ITEMS_PER_SOURCE)
+            .limit(self._limit)
         )
         if person_id:
             stmt = stmt.where(MedicalExam.person_id == person_id)
@@ -666,7 +673,7 @@ class CalendarAggregatorService:
                 MedicalReferral.due_at.is_not(None),
             )
             .order_by(MedicalReferral.due_at.asc())
-            .limit(MAX_ITEMS_PER_SOURCE)
+            .limit(self._limit)
         )
         if person_id:
             stmt = stmt.where(MedicalReferral.person_id == person_id)
@@ -766,7 +773,7 @@ class CalendarAggregatorService:
                 EmissionNorm.valid_until.is_not(None),
             )
             .order_by(EmissionNorm.valid_until.asc())
-            .limit(MAX_ITEMS_PER_SOURCE)
+            .limit(self._limit)
         )
         points_stmt = (
             select(WaterUsagePoint)
@@ -776,7 +783,7 @@ class CalendarAggregatorService:
                 WaterUsagePoint.permit_valid_until.is_not(None),
             )
             .order_by(WaterUsagePoint.permit_valid_until.asc())
-            .limit(MAX_ITEMS_PER_SOURCE)
+            .limit(self._limit)
         )
         if lo is not None:
             norms_stmt = norms_stmt.where(EmissionNorm.valid_until >= lo)
@@ -825,7 +832,7 @@ class CalendarAggregatorService:
                 )
             )
         items.sort(key=lambda item: item.starts_at)
-        items = items[:MAX_ITEMS_PER_SOURCE]
+        items = items[: self._limit]
 
         total = 0
         overdue = 0
@@ -901,7 +908,7 @@ class CalendarAggregatorService:
                 EmissionMonitoringPlanItem.deleted_at.is_(None),
             )
             .order_by(EmissionMonitoringPlanItem.next_due_on.asc())
-            .limit(MAX_ITEMS_PER_SOURCE)
+            .limit(self._limit)
         )
         if from_at is not None:
             stmt = stmt.where(EmissionMonitoringPlanItem.next_due_on >= from_at.date())
@@ -986,7 +993,7 @@ class CalendarAggregatorService:
                 TechnicalDevice.epb_valid_until.is_not(None),
             )
             .order_by(TechnicalDevice.epb_valid_until.asc())
-            .limit(MAX_ITEMS_PER_SOURCE)
+            .limit(self._limit)
         )
         if from_at is not None:
             stmt = stmt.where(TechnicalDevice.epb_valid_until >= from_at.date())
@@ -1073,7 +1080,7 @@ class CalendarAggregatorService:
                 CivilDefenseDrill.held_on.is_(None),
             )
             .order_by(CivilDefenseDrill.planned_on.asc())
-            .limit(MAX_ITEMS_PER_SOURCE)
+            .limit(self._limit)
         )
         if site_id:
             stmt = stmt.where(CivilDefenseDrill.site_id == site_id)
@@ -1179,7 +1186,7 @@ class CalendarAggregatorService:
                     column.is_not(None),
                 )
                 .order_by(column.asc())
-                .limit(MAX_ITEMS_PER_SOURCE)
+                .limit(self._limit)
             )
             if attr == "tachograph_due":
                 stmt = stmt.where(Vehicle.tachograph_installed.is_(True))
@@ -1229,7 +1236,7 @@ class CalendarAggregatorService:
                     )
                 )
         items.sort(key=lambda item: item.starts_at)
-        items = items[:MAX_ITEMS_PER_SOURCE]
+        items = items[: self._limit]
 
         total = 0
         overdue = 0
@@ -1258,7 +1265,7 @@ class CalendarAggregatorService:
                 PPEIssue.expires_at.is_not(None),
             )
             .order_by(PPEIssue.expires_at.asc())
-            .limit(MAX_ITEMS_PER_SOURCE)
+            .limit(self._limit)
         )
         if person_id:
             stmt = stmt.where(PPEIssue.person_id == person_id)
@@ -1356,7 +1363,7 @@ class CalendarAggregatorService:
                 Permit.valid_until.is_not(None),
             )
             .order_by(Permit.valid_until.asc())
-            .limit(MAX_ITEMS_PER_SOURCE)
+            .limit(self._limit)
         )
         if person_id:
             stmt = stmt.where(Permit.person_id == person_id)
@@ -1446,7 +1453,7 @@ class CalendarAggregatorService:
             .outerjoin(TrainingCourse, TrainingCourse.id == TrainingSession.course_id)
             .where(TrainingSession.tenant_id == self.tenant_id)
             .order_by(anchor_col.asc())
-            .limit(MAX_ITEMS_PER_SOURCE)
+            .limit(self._limit)
         )
         if person_id:
             stmt = stmt.where(TrainingSession.person_id == person_id)
@@ -1541,7 +1548,7 @@ class CalendarAggregatorService:
                 Inspection.scheduled_at.is_not(None),
             )
             .order_by(Inspection.scheduled_at.asc())
-            .limit(MAX_ITEMS_PER_SOURCE)
+            .limit(self._limit)
         )
         if site_id:
             stmt = stmt.where(Inspection.site_id == site_id)
@@ -1651,7 +1658,7 @@ class CalendarAggregatorService:
             select(ComplianceDeadline)
             .where(ComplianceDeadline.tenant_id == self.tenant_id)
             .order_by(ComplianceDeadline.due_at.asc())
-            .limit(MAX_ITEMS_PER_SOURCE)
+            .limit(self._limit)
         )
         if person_id:
             stmt = stmt.where(ComplianceDeadline.person_id == person_id)
@@ -1746,7 +1753,7 @@ class CalendarAggregatorService:
                 BriefingEntry.deleted_at.is_(None),
             )
             .order_by(anchor_col.asc())
-            .limit(MAX_ITEMS_PER_SOURCE)
+            .limit(self._limit)
         )
         if person_id:
             stmt = stmt.where(BriefingEntry.person_id == person_id)
@@ -1863,7 +1870,7 @@ class CalendarAggregatorService:
             select(CalendarEvent)
             .where(CalendarEvent.tenant_id == self.tenant_id)
             .order_by(CalendarEvent.starts_at.asc())
-            .limit(MAX_ITEMS_PER_SOURCE)
+            .limit(self._limit)
         )
         if site_id:
             stmt = stmt.where(CalendarEvent.site_id == site_id)

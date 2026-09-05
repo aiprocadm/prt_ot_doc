@@ -164,15 +164,15 @@ async def list_event_types(tenant: TenantDep, access: Access) -> EventTypePage:
 
 
 @router.get("/library", response_model=RuleLibraryPage, dependencies=[FeatureGate])
-async def rule_library(
-    tenant: TenantDep, session: SessionDep, access: Access
-) -> RuleLibraryPage:
+async def rule_library(tenant: TenantDep, session: SessionDep, access: Access) -> RuleLibraryPage:
     """Библиотека предустановленных правил по дисциплинам (разд. 57.3).
 
-    Показывает и то, что есть, и то, чего НЕТ с причиной: у экологии, ГО-ЧС и
-    БДД в продукте нет ни одного события, и правило для них пришлось бы вешать
-    на свободный текст — то есть на угадайку. Ноль без объяснения прочитали бы
-    как недоделку, а не как решение.
+    Показывает и то, что есть, и то, чего НЕТ с причиной. До среза-62 у
+    экологии, ГО-ЧС и БДД в продукте не было ни одного события, и правило для
+    них пришлось бы вешать на свободный текст — то есть на угадайку; ноль без
+    объяснения прочитали бы как недоделку, а не как решение. С среза-62 все
+    восемь дисциплин с правилами (событие ``DisciplineDeadlineOverdue``), а
+    причина остаётся обязательной на случай, если клетка снова опустеет.
     """
 
     TenantContextValidator.ensure_tenant_context(tenant)

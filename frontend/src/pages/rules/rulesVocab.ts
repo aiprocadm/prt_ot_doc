@@ -49,6 +49,7 @@ export const EVENT_LABELS: Record<string, string> = {
   PersonSuspended: "Отстранение от работы",
   PersonReinstated: "Допуск восстановлен",
   PrescriptionOverdue: "Просрочено предписание",
+  DisciplineDeadlineOverdue: "Срок дисциплины просрочен",
   DocumentCreated: "Создан документ",
   DocumentGenerated: "Сгенерирован документ",
   DocumentSigned: "Документ подписан",
