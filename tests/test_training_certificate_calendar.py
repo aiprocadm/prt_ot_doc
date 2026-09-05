@@ -126,8 +126,8 @@ class TestКалендарь:
         assert response.overdue_count == 1
         titles = [item.title for item in response.items]
         assert titles == [
-            "Удостоверение: Охрана труда для руководителей",
-            "Удостоверение: Промбезопасность",
+            "Удостоверение: Охрана труда для руководителей — Петров Пётр",
+            "Удостоверение: Промбезопасность — Петров Пётр",
         ]
         expired, valid = response.items
         assert expired.id.startswith("training_certificate:")
@@ -137,6 +137,7 @@ class TestКалендарь:
         assert expired.person_id == str(person.id)
         assert expired.extra["number"] == "УД-001"
         assert expired.extra["program_title"] == "Охрана труда для руководителей"
+        assert expired.extra["person_name"] == "Петров Пётр", "имя — для задачи правила (срез-76)"
         assert expired.actual_at is not None, "факт — дата выдачи"
         assert valid.status == "valid"
         assert valid.is_overdue is False
@@ -249,7 +250,7 @@ class TestЦентрВнимания:
         items = [item for item in body["items"] if item["item_type"] == "training_certificate"]
         assert len(items) == 1, body["items"]
         assert items[0]["discipline"] == "training"
-        assert items[0]["title"] == "Удостоверение: Работы на высоте"
+        assert items[0]["title"] == "Удостоверение: Работы на высоте — Смирнова Анна"
         assert items[0]["severity"] in {"critical", "high"}
         training = next(row for row in body["disciplines"] if row["code"] == "training")
         assert training["overdue"] >= 1

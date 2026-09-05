@@ -654,15 +654,25 @@ class CalendarAggregatorService:
         то же, что у медосмотров: ``valid_until < today`` — в день окончания
         удостоверение ещё действует. Название берётся из программы, иначе из
         курса, иначе — номер или код: у старых удостоверений программы нет.
+        В заголовке — фамилия и имя (срез-76): из него складывается задача
+        правила «направить на переобучение», и без имени она никому не адресована
+        (как у водительских удостоверений, срез-62).
         """
 
         today = now.date()
         stmt = (
-            select(TrainingCertificate, TrainingProgram.title, TrainingCourse.title)
+            select(
+                TrainingCertificate,
+                TrainingProgram.title,
+                TrainingCourse.title,
+                Person.last_name,
+                Person.first_name,
+            )
             .outerjoin(
                 TrainingProgram, TrainingProgram.id == TrainingCertificate.training_program_id
             )
             .outerjoin(TrainingCourse, TrainingCourse.id == TrainingCertificate.course_id)
+            .outerjoin(Person, Person.id == TrainingCertificate.person_id)
             .where(
                 TrainingCertificate.tenant_id == self.tenant_id,
                 TrainingCertificate.deleted_at.is_(None),
@@ -680,19 +690,24 @@ class CalendarAggregatorService:
             stmt = stmt.where(TrainingCertificate.valid_until <= to_at.date())
 
         items: list[CalendarEventItem] = []
-        for cert, program_title, course_title in (await self.db.execute(stmt)).all():
+        rows = (await self.db.execute(stmt)).all()
+        for cert, program_title, course_title, last_name, first_name in rows:
             anchor = _coerce_dt(cert.valid_until)
             if anchor is None:
                 continue
             is_overdue = cert.valid_until < today
             days_to_due = _days_to_due(anchor, now) if include_sla else None
             subject = program_title or course_title or cert.number or cert.code or "без программы"
+            person_name = " ".join(part for part in (last_name, first_name) if part)
+            title = f"Удостоверение: {subject}"
+            if person_name:
+                title = f"{title} — {person_name}"
             items.append(
                 CalendarEventItem(
                     id=f"training_certificate:{cert.id}",
                     source_type="training_certificate",
                     source_id=str(cert.id),
-                    title=f"Удостоверение: {subject}",
+                    title=title,
                     starts_at=anchor,
                     ends_at=None,
                     status="expired" if is_overdue else "valid",
@@ -717,6 +732,7 @@ class CalendarAggregatorService:
                         "valid_until": cert.valid_until.isoformat(),
                         "program_title": program_title,
                         "course_title": course_title,
+                        "person_name": person_name or None,
                     },
                 )
             )

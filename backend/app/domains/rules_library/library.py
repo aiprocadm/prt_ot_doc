@@ -174,6 +174,42 @@ LIBRARY_RULES: tuple[LibraryRule, ...] = (
         ],
         priority=40,
     ),
+    LibraryRule(
+        discipline=Discipline.TRAINING,
+        name="Обучение: истёк срок удостоверения — направить на переобучение",
+        description=(
+            "Работника, не прошедшего в установленном порядке обучение и проверку "
+            "знаний по охране труда, работодатель обязан отстранить от работы "
+            "(ТК РФ ст. 76, Порядок обучения — ПП РФ № 2464). Срок истекает у "
+            "конкретного удостоверения конкретного человека (срез-75); правило "
+            "ставит задачу направить на переобучение и предупреждает специалиста "
+            "по ОТ и кадры. Задача на три дня: переобучение надо организовать, "
+            "а не просто отметить."
+        ),
+        event_type="DisciplineDeadlineOverdue",
+        conditions={
+            "match": "all",
+            "conditions": [{"field": "source_type", "op": "eq", "value": "training_certificate"}],
+        },
+        actions=[
+            {
+                "type": "create_task",
+                "title_template": "{title}: срок истёк — направить на переобучение",
+                "priority": "high",
+                "due_in_days": 3,
+                "assignee_mode": "none",
+            },
+            {
+                "type": "notify",
+                "title_template": "Истёк срок удостоверения по обучению",
+                "body_template": "{title} — срок истёк, просрочка {days_overdue} дн.; до переобучения к работам по нему не допускать.",
+                "recipient_mode": "role",
+                "roles": ["ot_specialist", "hr"],
+                "priority": "high",
+            },
+        ],
+        priority=20,
+    ),
     # ── Пожарная безопасность ───────────────────────────────────────────────
     LibraryRule(
         discipline=Discipline.FIRE_SAFETY,
