@@ -320,6 +320,40 @@ LIBRARY_RULES: tuple[LibraryRule, ...] = (
         ],
         priority=30,
     ),
+    LibraryRule(
+        discipline=Discipline.ECOLOGY,
+        name="Экология: пропущен срок отчётности или платежа — сдать и уплатить",
+        description=(
+            "Несданная 2-ТП или декларация о плате — штраф (КоАП РФ ст. 8.5), "
+            "неуплаченная плата за НВОС — штраф и пени (ст. 8.41). Срок вносит "
+            "эколог; событие приходит только по несданному — исполненный срок "
+            "календарь не отдаёт. Задача ставится на завтра: каждый день "
+            "просрочки дорожает."
+        ),
+        event_type="DisciplineDeadlineOverdue",
+        conditions={
+            "match": "all",
+            "conditions": [{"field": "source_type", "op": "eq", "value": "ecology_report"}],
+        },
+        actions=[
+            {
+                "type": "create_task",
+                "title_template": "{title}: срок прошёл — сдать и отметить исполнение",
+                "priority": "high",
+                "due_in_days": 1,
+                "assignee_mode": "none",
+            },
+            {
+                "type": "notify",
+                "title_template": "Пропущен срок отчётности",
+                "body_template": "{title} — срок прошёл, просрочка {days_overdue} дн.",
+                "recipient_mode": "role",
+                "roles": ["ecologist"],
+                "priority": "high",
+            },
+        ],
+        priority=20,
+    ),
     # ── ГО и ЧС ─────────────────────────────────────────────────────────────
     LibraryRule(
         discipline=Discipline.CIVIL_DEFENSE,

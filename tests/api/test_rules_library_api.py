@@ -12,7 +12,9 @@
 * каталог библиотеки называет дисциплины без правил ПРИЧИНОЙ, а не нулём;
 * (срез-62) просроченные права водителя доходят до задачи — и ровно одной;
 * (срез-63) ручка выдачи даёт существующему арендатору недостающие правила,
-  не возвращает удалённые специалистом и доступна только admin/owner.
+  не возвращает удалённые специалистом и доступна только admin/owner;
+* (срез-72) пропущенный срок 2-ТП доходит до задачи эколога — и ровно одной;
+  исполненный срок задачи не рождает. Счёт правил — 13.
 """
 
 from __future__ import annotations
@@ -155,8 +157,8 @@ async def test_каталог_называет_дисциплины_без_пр�
 
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["total"] == 12
-    assert body["installed"] == 12
+    assert body["total"] == 13
+    assert body["installed"] == 13
     rows = {row["discipline"]: row for row in body["items"]}
     assert len(rows) == 8, "в каталоге обязаны быть ВСЕ дисциплины ТЗ"
     assert rows["fire_safety"]["rules"] == 1
@@ -226,13 +228,71 @@ async def test_просроченные_права_водителя_доходя
 
 
 @pytest.mark.asyncio
+async def test_пропущенный_срок_отчётности_доходит_до_задачи_и_один_раз(
+    tenant_with_library, sessionmaker, data_factory
+):
+    """Срез-72 живьём: срок 2-ТП (срез-71) → обход → событие → правило → задача.
+
+    Исполненный срок с прошедшей датой задачи не рождает — календарь его не
+    отдаёт (срез-71), а значит, и событию взяться неоткуда.
+    """
+
+    from datetime import date, timedelta
+
+    from app.models.ecology import EcologyReportingDeadline
+    from app.services.discipline_deadline_events import emit_overdue_deadline_events
+
+    tenant, _ = tenant_with_library
+    tid = str(tenant.id)
+    async with sessionmaker() as session:
+        await data_factory.set_modules(session, tenant.id, ("ecology",))
+        session.add_all(
+            [
+                EcologyReportingDeadline(
+                    tenant_id=tid,
+                    kind="report",
+                    title="2-ТП (отходы) за прошлый год",
+                    due_on=date.today() - timedelta(days=4),
+                ),
+                EcologyReportingDeadline(
+                    tenant_id=tid,
+                    kind="payment",
+                    title="Плата за НВОС за прошлый год",
+                    due_on=date.today() - timedelta(days=4),
+                    done_on=date.today() - timedelta(days=5),
+                ),
+            ]
+        )
+        await session.commit()
+
+    for _ in range(2):
+        async with sessionmaker() as session:
+            await emit_overdue_deadline_events(session, tenant_id=tid)
+            await session.commit()
+
+    async with sessionmaker() as session:
+        titles = [
+            str(title)
+            for title in (
+                await session.execute(select(Task.title).where(Task.tenant_id == tid))
+            ).scalars()
+        ]
+    matching = [t for t in titles if "сдать и отметить исполнение" in t]
+    assert len(matching) == 1, titles
+    assert matching[0].startswith("Отчётность: 2-ТП (отходы)")
+    # исполненный платёж задачи не родил; правила других источников молчат
+    assert not any("Плата за НВОС" in t for t in titles), titles
+    assert not any("переоформить разрешение" in t or "провести замер" in t for t in titles), titles
+
+
+@pytest.mark.asyncio
 async def test_выдача_недостающих_правил_существующему_арендатору(
     async_client, make_auth_headers, sessionmaker, data_factory
 ):
     """Срез-63: арендатор, созданный до пополнения библиотеки, получает правила ручкой.
 
     Первая выдача заводит всё; вторая — ничего не плодит и честно говорит
-    «создано 0». Каталог после выдачи показывает «выдано 12 из 12».
+    «создано 0». Каталог после выдачи показывает «выдано 13 из 13».
     """
 
     async with sessionmaker() as session:
@@ -247,18 +307,18 @@ async def test_выдача_недостающих_правил_существу
     first = await async_client.post(f"{RULES}/library/install", headers=headers)
     assert first.status_code == 200, first.text
     body = first.json()
-    assert len(body["created"]) == body["total"] == 12
-    assert body["installed"] == 12
+    assert len(body["created"]) == body["total"] == 13
+    assert body["installed"] == 13
     assert body["kept_deleted"] == []
     assert any("отстранить от рейсов" in name or "БДД" in name for name in body["created"])
 
     second = await async_client.post(f"{RULES}/library/install", headers=headers)
     assert second.status_code == 200, second.text
     assert second.json()["created"] == []
-    assert second.json()["installed"] == 12
+    assert second.json()["installed"] == 13
 
     after = await async_client.get(f"{RULES}/library", headers=headers)
-    assert after.json()["installed"] == 12
+    assert after.json()["installed"] == 13
     assert after.json()["removed"] == 0
     # срез-66: до выдачи каждая строка называла имена по своей дисциплине,
     # после — не выдано нечего
@@ -266,7 +326,7 @@ async def test_выдача_недостающих_правил_существу
     assert rows_before["road_safety"]["missing"] == [
         name for name in body["created"] if "БДД" in name or "рейс" in name
     ]
-    assert sum(len(row["missing"]) for row in rows_before.values()) == 12
+    assert sum(len(row["missing"]) for row in rows_before.values()) == 13
     assert all(row["missing"] == [] for row in after.json()["items"])
     assert all(row["removed"] == [] for row in after.json()["items"])
 
@@ -305,10 +365,10 @@ async def test_удалённое_специалистом_правило_не_�
     body = response.json()
     assert body["created"] == []
     assert body["kept_deleted"] == [name]
-    assert body["installed"] == 11
+    assert body["installed"] == 12
 
     catalog = await async_client.get(f"{RULES}/library", headers=headers)
-    assert catalog.json()["installed"] == 11
+    assert catalog.json()["installed"] == 12
     assert catalog.json()["removed"] == 1
     # срез-66: удалённое названо по имени в своей строке и НЕ числится «не выданным»
     rows = [row for row in catalog.json()["items"] if row["removed"]]
