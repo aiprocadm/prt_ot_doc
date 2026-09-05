@@ -220,3 +220,78 @@ describe("Отчёт клиенту (BIZ-51 срез-11)", () => {
     expect(api.sendReport).toHaveBeenCalledWith("mc1", "r2");
   });
 });
+
+describe("Происшествия клиента из отчёта (срез-61)", () => {
+  it("число из отчёта ведёт в реестр того же клиента и той же дисциплины", async () => {
+    api.auditReports.mockResolvedValue({
+      items: [
+        {
+          ...REPORTS.items[0],
+          payload: {
+            incidents: {
+              total: 4,
+              by_discipline: { road_safety: 2, ecology: 1 },
+              unmarked: 1,
+            },
+          },
+        },
+        REPORTS.items[1],
+      ],
+      total: 2,
+    });
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getAllByTestId("audit-report-row").length).toBe(2),
+    );
+
+    const rows = screen.getAllByTestId("audit-report-row");
+    const links = within(rows[0]).getByTestId("incident-links");
+    // ссылка = тот же фильтр, каким отчёт считал число: компания + дисциплина
+    expect(
+      within(links).getByRole("link", { name: "БДД — 2" }),
+    ).toHaveAttribute(
+      "href",
+      "/incidents?company_id=comp-a&discipline=road_safety",
+    );
+    expect(
+      within(links).getByRole("link", { name: "Экология — 1" }),
+    ).toHaveAttribute(
+      "href",
+      "/incidents?company_id=comp-a&discipline=ecology",
+    );
+    // неразмеченные — весь реестр клиента: фильтра «без дисциплины» нет
+    expect(
+      within(links).getByRole("link", { name: "без разметки — 1" }),
+    ).toHaveAttribute("href", "/incidents?company_id=comp-a");
+    // отчёт без происшествий ссылок не показывает — нечего открывать
+    expect(
+      within(rows[1]).queryByTestId("incident-links"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("у клиента в своём контуре ссылок нет: его реестр живёт не здесь", async () => {
+    api.get.mockResolvedValue({
+      ...CLIENT,
+      mode: "dedicated",
+      company_id: null,
+      dedicated_tenant_slug: "romashka",
+    });
+    api.auditReports.mockResolvedValue({
+      items: [
+        {
+          ...REPORTS.items[0],
+          payload: {
+            incidents: { total: 1, by_discipline: { ecology: 1 }, unmarked: 0 },
+          },
+        },
+      ],
+      total: 1,
+    });
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getAllByTestId("audit-report-row").length).toBe(1),
+    );
+
+    expect(screen.queryByTestId("incident-links")).not.toBeInTheDocument();
+  });
+});
