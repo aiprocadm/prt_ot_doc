@@ -39,6 +39,11 @@
 ключ, перекрыть её нечем; запись без ``valid_until`` — бессрочная, не срок.
 Виды не перекрывают друг друга: повторный не закрывает истёкший ПТМ (это
 другая обязанность), а первичный обычно без срока.
+
+Карточка сотрудника (срез-84) считает ПБ одного человека —
+``collect_fire_briefing_numbers``: те же инструктажи, но без объектов
+(``objects_counted=False``): средства, тренировки и документы — сроки
+площадки, у человека их нет.
 """
 
 from __future__ import annotations
@@ -60,7 +65,12 @@ from app.models.fire_safety import (
     FireSafetyEquipment,
 )
 
-__all__ = ["FIRE_BRIEFING_TYPES", "FIRE_DUE_SOON_DAYS", "collect_fire_safety_numbers"]
+__all__ = [
+    "FIRE_BRIEFING_TYPES",
+    "FIRE_DUE_SOON_DAYS",
+    "collect_fire_briefing_numbers",
+    "collect_fire_safety_numbers",
+]
 
 #: горизонт «скоро истекает» — общий у сводки модуля и карточки площадки
 FIRE_DUE_SOON_DAYS = 30
@@ -104,6 +114,30 @@ async def _fire_briefing_numbers(
     overdue = sum(1 for value in latest if value is not None and value < now)
     due_soon = sum(1 for value in latest if value is not None and now <= value <= soon)
     return overdue, due_soon, len(latest) - overdue - due_soon
+
+
+async def collect_fire_briefing_numbers(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    person_ids: Sequence[str],
+    now: datetime | None = None,
+) -> FireSafetyNumbers:
+    """ПБ этих людей без объектов — только их инструктажи (карточка сотрудника)."""
+
+    overdue, due_soon, valid = await _fire_briefing_numbers(
+        session,
+        tenant_id=tenant_id,
+        person_ids=person_ids,
+        now=now or datetime.now(tz=timezone.utc),
+    )
+    return FireSafetyNumbers(
+        due_soon_days=FIRE_DUE_SOON_DAYS,
+        overdue_briefings=overdue,
+        briefings_due_soon=due_soon,
+        briefings_valid=valid,
+        objects_counted=False,
+    )
 
 
 async def collect_fire_safety_numbers(
