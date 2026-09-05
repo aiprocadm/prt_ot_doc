@@ -18,6 +18,7 @@ from httpx import AsyncClient
 from sqlalchemy import delete, select
 
 from app.db.session import AsyncSessionLocal
+from app.models.briefings import BriefingEntry, BriefingJournal
 from app.models.feature import Feature, FeatureEnablement
 from app.models.fire_safety import (
     FireDrill,
@@ -25,7 +26,7 @@ from app.models.fire_safety import (
     FireSafetyDocument,
     FireSafetyEquipment,
 )
-from app.models.master_data import Company, Site, Workplace
+from app.models.master_data import Company, Person, Site, Workplace
 from app.models.medical import MedicalExamKind, MedicalNorm
 from app.models.models import Position, RoleEnum, Tenant
 from app.models.work_permit import WorkPermit
@@ -364,6 +365,72 @@ class TestSiteOverview:
         assert summary["units_without_maintenance"] == 3
         assert summary["overdue_documents"] == 1
         assert summary["days_since_last_drill"] == 40
+
+    async def test_противопожарные_инструктажи_людей_площадки_красят_её_строку(
+        self, async_client: AsyncClient, make_auth_headers, site_with_people, sessionmaker
+    ) -> None:
+        """Срез-83 (разд. 54.1): истёкший инструктаж человека площадки — красный,
+        как огнетушитель; человек без рабочего места — не площадки, но в сводке
+        модуля; старая запись, перекрытая свежей, — не нарушение."""
+
+        from datetime import datetime, timedelta, timezone
+
+        tenant, site_id = site_with_people
+        now = datetime.now(timezone.utc)
+        async with sessionmaker() as session:
+            people = {
+                person.last_name: person.id
+                for person in (
+                    await session.execute(select(Person).where(Person.tenant_id == tenant.id))
+                ).scalars()
+            }
+            journal = BriefingJournal(
+                tenant_id=tenant.id, code="J-FIRE", title="Журнал ПБ", journal_type="fire"
+            )
+            session.add(journal)
+            await session.flush()
+
+            def entry(person_id, briefing_type, *, days_ago, valid_days):
+                return BriefingEntry(
+                    tenant_id=tenant.id,
+                    briefing_journal_id=journal.id,
+                    person_id=person_id,
+                    briefing_type=briefing_type,
+                    briefing_date=now - timedelta(days=days_ago),
+                    valid_until=now + timedelta(days=valid_days),
+                    status="completed",
+                )
+
+            session.add_all(
+                [
+                    # Иванов на площадке: ПТМ истёк — просрочка площадки
+                    entry(people["Иванов"], "fire_ptm", days_ago=400, valid_days=-35),
+                    # его же повторный: старая запись истекла, свежая действует —
+                    # считается человек × вид, старая не красит
+                    entry(people["Иванов"], "fire_repeat", days_ago=400, valid_days=-220),
+                    entry(people["Иванов"], "fire_repeat", days_ago=10, valid_days=170),
+                    # инструктаж по охране труда — не ПБ
+                    entry(people["Иванов"], "repeat", days_ago=400, valid_days=-35),
+                    # Петров без рабочего места: истёкший ПТМ — не площадки
+                    entry(people["Петров"], "fire_ptm", days_ago=400, valid_days=-35),
+                ]
+            )
+            await session.commit()
+        headers = await make_auth_headers(RoleEnum.ADMIN)
+
+        fire = _row(await _overview(async_client, headers, site_id), "fire_safety")
+
+        assert fire["light"] == "red", fire
+        assert fire["reason"] == (
+            "Просрочено по ПБ — противопожарные инструктажи: 1; "
+            "проведённых тренировок нет; противопожарных инструктажей действует: 1"
+        )
+        assert fire["required"] == 2 and fire["lapsed"] == 1
+
+        # сводка модуля — по всему арендатору: Иванов + Петров, перекрытая запись — нет
+        readiness = await async_client.get("/api/v1/fire-safety/readiness", headers=headers)
+        assert readiness.status_code == 200, readiness.text
+        assert readiness.json()["overdue_fire_briefings"] == 2
 
     async def test_непосчитанное_названо_с_причиной(
         self, async_client: AsyncClient, make_auth_headers, site_with_people

@@ -23,12 +23,11 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
-from app.core.disciplines import BRIEFING_TYPE_DISCIPLINE, Discipline
+from app.core.disciplines import Discipline
 from app.core.errors import api_problem_detail
 from app.core.feature_flags import is_module_enabled, raise_for_disabled_module
 from app.core.security import AccessContext, abac, rbac
 from app.core.tenant_validation import TenantContextValidator
-from app.models.briefings import BriefingEntry
 from app.models.fire_safety import (
     FIRE_DOCUMENT_KINDS,
     FIRE_DOCUMENT_STATUS_TITLES,
@@ -954,28 +953,11 @@ async def fire_readiness(
     # карточкой площадки 360° (``services/discipline_fire_safety.py``) — здесь
     # по всему арендатору, там по одному объекту. Правила счёта и границы
     # (что не судится) описаны у формулы.
-    numbers = await collect_fire_safety_numbers(session, tenant_id=str(tenant.id), today=today)
-
     # Разд. 54.1 «контроль сроков»: просроченный противопожарный инструктаж —
-    # такое же нарушение к приходу МЧС, как непроверенный огнетушитель.
-    fire_types = [
-        code
-        for code, discipline in BRIEFING_TYPE_DISCIPLINE.items()
-        if discipline is Discipline.FIRE_SAFETY
-    ]
-    overdue_briefings = int(
-        await session.scalar(
-            select(func.count())
-            .select_from(BriefingEntry)
-            .where(
-                BriefingEntry.tenant_id == tenant.id,
-                BriefingEntry.briefing_type.in_(fire_types),
-                BriefingEntry.valid_until.is_not(None),
-                BriefingEntry.valid_until < func.now(),
-            )
-        )
-        or 0
-    )
+    # такое же нарушение к приходу МЧС, как непроверенный огнетушитель. Срез-83:
+    # считается там же, по человеку × виду (старая запись, перекрытая свежим
+    # повторным инструктажем, — не нарушение), а не по каждой записи.
+    numbers = await collect_fire_safety_numbers(session, tenant_id=str(tenant.id), today=today)
 
     return FireReadinessRead(
         fire_documents=numbers.documents,
@@ -990,7 +972,7 @@ async def fire_readiness(
         overdue_inspection=numbers.overdue_inspection,
         due_soon=numbers.due_soon,
         due_soon_days=numbers.due_soon_days,
-        overdue_fire_briefings=overdue_briefings,
+        overdue_fire_briefings=numbers.overdue_briefings,
         # Доп. №1 разд. 57.4: открытые происшествия контура — той же формулой,
         # что разрез «по дисциплинам» у директора (срез-49).
         incidents_open=await open_incidents_count(session, str(tenant.id), Discipline.FIRE_SAFETY),

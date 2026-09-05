@@ -14,6 +14,11 @@
 - средства без записи о работах и давность тренировки — факты, не цвет;
 - без средств, тренировок и документов — причина словаря, слово в слово;
 - кто сроки объекта не считал, получает прежнюю строку, а не нули.
+
+Срез-83 (решение 6): противопожарные инструктажи людей площадки — тоже в
+цвет: истёкший — красный наравне с огнетушителем, истекающий — жёлтый,
+действующий — факт в расшифровке; зелёного по-прежнему нет, потому что
+сколько людям положено инструктажей, платформа не судит.
 """
 
 from __future__ import annotations
@@ -77,10 +82,40 @@ class TestЦвет:
         row = fire_safety_status(FireSafetyNumbers(units=2, due_soon=1, due_soon_days=30))
         assert row.light is TrafficLight.YELLOW
         assert row.reason == (
-            "Перезарядка или поверка средств защиты в ближайшие 30 дн.: 1; "
-            "проведённых тренировок нет"
+            "Истекает по ПБ в ближайшие 30 дн. — перезарядка или поверка средств "
+            "защиты: 1; проведённых тренировок нет"
         )
         assert row.counts == DisciplineCounts(required=2, expiring=1)
+
+    def test_истёкший_инструктаж_красит_красным_как_огнетушитель(self) -> None:
+        """Решение 6 (срез-83): поимённый срок ПБ — в цвет, как удостоверение у БДД."""
+
+        row = fire_safety_status(
+            FireSafetyNumbers(overdue_briefings=2, briefings_due_soon=1, briefings_valid=3)
+        )
+        assert row.light is TrafficLight.RED
+        assert row.reason == (
+            "Просрочено по ПБ — противопожарные инструктажи: 2; "
+            "проведённых тренировок нет; противопожарных инструктажей действует: 3"
+        )
+        # инструктажи — тоже «положено/просрочено/истекает», как удостоверения
+        assert row.counts == DisciplineCounts(required=6, lapsed=2, expiring=1)
+
+    def test_истекающий_инструктаж_жёлтый_рядом_со_средствами(self) -> None:
+        row = fire_safety_status(FireSafetyNumbers(units=1, due_soon=1, briefings_due_soon=2))
+        assert row.light is TrafficLight.YELLOW
+        assert row.reason == (
+            "Истекает по ПБ в ближайшие 30 дн. — перезарядка или поверка средств "
+            "защиты: 1, противопожарные инструктажи: 2; проведённых тренировок нет"
+        )
+        assert row.counts == DisciplineCounts(required=3, expiring=3)
+
+    def test_только_действующие_инструктажи_это_объект_но_не_зелёный(self) -> None:
+        row = fire_safety_status(FireSafetyNumbers(briefings_valid=5))
+        assert row.light is TrafficLight.NOT_MEASURED
+        assert row.reason.startswith("Сроки ПБ не просрочены (средств защиты: 0, документов: 0); ")
+        assert "противопожарных инструктажей действует: 5" in row.reason
+        assert row.reason.endswith(BASE)
 
     def test_порядок_в_сроках_не_зелёный_а_факт_с_причиной(self) -> None:
         row = fire_safety_status(
@@ -125,18 +160,25 @@ class TestЦвет:
             FireSafetyNumbers(units=3, due_soon=1),
             FireSafetyNumbers(units=3, overdue_recharge=1),
             FireSafetyNumbers(documents=2, planned_drills=1, last_drill_on=date(2026, 9, 1)),
+            FireSafetyNumbers(briefings_valid=7),
+            FireSafetyNumbers(units=2, briefings_due_soon=1),
         ],
     )
     def test_пб_никогда_не_зелёная(self, numbers: FireSafetyNumbers) -> None:
-        """Сторож решения 5: сроки объекта — факт, не эталон."""
+        """Сторож решений 5 и 6: сроки объекта и инструктажи — факт, не эталон."""
 
         assert fire_safety_status(numbers).light is not TrafficLight.GREEN
 
-    def test_просрочка_это_те_же_четыре_слагаемых_что_у_центра_внимания(self) -> None:
+    def test_просрочка_это_четыре_слагаемых_центра_внимания_плюс_инструктажи(self) -> None:
         numbers = FireSafetyNumbers(
-            overdue_recharge=1, overdue_inspection=2, overdue_drills=3, overdue_documents=4
+            overdue_recharge=1,
+            overdue_inspection=2,
+            overdue_drills=3,
+            overdue_documents=4,
+            overdue_briefings=5,
         )
-        assert numbers.overdue == 10
+        assert numbers.overdue == 15
+        assert FireSafetyNumbers(due_soon=1, briefings_due_soon=2).expiring == 3
 
 
 class TestВСветофоре:

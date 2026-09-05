@@ -44,6 +44,15 @@
 не судит (признаков применимости норм у площадки нет), и «сроки в порядке»
 не значит «всё положенное есть». Средства без единой записи о работах и
 давность последней тренировки — факты в расшифровке, цвет они не трогают.
+
+**6. ПБ: противопожарные инструктажи людей — в цвет (срез-83).** Истёкший
+противопожарный инструктаж или ПТМ — поимённый срок, как удостоверение
+водителя у БДД, и красит ПБ красным наравне с непроверенным огнетушителем
+(так его и считает сводка готовности модуля, разд. 54.1 «контроль сроков»).
+Считается человек × вид по самой поздней дате действия, а не каждая запись:
+старая запись, перекрытая свежим повторным инструктажем, — не нарушение.
+Сколько людям ПОЛОЖЕНО инструктажей, платформа не судит — поэтому и с
+действующими инструктажами ПБ не зелёная, а «не измеряется» с фактом.
 """
 
 from __future__ import annotations
@@ -281,18 +290,38 @@ class FireSafetyNumbers:
     documents: int = 0
     #: у скольких просрочен пересмотр
     overdue_documents: int = 0
+    #: противопожарных инструктажей и ПТМ людей, истёкших (человек × вид по
+    #: самой поздней дате действия — срез-83, решение 6)
+    overdue_briefings: int = 0
+    #: истекают в горизонте «скоро»
+    briefings_due_soon: int = 0
+    #: действуют дольше горизонта — факт, цвет не трогает
+    briefings_valid: int = 0
 
     @property
     def overdue(self) -> int:
-        """Все просрочки объекта — те же четыре слагаемых, что у строки
-        «Пожарная безопасность» Центра внимания (срез-80)."""
+        """Все просрочки — четыре слагаемых строки «Пожарная безопасность»
+        Центра внимания (срез-80) плюс инструктажи людей (срез-83)."""
 
         return (
             self.overdue_recharge
             + self.overdue_inspection
             + self.overdue_drills
             + self.overdue_documents
+            + self.overdue_briefings
         )
+
+    @property
+    def expiring(self) -> int:
+        """Всё, что истекает в горизонте: сроки средств и инструктажи."""
+
+        return self.due_soon + self.briefings_due_soon
+
+    @property
+    def briefings(self) -> int:
+        """Сколько инструктажей (человек × вид) вообще со сроком."""
+
+        return self.overdue_briefings + self.briefings_due_soon + self.briefings_valid
 
     @property
     def has_objects(self) -> bool:
@@ -304,6 +333,7 @@ class FireSafetyNumbers:
             or self.planned_drills
             or self.last_drill_on is not None
             or self.documents
+            or self.briefings
         )
 
 
@@ -325,6 +355,8 @@ def _fire_safety_facts(numbers: FireSafetyNumbers) -> list[str]:
         facts.append("проведённых тренировок нет")
     if numbers.planned_drills:
         facts.append(f"тренировок назначено: {numbers.planned_drills}")
+    if numbers.briefings_valid:
+        facts.append(f"противопожарных инструктажей действует: {numbers.briefings_valid}")
     return facts
 
 
@@ -346,36 +378,36 @@ def fire_safety_status(numbers: FireSafetyNumbers) -> DisciplineStatus:
             reason=base,
         )
     counts = DisciplineCounts(
-        required=numbers.units, lapsed=numbers.overdue, expiring=numbers.due_soon
+        required=numbers.units + numbers.briefings,
+        lapsed=numbers.overdue,
+        expiring=numbers.expiring,
     )
     facts = "; ".join(_fire_safety_facts(numbers))
     if numbers.overdue > 0:
-        parts = [
-            f"{label}: {amount}"
-            for label, amount in (
-                ("перезарядка средств защиты", numbers.overdue_recharge),
-                ("поверка/ТО", numbers.overdue_inspection),
-                ("тренировки", numbers.overdue_drills),
-                ("пересмотр документов", numbers.overdue_documents),
-            )
-            if amount
-        ]
+        parts = _named_amounts(
+            ("перезарядка средств защиты", numbers.overdue_recharge),
+            ("поверка/ТО", numbers.overdue_inspection),
+            ("тренировки", numbers.overdue_drills),
+            ("пересмотр документов", numbers.overdue_documents),
+            ("противопожарные инструктажи", numbers.overdue_briefings),
+        )
         return DisciplineStatus(
             discipline=Discipline.FIRE_SAFETY,
             title=title,
             light=TrafficLight.RED,
-            reason=f"Просрочено по ПБ — {', '.join(parts)}; {facts}",
+            reason=f"Просрочено по ПБ — {parts}; {facts}",
             counts=counts,
         )
-    if numbers.due_soon > 0:
+    if numbers.expiring > 0:
+        parts = _named_amounts(
+            ("перезарядка или поверка средств защиты", numbers.due_soon),
+            ("противопожарные инструктажи", numbers.briefings_due_soon),
+        )
         return DisciplineStatus(
             discipline=Discipline.FIRE_SAFETY,
             title=title,
             light=TrafficLight.YELLOW,
-            reason=(
-                f"Перезарядка или поверка средств защиты в ближайшие "
-                f"{numbers.due_soon_days} дн.: {numbers.due_soon}; {facts}"
-            ),
+            reason=f"Истекает по ПБ в ближайшие {numbers.due_soon_days} дн. — {parts}; {facts}",
             counts=counts,
         )
     return DisciplineStatus(
@@ -388,6 +420,12 @@ def fire_safety_status(numbers: FireSafetyNumbers) -> DisciplineStatus:
         ),
         counts=counts,
     )
+
+
+def _named_amounts(*pairs: tuple[str, int]) -> str:
+    """«перезарядка: 1, тренировки: 2» — только ненулевые, в заданном порядке."""
+
+    return ", ".join(f"{label}: {amount}" for label, amount in pairs if amount)
 
 
 def build_discipline_statuses(
