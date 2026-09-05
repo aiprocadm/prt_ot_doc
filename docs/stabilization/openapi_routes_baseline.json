@@ -208,6 +208,7 @@
     "GET /api/v1/ecology/fee-rates",
     "GET /api/v1/ecology/monitoring-plan",
     "GET /api/v1/ecology/readiness",
+    "GET /api/v1/ecology/reporting-deadlines",
     "GET /api/v1/ecology/waste-movements",
     "GET /api/v1/ecology/waste-passports",
     "GET /api/v1/ecology/water-points",
@@ -605,6 +606,7 @@
     "PATCH /api/v1/ecology/fee-lines/{line_id}",
     "PATCH /api/v1/ecology/fee-rates/{rate_id}",
     "PATCH /api/v1/ecology/monitoring-plan/{item_id}",
+    "PATCH /api/v1/ecology/reporting-deadlines/{deadline_id}",
     "PATCH /api/v1/ecology/waste-movements/{movement_id}",
     "PATCH /api/v1/ecology/waste-passports/{passport_id}",
     "PATCH /api/v1/ecology/water-points/{point_id}",
@@ -781,6 +783,7 @@
     "POST /api/v1/ecology/fee-lines",
     "POST /api/v1/ecology/fee-rates",
     "POST /api/v1/ecology/monitoring-plan",
+    "POST /api/v1/ecology/reporting-deadlines",
     "POST /api/v1/ecology/waste-movements",
     "POST /api/v1/ecology/waste-passports",
     "POST /api/v1/ecology/water-points",
@@ -1324,6 +1327,7 @@
     "create_question_api_v1_training_tests__item_id__questions_post",
     "create_reimbursement_api_v1_budget_reimbursements_post",
     "create_replace_map_api_v1_replace_maps_post",
+    "create_reporting_deadline_api_v1_ecology_reporting_deadlines_post",
     "create_request_api_v1_client_portal_requests_post",
     "create_request_message_api_v1_client_portal_requests__request_id__messages_post",
     "create_role_api_v1_admin_roles_post",
@@ -1818,6 +1822,7 @@
     "list_public_legal_api_v1_public_legal_get",
     "list_recent_searches_api_v1_search_recent_get",
     "list_reimbursements_api_v1_budget_reimbursements_get",
+    "list_reporting_deadlines_api_v1_ecology_reporting_deadlines_get",
     "list_requests_api_v1_client_portal_requests_get",
     "list_risk_cards_api_v1_risk_cards_get",
     "list_risk_maps_api_v1_risk_maps_get",
@@ -2165,6 +2170,7 @@
     "update_prescription_api_v1_prescriptions__prescription_id__patch",
     "update_profile_api_v1_civil_defense_profiles__profile_id__patch",
     "update_reimbursement_api_v1_budget_reimbursements__reimbursement_id__patch",
+    "update_reporting_deadline_api_v1_ecology_reporting_deadlines__deadline_id__patch",
     "update_rule_api_v1_rules__rule_id__patch",
     "update_saved_view_api_v1_calendar_saved_views__view_id__patch",
     "update_site_api_v1_sites__site_id__patch",
@@ -2477,6 +2483,10 @@
     "DryRunIn",
     "DryRunOut",
     "EcologyReadinessRead",
+    "EcologyReportingDeadlineCreate",
+    "EcologyReportingDeadlinePage",
+    "EcologyReportingDeadlineRead",
+    "EcologyReportingDeadlineUpdate",
     "EdoMessageIn",
     "EdoSendIn",
     "EdoSendRequest",
@@ -5271,7 +5281,42 @@
       "fee_lines": "integer",
       "fee_lines_without_rate": "integer",
       "fee_total_rubles": "string",
+      "reporting_overdue": "integer",
       "incidents_open": "integer"
+    },
+    "EcologyReportingDeadlineCreate": {
+      "kind": "string",
+      "title": "string",
+      "period": "null|string",
+      "due_on": "string",
+      "done_on": "null|string",
+      "responsible": "null|string",
+      "notes": "null|string"
+    },
+    "EcologyReportingDeadlinePage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "EcologyReportingDeadlineRead": {
+      "id": "string",
+      "kind": "string",
+      "kind_label": "string",
+      "title": "string",
+      "period": "null|string",
+      "due_on": "string",
+      "done_on": "null|string",
+      "responsible": "null|string",
+      "notes": "null|string",
+      "status": "string",
+      "status_label": "string"
+    },
+    "EcologyReportingDeadlineUpdate": {
+      "title": "null|string",
+      "period": "null|string",
+      "due_on": "null|string",
+      "done_on": "null|string",
+      "responsible": "null|string",
+      "notes": "null|string"
     },
     "EdoMessageIn": {
       "entity_type": "string",
@@ -9492,7 +9537,9 @@
       "discipline": "string",
       "title": "string",
       "rules": "integer",
-      "reason": "string"
+      "reason": "string",
+      "missing": "array",
+      "removed": "array"
     },
     "RuleLibraryInstallOut": {
       "created": "array",

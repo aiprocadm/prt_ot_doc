@@ -281,6 +281,9 @@ class EcologyReadinessRead(BaseSchema):
     #: итог не попадает — иначе итог выглядел бы полным
     fee_lines_without_rate: int = 0
     fee_total_rubles: Decimal = Decimal("0.00")
+    #: разд. 55.3 «сроки сдачи отчётности, платежей» (срез-71): просроченные
+    #: и не исполненные сроки — те же строки, что видит Центр внимания
+    reporting_overdue: int = 0
     #: Доп. №1 разд. 57.4: открытые происшествия, размеченные этой дисциплиной
     #: (срез-49). Формула одна на контуры и разрез директора —
     #: ``app.services.discipline_incidents``; «не закрыто и не отменено».
@@ -553,4 +556,47 @@ class EmissionMeasurementRead(BaseSchema):
 
 class EmissionMeasurementPage(BaseSchema):
     items: list[EmissionMeasurementRead]
+    total: int
+
+
+class EcologyReportingDeadlineCreate(BaseSchema):
+    """Срок отчётности или платежа (разд. 55.3, срез-71). Дату вносит эколог."""
+
+    #: report / payment — см. ``REPORTING_KINDS``
+    kind: str = Field(min_length=1, max_length=16)
+    title: str = Field(min_length=1, max_length=255)
+    period: str | None = Field(default=None, max_length=32)
+    due_on: date
+    done_on: date | None = None
+    responsible: str | None = Field(default=None, max_length=255)
+    notes: str | None = None
+
+
+class EcologyReportingDeadlineUpdate(BaseSchema):
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    period: str | None = Field(default=None, max_length=32)
+    due_on: date | None = None
+    #: дата сдачи/уплаты; ``null`` снимает отметку об исполнении
+    done_on: date | None = None
+    responsible: str | None = Field(default=None, max_length=255)
+    notes: str | None = None
+
+
+class EcologyReportingDeadlineRead(BaseSchema):
+    id: str
+    kind: str
+    kind_label: str
+    title: str
+    period: str | None = None
+    due_on: date
+    done_on: date | None = None
+    responsible: str | None = None
+    notes: str | None = None
+    #: planned / overdue / done — считается при чтении, не хранится
+    status: str
+    status_label: str
+
+
+class EcologyReportingDeadlinePage(BaseSchema):
+    items: list[EcologyReportingDeadlineRead]
     total: int

@@ -38,11 +38,14 @@ from app.models.ecology import (
     NVOS_CATEGORIES,
     NVOS_STATUSES,
     PERIODICITY_LABELS,
+    REPORTING_KINDS,
+    REPORTING_STATUS_TITLES,
     WASTE_HAZARD_CLASSES,
     WASTE_MOVEMENT_KINDS,
     WATER_PERMIT_STATUS_TITLES,
     WATER_POINT_KINDS,
     WATER_RECORD_BASES,
+    EcologyReportingDeadline,
     EmissionMeasurement,
     EmissionMonitoringPlanItem,
     EmissionNorm,
@@ -60,6 +63,10 @@ from app.models.master_data import Site
 from app.models.models import Tenant
 from app.schemas.ecology import (
     EcologyReadinessRead,
+    EcologyReportingDeadlineCreate,
+    EcologyReportingDeadlinePage,
+    EcologyReportingDeadlineRead,
+    EcologyReportingDeadlineUpdate,
     EmissionMeasurementCreate,
     EmissionMeasurementPage,
     EmissionMeasurementRead,
@@ -2749,6 +2756,254 @@ async def update_fee_line(
     return _fee_line_read(line, rates.get((line.year, line.impact_kind, line.subject)))
 
 
+# ── Сроки отчётности и платежей (разд. 55.3, разд. 57.2; срез-71) ────────────
+
+
+def reporting_status(due_on: date, done_on: date | None, today: date) -> str:
+    """planned / overdue / done — одна формула у реестра, сводки и календаря.
+
+    Исполненный срок просроченным не бывает, даже если сдали позже даты:
+    просрочка — это то, что ещё требует действия.
+    """
+
+    if done_on is not None:
+        return "done"
+    return "overdue" if due_on < today else "planned"
+
+
+def _reporting_read(row: EcologyReportingDeadline) -> EcologyReportingDeadlineRead:
+    status_value = reporting_status(row.due_on, row.done_on, date.today())
+    return EcologyReportingDeadlineRead(
+        id=row.id,
+        kind=row.kind,
+        kind_label=REPORTING_KINDS.get(row.kind, row.kind),
+        title=row.title,
+        period=row.period,
+        due_on=row.due_on,
+        done_on=row.done_on,
+        responsible=row.responsible,
+        notes=row.notes,
+        status=status_value,
+        status_label=REPORTING_STATUS_TITLES[status_value],
+    )
+
+
+def _validate_reporting_kind(value: str) -> None:
+    if value not in REPORTING_KINDS:
+        raise _unprocessable(
+            f"Неизвестный вид срока {value!r}; допустимые: {', '.join(REPORTING_KINDS)}"
+        )
+
+
+async def _ensure_reporting_deadline_free(
+    session: AsyncSession,
+    tenant: Tenant,
+    *,
+    title: str,
+    due_on: date,
+    exclude_id: str | None = None,
+) -> None:
+    """Один и тот же отчёт на одну дату — один срок: дубль дал бы две строки
+    в Центре внимания и удвоил бы «просрочено» в сводке."""
+
+    stmt = select(EcologyReportingDeadline.id).where(
+        EcologyReportingDeadline.tenant_id == tenant.id,
+        EcologyReportingDeadline.title == title,
+        EcologyReportingDeadline.due_on == due_on,
+        EcologyReportingDeadline.deleted_at.is_(None),
+    )
+    if exclude_id:
+        stmt = stmt.where(EcologyReportingDeadline.id != exclude_id)
+    if (await session.execute(stmt)).scalar_one_or_none() is not None:
+        raise _unprocessable(f"Срок {title!r} на {due_on.isoformat()} уже внесён")
+
+
+async def _get_reporting_deadline_or_404(
+    session: AsyncSession, tenant: Tenant, deadline_id: str
+) -> EcologyReportingDeadline:
+    stmt = select(EcologyReportingDeadline).where(
+        EcologyReportingDeadline.id == deadline_id,
+        EcologyReportingDeadline.tenant_id == tenant.id,
+        EcologyReportingDeadline.deleted_at.is_(None),
+    )
+    row = (await session.execute(stmt)).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail=api_problem_detail(
+                code="NVOS_REPORTING_DEADLINE_NOT_FOUND",
+                message="Reporting deadline not found",
+                error_type="ecology",
+            ),
+        )
+    return row
+
+
+@router.get("/reporting-deadlines", response_model=EcologyReportingDeadlinePage)
+async def list_reporting_deadlines(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    kind: str | None = Query(default=None),
+    status_filter: str | None = Query(
+        default=None,
+        alias="status",
+        description="planned / overdue / done; пусто — все",
+    ),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> EcologyReportingDeadlinePage:
+    """Сроки сдачи отчётности и платежей: ближайшие сверху, исполненные — тоже
+    (ради истории), но их отличает состояние."""
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    if kind is not None:
+        _validate_reporting_kind(kind)
+    if status_filter is not None and status_filter not in REPORTING_STATUS_TITLES:
+        raise _unprocessable(
+            f"Неизвестное состояние {status_filter!r}; допустимые: "
+            f"{', '.join(REPORTING_STATUS_TITLES)}"
+        )
+    today = date.today()
+    stmt = select(EcologyReportingDeadline).where(
+        EcologyReportingDeadline.tenant_id == tenant.id,
+        EcologyReportingDeadline.deleted_at.is_(None),
+    )
+    if kind:
+        stmt = stmt.where(EcologyReportingDeadline.kind == kind)
+    if status_filter == "done":
+        stmt = stmt.where(EcologyReportingDeadline.done_on.is_not(None))
+    elif status_filter == "overdue":
+        stmt = stmt.where(
+            EcologyReportingDeadline.done_on.is_(None),
+            EcologyReportingDeadline.due_on < today,
+        )
+    elif status_filter == "planned":
+        stmt = stmt.where(
+            EcologyReportingDeadline.done_on.is_(None),
+            EcologyReportingDeadline.due_on >= today,
+        )
+    total = int(
+        await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    )
+    rows = (
+        (
+            await session.execute(
+                stmt.order_by(
+                    EcologyReportingDeadline.due_on.asc(), EcologyReportingDeadline.title
+                )
+                .offset(offset)
+                .limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return EcologyReportingDeadlinePage(
+        items=[_reporting_read(r) for r in rows], total=total
+    )
+
+
+@router.post(
+    "/reporting-deadlines",
+    response_model=EcologyReportingDeadlineRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_reporting_deadline(
+    request: Request,
+    payload: EcologyReportingDeadlineCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> EcologyReportingDeadlineRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _validate_reporting_kind(payload.kind)
+    title = payload.title.strip()
+    if not title:
+        raise _unprocessable("Название срока не может быть пустым")
+    await _ensure_reporting_deadline_free(
+        session, tenant, title=title, due_on=payload.due_on
+    )
+
+    row = EcologyReportingDeadline(
+        tenant_id=str(tenant.id),
+        kind=payload.kind,
+        title=title,
+        period=(payload.period or None),
+        due_on=payload.due_on,
+        done_on=payload.done_on,
+        responsible=(payload.responsible or None),
+        notes=(payload.notes or None),
+    )
+    session.add(row)
+    await session.flush()
+    await AuditService(session).log_event(
+        tenant_id=str(tenant.id),
+        action="create",
+        object_type="EcologyReportingDeadline",
+        object_id=row.id,
+        user_id=access.user.id,
+        ip=request.client.host if request.client else "unknown",
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+        changed_fields={"fields": {"id": {"before": None, "after": row.id}}},
+        details={"entity": "EcologyReportingDeadline", "title": row.title},
+    )
+    await session.commit()
+    await session.refresh(row)
+    return _reporting_read(row)
+
+
+@router.patch(
+    "/reporting-deadlines/{deadline_id}", response_model=EcologyReportingDeadlineRead
+)
+async def update_reporting_deadline(
+    request: Request,
+    deadline_id: str,
+    payload: EcologyReportingDeadlineUpdate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> EcologyReportingDeadlineRead:
+    """Правка срока; ``done_on`` — отметка «сдано/уплачено», ``null`` её снимает."""
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    row = await _get_reporting_deadline_or_404(session, tenant, deadline_id)
+    fields = ("title", "period", "due_on", "done_on", "responsible", "notes")
+    before = {f: (v.isoformat() if isinstance(v := getattr(row, f), date) else v) for f in fields}
+    data = payload.model_dump(exclude_unset=True)
+    if "title" in data and data["title"] is not None:
+        row.title = data["title"].strip() or row.title
+    if data.get("due_on") is not None:
+        row.due_on = data["due_on"]
+    if "title" in data or "due_on" in data:
+        await _ensure_reporting_deadline_free(
+            session, tenant, title=row.title, due_on=row.due_on, exclude_id=row.id
+        )
+    if "done_on" in data:
+        row.done_on = data["done_on"]
+    for field in ("period", "responsible", "notes"):
+        if field in data:
+            setattr(row, field, data[field] or None)
+    await session.flush()
+    after = {f: (v.isoformat() if isinstance(v := getattr(row, f), date) else v) for f in fields}
+    await AuditService(session).log_event(
+        tenant_id=str(tenant.id),
+        action="update",
+        object_type="EcologyReportingDeadline",
+        object_id=row.id,
+        user_id=access.user.id,
+        ip=request.client.host if request.client else "unknown",
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+        changed_fields=field_level_diff(before, after),
+        details={"entity": "EcologyReportingDeadline"},
+    )
+    await session.commit()
+    await session.refresh(row)
+    return _reporting_read(row)
+
+
 @router.get("/readiness", response_model=EcologyReadinessRead)
 async def ecology_readiness(
     tenant: TenantDep,
@@ -2950,7 +3205,25 @@ async def ecology_readiness(
             _KOPECKS
         )
 
+    # Разд. 55.3 «сроки сдачи отчётности, платежей» (срез-71): просрочено —
+    # не исполнено и дата прошла; исполненное с опозданием просрочкой не
+    # считается (та же формула, что у реестра и календаря).
+    reporting_overdue = int(
+        await session.scalar(
+            select(func.count())
+            .select_from(EcologyReportingDeadline)
+            .where(
+                EcologyReportingDeadline.tenant_id == tenant.id,
+                EcologyReportingDeadline.deleted_at.is_(None),
+                EcologyReportingDeadline.done_on.is_(None),
+                EcologyReportingDeadline.due_on < today,
+            )
+        )
+        or 0
+    )
+
     return EcologyReadinessRead(
+        reporting_overdue=reporting_overdue,
         fee_lines=len(fee_lines),
         fee_lines_without_rate=fee_without_rate,
         fee_total_rubles=fee_total,

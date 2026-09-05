@@ -75,6 +75,7 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "nvos_facility",
         "nvos_fee_line",
         "nvos_fee_rate",
+        "nvos_reporting_deadline",
         "opo_device_work",
         "opo_production_control_measure",
         "opo_production_control_plan",

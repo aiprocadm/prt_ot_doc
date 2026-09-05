@@ -19,6 +19,8 @@ export type CalendarSourceType =
   // Доп. №1 разд. 55.3 «экологический календарь».
   | "ecology_permit"
   | "ecology_measurement"
+  // Доп. №1 разд. 55.3 (срез-71): сроки 2-ТП, декларации НВОС и платежей.
+  | "ecology_report"
   // Доп. №1 разд. 57.2 (срез-57): ЭПБ на ОПО, учения ГО, документы ТС.
   | "industrial_safety_epb"
   | "civil_defense_drill"
@@ -37,6 +39,7 @@ export const CALENDAR_SOURCE_TYPES: readonly CalendarSourceType[] = [
   "calendar_event",
   "ecology_permit",
   "ecology_measurement",
+  "ecology_report",
   "industrial_safety_epb",
   "civil_defense_drill",
   "road_safety_vehicle",
