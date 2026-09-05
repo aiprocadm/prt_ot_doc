@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { analyticsApi } from "@/api/analyticsApi";
+import { UNMARKED_DISCIPLINE_FILTER } from "@/api/incidents";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { Button } from "@/components/ui/button";
@@ -213,7 +214,10 @@ export function DisciplineReportCard() {
             {report.payload.unmarked_incidents > 0 ? (
               <p className="text-sm text-muted-foreground">
                 Не размечено дисциплиной:{" "}
-                <Link to="/incidents" className="text-primary underline">
+                <Link
+                  to={`/incidents?discipline=${UNMARKED_DISCIPLINE_FILTER}`}
+                  className="text-primary underline"
+                >
                   {report.payload.unmarked_incidents}
                 </Link>{" "}
                 — ни один контур их не видит.

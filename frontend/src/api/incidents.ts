@@ -1,5 +1,12 @@
 import { apiClient } from "@/api/client";
 
+/**
+ * Слово фильтра «без разметки» у сервера (срез-65): `?discipline=none` отдаёт
+ * только неразмеченные происшествия. Записать «none» дисциплиной нельзя —
+ * снятие разметки по-прежнему null.
+ */
+export const UNMARKED_DISCIPLINE_FILTER = "none";
+
 export type Incident = {
   id: string;
   title: string;

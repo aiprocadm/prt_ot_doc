@@ -9,6 +9,7 @@ import {
   type ManagedClient,
   type ManagedClientMode,
 } from "@/api/managedClients";
+import { UNMARKED_DISCIPLINE_FILTER } from "@/api/incidents";
 import { TRAINING_DISCIPLINE_TITLES } from "@/api/training";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -45,7 +46,7 @@ const CONTRACT_LABELS: Record<string, string> = {
  * Ссылки «происшествия клиента по дисциплине» (срез-61). Отчёт называет
  * число, реестр показывает сами происшествия — того же клиента (компании в
  * контуре исполнителя) и той же дисциплины, какими их считал отчёт.
- * Неразмеченные — весь реестр клиента: фильтра «без дисциплины» у реестра нет.
+ * Неразмеченные — тот же реестр с фильтром «без разметки» (срез-65).
  */
 const incidentLinks = (
   report: ClientAuditReport,
@@ -65,7 +66,7 @@ const incidentLinks = (
     links.push({
       key: "unmarked",
       label: `без разметки — ${incidents.unmarked}`,
-      to: base,
+      to: `${base}&discipline=${UNMARKED_DISCIPLINE_FILTER}`,
     });
   }
   return links;

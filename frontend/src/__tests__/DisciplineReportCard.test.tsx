@@ -119,11 +119,12 @@ describe("DisciplineReportCard (Доп. №1 разд. 57.4, срез-50)", () =
     expect(
       within(rows[2]).getByTitle("В прошлом отчёте сравнить не с чем"),
     ).toHaveTextContent("—");
-    // неразмеченные — отдельной строкой со ссылкой в реестр
+    // неразмеченные — отдельной строкой со ссылкой в реестр с фильтром
+    // «без разметки» (срез-65), а не в весь список
     expect(screen.getByText(/Не размечено дисциплиной/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "1" })).toHaveAttribute(
       "href",
-      "/incidents",
+      "/incidents?discipline=none",
     );
   });
 

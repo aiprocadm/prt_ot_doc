@@ -24,6 +24,7 @@ const mockIncident = {
 };
 
 vi.mock("@/api/incidents", () => ({
+  UNMARKED_DISCIPLINE_FILTER: "none",
   incidentsApi: {
     list: listMock,
     create: createMock,
@@ -341,6 +342,19 @@ describe("IncidentsPage", () => {
         discipline: "industrial_safety",
       });
     });
+
+    // «Без разметки» — слово фильтра сервера «none», в адресе тоже (срез-65)
+    await user.selectOptions(select, "none");
+    await waitFor(() => {
+      expect(listMock).toHaveBeenLastCalledWith({
+        limit: 100,
+        status_filter: "closed",
+        discipline: "none",
+      });
+    });
+    expect(
+      within(select).getByRole("option", { name: "Без разметки" }),
+    ).toHaveProperty("selected", true);
   });
 
   it("фильтр по компании — по ссылке с карточки клиента и из списка (срез-61)", async () => {

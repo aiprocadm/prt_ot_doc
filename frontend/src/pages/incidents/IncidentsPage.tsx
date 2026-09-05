@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import { incidentsApi, type Incident } from "@/api/incidents";
+import {
+  incidentsApi,
+  type Incident,
+  UNMARKED_DISCIPLINE_FILTER,
+} from "@/api/incidents";
 import { TRAINING_DISCIPLINE_TITLES } from "@/api/training";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
@@ -227,6 +231,9 @@ const IncidentsPage = () => {
             aria-label="Фильтр по дисциплине"
           >
             <option value="">Все дисциплины</option>
+            {/* «none» — слово фильтра сервера (срез-65): только неразмеченные;
+                сюда ведут ссылки «без разметки» из отчётов и разреза */}
+            <option value={UNMARKED_DISCIPLINE_FILTER}>Без разметки</option>
             {Object.entries(TRAINING_DISCIPLINE_TITLES).map(([code, title]) => (
               <option key={code} value={code}>
                 {title}
