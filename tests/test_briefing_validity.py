@@ -20,6 +20,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from app.models.briefings import BriefingEntry, BriefingJournal
+from app.models.master_data import EmploymentStatus
 from app.services.briefing_validity import latest_briefing_validity
 
 pytestmark = pytest.mark.anyio
@@ -129,3 +130,61 @@ async def test_пустой_список_людей_это_пусто_а_не_в
         assert (
             await latest_briefing_validity(session, tenant_id=str(tenant.id), person_ids=[]) == {}
         )
+
+
+async def test_без_списка_людей_уволенный_и_удалённый_не_в_счёт(sessionmaker, data_factory) -> None:
+    """Срез-94: сводка модуля ПБ (``person_ids=None``) считает только работающих;
+    запись без человека остаётся; явный список — ровно эти люди."""
+
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        company = await data_factory.create_company(tenant=tenant, name="АКМЕ", session=session)
+        here = await data_factory.create_person(
+            tenant=tenant, company=company, last_name="Работающий", session=session
+        )
+        gone = await data_factory.create_person(
+            tenant=tenant,
+            company=company,
+            last_name="Уволенный",
+            employment_status=EmploymentStatus.TERMINATED,
+            session=session,
+        )
+        erased = await data_factory.create_person(
+            tenant=tenant, company=company, last_name="Удалённый", deleted_at=NOW, session=session
+        )
+        journal = BriefingJournal(
+            tenant_id=tenant.id, code="J-T", title="Журнал", journal_type="all"
+        )
+        session.add(journal)
+        await session.flush()
+        orphan = _entry(tenant, journal, briefing_type="fire_ptm", valid_days=-10)
+        session.add_all(
+            [
+                _entry(
+                    tenant, journal, person_id=here.id, briefing_type="fire_ptm", valid_days=-10
+                ),
+                _entry(
+                    tenant, journal, person_id=gone.id, briefing_type="fire_ptm", valid_days=-10
+                ),
+                _entry(
+                    tenant, journal, person_id=erased.id, briefing_type="fire_ptm", valid_days=-10
+                ),
+                orphan,
+            ]
+        )
+        await session.commit()
+        tenant_id, here_id, gone_id, orphan_id = (
+            str(tenant.id),
+            str(here.id),
+            str(gone.id),
+            str(orphan.id),
+        )
+
+    async with sessionmaker() as session:
+        everyone = await latest_briefing_validity(session, tenant_id=tenant_id, person_ids=None)
+        explicit = await latest_briefing_validity(
+            session, tenant_id=tenant_id, person_ids=[gone_id]
+        )
+
+    assert {owner for owner, _ in everyone} == {here_id, orphan_id}
+    assert {owner for owner, _ in explicit} == {gone_id}

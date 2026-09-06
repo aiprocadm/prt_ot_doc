@@ -19,7 +19,13 @@
 - владелец — человек; у записи без человека владелец — она сама: перекрыть
   её нечем;
 - запись без ``valid_until`` — бессрочная, не срок, в правило не входит;
-- виды друг друга не перекрывают: повторный не закрывает истёкший ПТМ.
+- виды друг друга не перекрывают: повторный не закрывает истёкший ПТМ;
+- «уволенный не в счёт» (срез-94): без списка людей берутся только
+  работающие (``person_scope``) и записи без человека — сводка модуля ПБ
+  считала истёкший ПТМ уволенного, тогда как карточки, портфель и общий
+  календарь его уже не считают. Явный список — ровно эти люди: кого считать,
+  решил вызывающий (карточка сотрудника у уволенного светофор не считает
+  вовсе).
 """
 
 from __future__ import annotations
@@ -27,11 +33,12 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.feature_flags import as_utc
 from app.models.briefings import BriefingEntry
+from app.services.person_scope import not_employed_person_ids
 
 __all__ = ["latest_briefing_validity"]
 
@@ -47,8 +54,8 @@ async def latest_briefing_validity(
 
     Владелец — человек, а у записи без человека — она сама: перекрыть её
     нечем. Записи без ``valid_until`` — бессрочные, не срок — не входят.
-    ``person_ids=None`` — все люди арендатора, ``[]`` — никто;
-    ``briefing_types=None`` — все виды словаря.
+    ``person_ids=None`` — все работающие люди арендатора и записи без
+    человека, ``[]`` — никто; ``briefing_types=None`` — все виды словаря.
     """
 
     if person_ids is not None and not person_ids:
@@ -67,6 +74,13 @@ async def latest_briefing_validity(
         stmt = stmt.where(BriefingEntry.briefing_type.in_(list(briefing_types)))
     if person_ids is not None:
         stmt = stmt.where(BriefingEntry.person_id.in_(list(person_ids)))
+    else:
+        stmt = stmt.where(
+            or_(
+                BriefingEntry.person_id.is_(None),
+                BriefingEntry.person_id.not_in(not_employed_person_ids(tenant_id)),
+            )
+        )
     latest: dict[tuple[str, str], datetime] = {}
     for owner_id, briefing_type, value in (await session.execute(stmt)).all():
         moment = as_utc(value)
