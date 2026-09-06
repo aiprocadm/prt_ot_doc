@@ -80,6 +80,13 @@ celery_app.conf.beat_schedule = {
         "task": "medical.contingent.tick",
         "schedule": crontab(hour=3, minute=0),
     },
+    # BIZ-54-57 срез-97: read model'ы аналитики (пакеты, соответствие по людям,
+    # площадки) пересобираются ночью — до этого их не звал никто, и дашборды
+    # жили по последней ручной пересборке. Перед подрядчиками той же полосой.
+    "analytics-projections-daily": {
+        "task": "analytics.projections.tick",
+        "schedule": crontab(hour=3, minute=15),
+    },
     # BIZ-51 срез-7: еженедельная сверка «что изменилось, что просрочено,
     # что нужно сделать» — как в ТЗ (разд. 51.3, «напр. еженедельно»).
     "managed-clients-audit-weekly": {
