@@ -43,6 +43,7 @@ from app.models.medical import MedicalExam, MedicalNorm
 from app.models.ppe import PPEIssue, PPENorm
 from app.models.road_safety import Driver
 from app.models.training import TrainingEnrollment
+from app.services.discipline_road_safety import admitted_driver_where
 from app.services.discipline_training import overdue_training_enrollment_where
 
 __all__ = ["DisciplineNumbers", "collect_people_numbers"]
@@ -74,10 +75,9 @@ async def _road_safety_numbers(
         (
             await session.execute(
                 select(Driver.license_due).where(
-                    Driver.tenant_id == tenant_id,
+                    # Правило «допущенный водитель» одно с календарём и портфелем (срез-88).
+                    *admitted_driver_where(tenant_id),
                     Driver.person_id.in_(person_ids),
-                    Driver.deleted_at.is_(None),
-                    Driver.status == "admitted",
                 )
             )
         )

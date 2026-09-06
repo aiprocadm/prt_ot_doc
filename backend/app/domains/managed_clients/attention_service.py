@@ -13,7 +13,9 @@
 **Один запрос на сигнал, а не на клиента.** Портфель бывает на сотню клиентов;
 запрос в цикле дал бы сотни round-trip'ов на каждое открытие экрана. Просрочки
 ПБ (срез-87) поэтому считает ``collect_fire_safety_overdue_by_company`` — по
-всем организациям разом, теми же слагаемыми, что светофор клиента.
+всем организациям разом, теми же слагаемыми, что светофор клиента; истёкшие
+удостоверения водителей (срез-88) — одним сгруппированным запросом по правилу
+``discipline_road_safety.expired_license_where``.
 """
 
 from __future__ import annotations
@@ -32,11 +34,13 @@ from app.domains.managed_clients.attention import (
 )
 from app.domains.managed_clients.lifecycle import ManagedClientMode, is_contract_expiring
 from app.models.managed_clients import ManagedClient
-from app.models.master_data import Person
+from app.models.master_data import EmploymentStatus, Person
 from app.models.medical import MedicalExam
 from app.models.ppe import PPEIssue
+from app.models.road_safety import Driver
 from app.models.training import TrainingEnrollment
 from app.services.discipline_fire_safety import collect_fire_safety_overdue_by_company
+from app.services.discipline_road_safety import expired_license_where
 from app.services.discipline_training import overdue_training_enrollment_where
 
 __all__ = ["DEDICATED_REASON", "collect_portfolio_attention"]
@@ -87,6 +91,7 @@ async def collect_portfolio_attention(
     training: dict[str, int] = {}
     contacts: dict[str, int] = {}
     fire_safety: dict[str, int] = {}
+    licenses: dict[str, int] = {}
 
     if company_ids:
         medical = await _count_by_company(
@@ -147,6 +152,21 @@ async def collect_portfolio_attention(
         fire_safety = await collect_fire_safety_overdue_by_company(
             session, tenant_id=tenant_id, company_ids=list(company_ids), today=today, now=now
         )
+        licenses = await _count_by_company(
+            session,
+            select(Person.company_id, func.count())
+            .select_from(Driver)
+            .join(Person, Person.id == Driver.person_id)
+            .where(
+                # Только допущенные водители — одно правило со светофором клиента
+                # и календарём (срез-88); уволенный светофору клиента не виден.
+                *expired_license_where(tenant_id, today),
+                Person.company_id.in_(company_ids),
+                Person.deleted_at.is_(None),
+                Person.employment_status != EmploymentStatus.TERMINATED,
+            )
+            .group_by(Person.company_id),
+        )
 
     rows: list[ClientAttention] = []
     for client in clients:
@@ -190,6 +210,7 @@ async def collect_portfolio_attention(
                     SignalKind.TRAINING_OVERDUE: training.get(cid, 0),
                     SignalKind.CONTACTS_MISSING: contacts.get(cid, 0),
                     SignalKind.FIRE_SAFETY_OVERDUE: fire_safety.get(cid, 0),
+                    SignalKind.DRIVER_LICENSE_EXPIRED: licenses.get(cid, 0),
                 },
                 contract_expiring=expiring,
             )

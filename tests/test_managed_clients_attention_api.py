@@ -19,6 +19,7 @@ from app.models.managed_clients import ManagedClient
 from app.models.master_data import EmploymentStatus, Person, Site
 from app.models.medical import MedicalExam
 from app.models.ppe import PPEIssue
+from app.models.road_safety import Driver
 from app.models.training import TrainingEnrollment
 
 _TODAY = date(2026, 8, 4)
@@ -325,6 +326,62 @@ async def test_fire_safety_overdue_is_one_signal_per_client_from_its_sites_and_p
     assert fire_a[0].severity is Severity.HIGH
     fire_b = [s for s in by_id[b.id].signals if s.kind is SignalKind.FIRE_SAFETY_OVERDUE]
     assert fire_b[0].count == 1, "средство чужой площадки — просрочка её клиента"
+
+
+@pytest.mark.asyncio
+async def test_expired_driver_license_is_a_critical_signal_of_admitted_drivers_only(sessionmaker):
+    """BIZ-54-57 срез-88 (разд. 54.1): истёкшие удостоверения — сигнал портфеля.
+
+    Правило одно со светофором клиента и календарём: только допущенные к
+    управлению; пустая дата — «сведений нет», не просрочка; отстранённый,
+    уволенный и чужой водитель — не считаются.
+    """
+
+    async with sessionmaker() as session:
+        a = await _client(session, name="Альфа", company_id="comp-a")
+        b = await _client(session, name="Бета", company_id="comp-b")
+        for pid in ("p-a1", "p-a2", "p-a3", "p-a4", "p-a5"):
+            await _person(session, pid=pid, company_id="comp-a")
+        fired = await _person(session, pid="p-a9", company_id="comp-a")
+        fired.employment_status = EmploymentStatus.TERMINATED
+        await _person(session, pid="p-b1", company_id="comp-b")
+
+        def _driver(person_id, number, *, days=None, status="admitted"):
+            return Driver(
+                tenant_id=_TENANT,
+                person_id=person_id,
+                license_number=number,
+                license_due=None if days is None else _TODAY + timedelta(days=days),
+                status=status,
+            )
+
+        session.add_all(
+            [
+                # Альфа: два истёкших у допущенных
+                _driver("p-a1", "77 АА 000001", days=-1),
+                _driver("p-a2", "77 АА 000002", days=-400),
+                # действующее, без даты, отстранённый и уволенный — нет
+                _driver("p-a3", "77 АА 000003", days=10),
+                _driver("p-a4", "77 АА 000004"),
+                _driver("p-a5", "77 АА 000005", days=-5, status="suspended"),
+                _driver("p-a9", "77 АА 000009", days=-5),
+                # Бета: чужое истёкшее — её сигнал, не Альфы
+                _driver("p-b1", "77 АА 000010", days=-3),
+            ]
+        )
+        await session.commit()
+
+        rows = await collect_portfolio_attention(
+            session, tenant_id=_TENANT, today=_TODAY, now=_NOW, horizon_days=30
+        )
+    by_id = {r.client_id: r for r in rows}
+    sig_a = [s for s in by_id[a.id].signals if s.kind is SignalKind.DRIVER_LICENSE_EXPIRED]
+    assert len(sig_a) == 1 and sig_a[0].count == 2
+    assert sig_a[0].severity is Severity.CRITICAL
+    assert by_id[a.id].severity is Severity.CRITICAL, "водитель без прав — как без медосмотра"
+    sig_b = [s for s in by_id[b.id].signals if s.kind is SignalKind.DRIVER_LICENSE_EXPIRED]
+    assert sig_b[0].count == 1
+    assert rows[0].client_id == a.id, "два истёкших выше одного при равном весе"
 
 
 @pytest.mark.asyncio

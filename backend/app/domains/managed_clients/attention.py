@@ -20,6 +20,12 @@
 расшифровку по слагаемым даёт светофор клиента (разд. 51.3), считающий те же
 числа. Сигнал — факт, а не эталон: он есть и у клиента, чей модуль ПБ
 выключен, если записи остались (срез-56).
+
+Истёкшие удостоверения водителей (срез-88, разд. 54.1) — второй поимённый
+сигнал того же ряда: считаются только допущенные к управлению
+(``services/discipline_road_safety``, одно правило со светофором клиента и
+календарём), вес — как у медосмотра, потому что водитель без действующего
+удостоверения к работе не допущен.
 """
 
 from __future__ import annotations
@@ -66,6 +72,7 @@ class SignalKind(str, enum.Enum):
     CONTRACT_EXPIRING = "contract_expiring"
     CONTACTS_MISSING = "contacts_missing"
     FIRE_SAFETY_OVERDUE = "fire_safety_overdue"
+    DRIVER_LICENSE_EXPIRED = "driver_license_expired"
 
 
 class AggregationStatus(str, enum.Enum):
@@ -87,6 +94,16 @@ SIGNAL_META: dict[SignalKind, SignalMeta] = {
         severity=Severity.CRITICAL,
         title="Просроченные медосмотры",
         action_hint="Направьте сотрудников на медосмотр: без него они не допущены к работе",
+    ),
+    # Истёкшее удостоверение допущенного водителя — как медосмотр: человек не
+    # допущен к работе, и это не «нарушение к проверке», а остановка перевозок.
+    SignalKind.DRIVER_LICENSE_EXPIRED: SignalMeta(
+        severity=Severity.CRITICAL,
+        title="Истёкшие водительские удостоверения",
+        action_hint=(
+            "Обновите удостоверение и срок в карточке водителя: с истёкшим "
+            "к управлению не допускают"
+        ),
     ),
     SignalKind.PPE_OVERDUE: SignalMeta(
         severity=Severity.HIGH,

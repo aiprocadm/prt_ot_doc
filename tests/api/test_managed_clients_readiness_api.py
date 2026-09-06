@@ -233,6 +233,16 @@ class TestClientReadiness:
         assert after["required"] == 1
         assert after["lapsed"] == 1
 
+        # Срез-88: сигнал «Истёкшие удостоверения» в сводке портфеля — то же
+        # число, что «просрочено» светофора клиента; расхождение — две правды.
+        async with await _trusted() as session:
+            portfolio = await collect_portfolio_attention(
+                session, tenant_id=tenant.id, today=TODAY, now=NOW, horizon_days=30
+            )
+        mine = next(r for r in portfolio if r.client_id == mcid)
+        licenses = next(s for s in mine.signals if s.kind is SignalKind.DRIVER_LICENSE_EXPIRED)
+        assert licenses.count == after["lapsed"] == 1
+
     async def test_сроки_пб_площадок_и_инструктажи_людей_клиента_красят_пб(
         self, async_client: AsyncClient, make_auth_headers, served_client, data_factory
     ) -> None:

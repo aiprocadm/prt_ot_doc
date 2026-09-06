@@ -179,6 +179,36 @@ def test_fire_safety_overdue_weighs_like_ppe_and_training():
     ]
 
 
+def test_driver_license_expired_weighs_like_medical():
+    """BIZ-54-57 срез-88 (разд. 54.1): водитель с истёкшим удостоверением к
+    работе не допущен — вес «критический», как у медосмотра; в строке
+    клиента при равном весе — по числу."""
+    from app.domains.managed_clients.attention import SIGNAL_META
+
+    meta = SIGNAL_META[SignalKind.DRIVER_LICENSE_EXPIRED]
+    assert SignalKind.DRIVER_LICENSE_EXPIRED.value == "driver_license_expired"
+    assert meta.severity is Severity.CRITICAL
+    assert meta.severity is SIGNAL_META[SignalKind.MEDICAL_OVERDUE].severity
+    row = build_client_attention(
+        client_id="c",
+        client_name="Клиент",
+        counts=_counts(
+            **{
+                SignalKind.DRIVER_LICENSE_EXPIRED: 3,
+                SignalKind.MEDICAL_OVERDUE: 1,
+                SignalKind.FIRE_SAFETY_OVERDUE: 9,
+            }
+        ),
+        contract_expiring=False,
+    )
+    assert [s.kind for s in row.signals] == [
+        SignalKind.DRIVER_LICENSE_EXPIRED,
+        SignalKind.MEDICAL_OVERDUE,
+        SignalKind.FIRE_SAFETY_OVERDUE,
+    ]
+    assert row.severity is Severity.CRITICAL
+
+
 @pytest.mark.parametrize(
     "worse,better",
     [
