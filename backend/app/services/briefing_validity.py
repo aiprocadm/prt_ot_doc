@@ -33,12 +33,12 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.feature_flags import as_utc
 from app.models.briefings import BriefingEntry
-from app.services.person_scope import not_employed_person_ids
+from app.services.person_scope import employed_record_where
 
 __all__ = ["latest_briefing_validity"]
 
@@ -75,12 +75,7 @@ async def latest_briefing_validity(
     if person_ids is not None:
         stmt = stmt.where(BriefingEntry.person_id.in_(list(person_ids)))
     else:
-        stmt = stmt.where(
-            or_(
-                BriefingEntry.person_id.is_(None),
-                BriefingEntry.person_id.not_in(not_employed_person_ids(tenant_id)),
-            )
-        )
+        stmt = stmt.where(employed_record_where(BriefingEntry, tenant_id))
     latest: dict[tuple[str, str], datetime] = {}
     for owner_id, briefing_type, value in (await session.execute(stmt)).all():
         moment = as_utc(value)

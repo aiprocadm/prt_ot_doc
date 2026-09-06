@@ -285,6 +285,60 @@ async def test_attention_ignores_terminated_person(db_session) -> None:
 
 
 @pytest.mark.asyncio
+async def test_blockers_and_role_summary_ignore_terminated_person(db_session) -> None:
+    """«Уволенный не в счёт» и в блокерах готовности, и в сводке роли (срез-95).
+
+    Срез-93 отобрал людей в ленте и в блокере контактов, а блокеры
+    ``training_overdue`` / ``ppe_expired`` и те же цифры в сводке роли (разд.
+    57.4) считали назначение и СИЗ уволенного: Центр внимания молчал, а
+    блокер под ним кричал. Условие — одно с календарём (``person_scope``).
+    """
+
+    tenant = SimpleNamespace(id="tenant-1", slug="tenant-a", name="Tenant A", is_active=True)
+    access = _access("user-1", "admin", tenant.id, tenant.slug)
+    now = datetime.now(timezone.utc)
+
+    here = _person(tenant.id, email="here@tenant.test", phone="+7 900 000-00-01")
+    gone = _person(tenant.id, employment_status=EmploymentStatus.TERMINATED)
+    erased = _person(tenant.id, deleted_at=now - timedelta(days=1))
+    program = TrainingProgram(
+        tenant_id=tenant.id, code="ОТ-1", title="Охрана труда", category="ot", kind="program"
+    )
+    db_session.add_all([here, gone, erased, program])
+    await db_session.flush()
+    for person in (here, gone, erased):
+        db_session.add_all(
+            [
+                TrainingEnrollment(
+                    tenant_id=tenant.id,
+                    training_program_id=program.id,
+                    person_id=person.id,
+                    status="assigned",
+                    due_at=now - timedelta(days=3),
+                ),
+                PPEIssue(
+                    tenant_id=tenant.id,
+                    person_id=person.id,
+                    item_name="Каска",
+                    quantity=1,
+                    status=PPEIssueStatus.ISSUED,
+                    issued_at=now - timedelta(days=400),
+                    expires_at=now - timedelta(days=30),
+                ),
+            ]
+        )
+    await db_session.commit()
+
+    payload = await workspace_attention(tenant=tenant, session=db_session, access=access)
+    summary = await role_workspace_summary(tenant=tenant, session=db_session, access=access)
+
+    blockers = {blocker.code: blocker.count for blocker in payload.blockers}
+    assert blockers["training_overdue"] == 1, "работающий — да, уволенный и удалённый — нет"
+    assert blockers["ppe_expired"] == 1
+    assert (summary.overdue_training, summary.expired_ppe) == (1, 1)
+
+
+@pytest.mark.asyncio
 async def test_attention_reports_unmeasured_disciplines_honestly(db_session) -> None:
     """Пять дисциплин ТЗ без данных отдаются с причиной, а не нулём.
 

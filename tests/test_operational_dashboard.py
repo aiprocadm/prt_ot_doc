@@ -291,3 +291,102 @@ class TestOperationalDashboardIntegration:
                 status.HTTP_200_OK,
                 status.HTTP_401_UNAUTHORIZED,
             ]
+
+
+@pytest.mark.asyncio
+async def test_командный_центр_уволенного_не_считает(sessionmaker, data_factory) -> None:
+    """«Уволенный не в счёт» (BIZ-54-57 срез-95) в просрочках Командного центра.
+
+    До среза сводка считала назначение, медосмотр, СИЗ и отстранение
+    уволенного и удалённого — тревога горела там, где Центр внимания и
+    календарь того же арендатора (срез-93) молчат. Условие — одно с ними.
+    """
+    from datetime import date, datetime, timedelta, timezone
+
+    from app.models.master_data import EmploymentStatus
+    from app.models.models import (
+        MedicalExam,
+        MedicalSuspension,
+        MedicalSuspensionReason,
+        PPEIssue,
+        PPEIssueStatus,
+        TrainingEnrollment,
+        TrainingProgram,
+    )
+
+    now = datetime.now(timezone.utc)
+    today = date.today()
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(slug="cc-95", session=session)
+        company = await data_factory.create_company(tenant=tenant, name="АКМЕ", session=session)
+        here = await data_factory.create_person(
+            tenant=tenant, company=company, last_name="Работающий", session=session
+        )
+        gone = await data_factory.create_person(
+            tenant=tenant,
+            company=company,
+            last_name="Уволенный",
+            employment_status=EmploymentStatus.TERMINATED,
+            session=session,
+        )
+        erased = await data_factory.create_person(
+            tenant=tenant, company=company, last_name="Удалённый", deleted_at=now, session=session
+        )
+        program = TrainingProgram(
+            tenant_id=tenant.id, code="ОТ-1", title="Охрана труда", category="ot", kind="program"
+        )
+        session.add(program)
+        await session.flush()
+        for person in (here, gone, erased):
+            session.add_all(
+                [
+                    TrainingEnrollment(
+                        tenant_id=tenant.id,
+                        training_program_id=program.id,
+                        person_id=person.id,
+                        status="assigned",
+                        due_at=now - timedelta(days=3),
+                    ),
+                    MedicalExam(
+                        tenant_id=tenant.id,
+                        person_id=person.id,
+                        exam_type="периодический",
+                        exam_date=today - timedelta(days=400),
+                        valid_until=today - timedelta(days=35),
+                    ),
+                    PPEIssue(
+                        tenant_id=tenant.id,
+                        person_id=person.id,
+                        item_name="Каска",
+                        quantity=1,
+                        status=PPEIssueStatus.ISSUED,
+                        issued_at=now - timedelta(days=400),
+                        expires_at=now - timedelta(days=30),
+                    ),
+                    MedicalSuspension(
+                        tenant_id=tenant.id,
+                        person_id=person.id,
+                        reason=MedicalSuspensionReason.UNFIT,
+                        started_at=now - timedelta(days=2),
+                    ),
+                ]
+            )
+        await session.commit()
+        tenant_id = str(tenant.id)
+
+    async with sessionmaker() as session:
+        dashboard = await OperationalDashboardService(get_settings()).get_dashboard(
+            tenant_id=tenant_id, db=session
+        )
+
+    overdue = {
+        alert.affected_entity_type: alert.count
+        for alert in dashboard.alerts
+        if alert.category == AlertCategory.OVERDUE
+    }
+    assert overdue == {
+        "training_enrollment": 1,
+        "medical_exam": 1,
+        "ppe_issue": 1,
+        "medical_suspension": 1,
+    }, "работающий — да, уволенный и удалённый — нет"

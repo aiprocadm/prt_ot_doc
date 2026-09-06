@@ -43,7 +43,7 @@ from app.services.discipline_attention import attention_events, overdue_by_disci
 from app.services.discipline_incidents import open_incidents_where
 from app.services.discipline_training import overdue_training_enrollment_where
 from app.services.person_link import resolve_person_id
-from app.services.person_scope import employed_person_where
+from app.services.person_scope import employed_person_where, employed_record_where
 
 router = APIRouter(prefix="/workspace", tags=["workspace"])
 
@@ -327,13 +327,17 @@ async def _readiness_blockers(
             )
         )
 
-    # Формула одна с календарём и Центром внимания (срез-77).
+    # Формула одна с календарём и Центром внимания (срез-77);
+    # уволенный не в счёт — как в календаре и карточке (срез-95).
     overdue_training = int(
         (
             await session.execute(
                 select(func.count())
                 .select_from(TrainingEnrollment)
-                .where(*overdue_training_enrollment_where(tenant.id, now))
+                .where(
+                    *overdue_training_enrollment_where(tenant.id, now),
+                    employed_record_where(TrainingEnrollment, tenant.id),
+                )
             )
         ).scalar_one()
         or 0
@@ -362,6 +366,7 @@ async def _readiness_blockers(
                     PPEIssue.status == PPEIssueStatus.ISSUED,
                     PPEIssue.expires_at.is_not(None),
                     PPEIssue.expires_at < now,
+                    employed_record_where(PPEIssue, tenant.id),
                 )
             )
         ).scalar_one()
@@ -846,13 +851,17 @@ async def role_workspace_summary(
     # Overdue training — HR roles
     overdue_training = 0
     if role in _HR_ROLES:
-        # Формула одна с календарём и Центром внимания (срез-77).
+        # Формула одна с календарём и Центром внимания (срез-77);
+        # уволенный не в счёт (срез-95).
         overdue_training = int(
             (
                 await session.execute(
                     select(func.count())
                     .select_from(TrainingEnrollment)
-                    .where(*overdue_training_enrollment_where(tenant.id, now))
+                    .where(
+                        *overdue_training_enrollment_where(tenant.id, now),
+                        employed_record_where(TrainingEnrollment, tenant.id),
+                    )
                 )
             ).scalar_one()
             or 0
@@ -872,6 +881,7 @@ async def role_workspace_summary(
                         PPEIssue.status == PPEIssueStatus.ISSUED,
                         PPEIssue.expires_at.is_not(None),
                         PPEIssue.expires_at < now,
+                        employed_record_where(PPEIssue, tenant.id),
                     )
                 )
             ).scalar_one()

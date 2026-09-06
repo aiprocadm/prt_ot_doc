@@ -1,5 +1,65 @@
 # CHANGELOG
 
+## 2026-09-06 (feat/biz-54-57-slice-95 — «уволенный не в счёт» в последних сводках «что горит сейчас»: блокеры готовности, сводка роли, Командный центр и сводка БДД; условие на запись — одно в `person_scope`, разд. 57.2 / 57.4 / 56.2)
+
+### Зачем
+
+Срезы 89–94 дали правилу «уволенный не в счёт» портфель, светофоры, карточки,
+общий календарь и сводку ПБ, но четыре сводки «что горит сейчас» считали
+по-старому: блокеры готовности `training_overdue` / `ppe_expired` и те же
+цифры в сводке роли (`routes/workspace`, разд. 57.2 / 57.4) — на том же
+экране, где лента после среза-93 уже молчит; Командный центр
+(`modules/operational_dashboard`: зачисления, медосмотры, СИЗ, отстранения);
+сводка БДД (`modules/road_safety`: удостоверения допущенных и просроченные
+инструктажи БДД, разд. 56.2). Центр внимания молчал, а блокер под ним кричал.
+Заодно условие `person_id NOT IN (…)` держали по копии календарь и формула
+инструктажей — третья копия забыла бы про пустой `person_id`.
+
+### Что сделано
+
+- **Одно условие на запись.** `services/person_scope.employed_record_where(Model, tenant_id)`
+  — «запись по работающему человеку» для таблиц с `person_id` без join'а с
+  `Person`: `NOT IN` подзапроса «кого не считать»; если `person_id` у таблицы
+  необязателен — ещё и «или без человека» (сам смотрит на колонку).
+  `calendar_aggregator._employed_only` и `briefing_validity` теперь зовут его,
+  своих копий нет.
+- **Блокеры готовности и сводка роли** (`api/routes/workspace.py`):
+  `training_overdue`, `ppe_expired` и `overdue_training` / `expired_ppe` в
+  `RoleWorkspaceSummary` — условие на запись.
+- **Командный центр** (`modules/operational_dashboard/service.py`): все четыре
+  просрочки (`training_enrollment`, `medical_exam`, `ppe_issue`,
+  `medical_suspension`) — условие на запись.
+- **Сводка БДД** (`modules/road_safety/api.py`, `GET /road-safety/readiness`):
+  `driver_license_overdue` / `driver_license_missing` считаются по допущенным
+  работающим (тот же довод, что у отстранённого); `road_briefings_overdue` —
+  по работающим. Реестровые числа — `total_drivers`, `drivers_by_status`,
+  `road_briefings_total` — НЕ тронуты: состав и журнал — история, она цела,
+  как и в самих списках.
+- **Сторож.** `tests/test_employed_person_formula.py`: никто в `backend/app`
+  не пишет `.not_in(not_employed_person_ids(` / `.in_(…)` сам — только
+  `person_scope`; плюс проверка формы условия для обязательного и
+  необязательного `person_id`.
+- **Проекции** (`modules/projections/services.py`, read model по человеку) —
+  намеренно не тронуты: это карточка одного человека (как явный список —
+  «ровно этот»), а не сводка арендатора.
+
+### Как проверено
+
+- Живые тесты (все красные на старом коде, `git stash -- backend/app/`):
+  `backend/tests/test_workspace_projections.py` **+1** (блокеры `1`, не `3`;
+  сводка роли `(1, 1)`); `tests/test_operational_dashboard.py` **+1** (четыре
+  просрочки по `1`, не по `3`); `tests/test_road_safety_drivers.py` **+1**
+  (`total_drivers == 3`, `driver_license_overdue == 1`, `missing == 0`);
+  `tests/test_road_safety_briefings.py` **+1** (`total == 2`, `overdue == 1`);
+  `tests/test_employed_person_formula.py` **+2** (сторож и форма условия).
+- Регресс волны — 61 файл (рабочий стол, Командный центр, БДД, календарь,
+  инструктажи, ПБ, дисциплины, портфель, карточки, медосмотры, СИЗ;
+  `/tmp/regress95.log`): **566 passed / 15 skipped / 0 failed**.
+- Фронт не тронут. OpenAPI без изменений (1106 операций / 1047 схем); границы
+  контекстов чисты; `black`/`ruff` по затронутым файлам — чисто
+  (`modules/road_safety/api.py` и тесты БДД — ширина 88, black не гонялся,
+  новые строки ≤ 88).
+
 ## 2026-09-06 (feat/biz-54-57-slice-94 — «уволенный не в счёт» и в сводке модуля ПБ: истёкший ПТМ уволенного больше не нарушение к приходу МЧС, разд. 54.1)
 
 ### Зачем

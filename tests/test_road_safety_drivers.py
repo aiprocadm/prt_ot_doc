@@ -45,13 +45,13 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import select
 
 from app.models.feature import Feature, FeatureEnablement
-from app.models.master_data import Company, Person
+from app.models.master_data import Company, EmploymentStatus, Person
 from app.models.models import Tenant
 
 pytestmark = pytest.mark.anyio
@@ -88,7 +88,7 @@ async def _grant(sessionmaker, code: str = "road_safety", on: bool = True) -> No
         await session.commit()
 
 
-async def _person(sessionmaker, last_name: str = "Шофёров") -> str:
+async def _person(sessionmaker, last_name: str = "Шофёров", **extra) -> str:
     """Человек из ЯДРА: карточка водителя своих людей не заводит."""
 
     async with sessionmaker() as session:
@@ -116,6 +116,7 @@ async def _person(sessionmaker, last_name: str = "Шофёров") -> str:
             middle_name="Иванович",
             personnel_number=f"ТН-{last_name}",
             position_title="Водитель",
+            **extra,
         )
         session.add(person)
         await session.commit()
@@ -535,6 +536,49 @@ class TestСводкаПоВодителям:
         )
         body = (await async_client.get(f"{_API}/readiness", headers=headers)).json()
         assert body["driver_license_missing"] == 1
+
+    async def test_уволенный_в_просрочки_не_идёт_а_в_составе_остаётся(
+        self, async_client, make_auth_headers, sessionmaker
+    ) -> None:
+        """«Уволенный не в счёт» (BIZ-54-57 срез-95): тот же довод, что у
+        отстранённого, — карточка в составе цела, а её удостоверение,
+        просроченное или невнесённое, проблемой не считается."""
+
+        headers = await make_auth_headers()
+        await _grant(sessionmaker)
+        here = await _person(sessionmaker, last_name="Работающий")
+        gone = await _person(
+            sessionmaker,
+            last_name="Уволенный",
+            employment_status=EmploymentStatus.TERMINATED,
+        )
+        erased = await _person(sessionmaker, last_name="Удалённый")
+        await _driver(
+            async_client,
+            headers,
+            here,
+            license_number="9902 000011",
+            license_due=date.today() - timedelta(days=5),
+        )
+        await _driver(
+            async_client,
+            headers,
+            gone,
+            license_number="9902 000012",
+            license_due=date.today() - timedelta(days=5),
+        )
+        await _driver(async_client, headers, erased, license_number="9902 000013")
+        # Карточку удалённому не завести (PERSON_NOT_FOUND) — удаляем после.
+        async with sessionmaker() as session:
+            person = await session.get(Person, erased)
+            person.deleted_at = datetime.now(timezone.utc)
+            await session.commit()
+
+        body = (await async_client.get(f"{_API}/readiness", headers=headers)).json()
+        assert body["total_drivers"] == 3, "состав — реестр, история цела"
+        assert body["drivers_by_status"]["admitted"] == 3
+        assert body["driver_license_overdue"] == 1, "уволенный в просрочки не идёт"
+        assert body["driver_license_missing"] == 0, "удалённый — тоже"
 
     async def test_платформа_не_решает_допуск_к_машине_и_хватает_ли_стажа(
         self, async_client, make_auth_headers, sessionmaker

@@ -64,7 +64,7 @@ from app.core.disciplines import (
 )
 from app.models.briefings import BriefingEntry, BriefingJournal
 from app.models.feature import Feature, FeatureEnablement
-from app.models.master_data import Company, Person
+from app.models.master_data import Company, EmploymentStatus, Person
 from app.models.models import Tenant
 
 pytestmark = pytest.mark.anyio
@@ -109,7 +109,11 @@ async def _grant(sessionmaker, code: str = "road_safety", on: bool = True) -> No
 
 
 async def _briefing(
-    sessionmaker, *, briefing_type: str, valid_until: datetime | None
+    sessionmaker,
+    *,
+    briefing_type: str,
+    valid_until: datetime | None,
+    terminated: bool = False,
 ) -> str:
     """Запись заводится ЯДРОВЫМ механизмом: своего реестра у БДД нет."""
 
@@ -136,6 +140,9 @@ async def _briefing(
             last_name=f"Водителев{briefing_type}",
             first_name="Пётр",
             position_title="Водитель",
+            employment_status=(
+                EmploymentStatus.TERMINATED if terminated else EmploymentStatus.ACTIVE
+            ),
         )
         journal = BriefingJournal(
             tenant_id=tenant.id,
@@ -248,6 +255,30 @@ class TestСводка:
         )
         body = (await async_client.get(f"{_API}/readiness", headers=headers)).json()
         assert body["road_briefings_total"] == 2
+        assert body["road_briefings_overdue"] == 1
+
+    async def test_просрочка_уволенного_в_сводку_бдд_не_идёт(
+        self, async_client, make_auth_headers, sessionmaker
+    ) -> None:
+        """«Уволенный не в счёт» (BIZ-54-57 срез-95): запись в журнале и в общем
+        счёте остаётся, а просрочкой не считается — как в календаре."""
+
+        headers = await make_auth_headers()
+        await _grant(sessionmaker)
+        now = datetime.now(timezone.utc)
+        await _briefing(
+            sessionmaker,
+            briefing_type="road_seasonal",
+            valid_until=now - timedelta(days=10),
+        )
+        await _briefing(
+            sessionmaker,
+            briefing_type="road_pre_trip",
+            valid_until=now - timedelta(days=10),
+            terminated=True,
+        )
+        body = (await async_client.get(f"{_API}/readiness", headers=headers)).json()
+        assert body["road_briefings_total"] == 2, "журнал — история, цела"
         assert body["road_briefings_overdue"] == 1
 
     async def test_чужие_инструктажи_в_сводку_бдд_не_попадают(
