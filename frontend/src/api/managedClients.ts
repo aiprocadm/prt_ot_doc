@@ -56,7 +56,8 @@ export type SignalKind =
   | "ppe_overdue"
   | "training_overdue"
   | "contract_expiring"
-  | "contacts_missing";
+  | "contacts_missing"
+  | "fire_safety_overdue";
 
 export interface AttentionSignal {
   kind: SignalKind;

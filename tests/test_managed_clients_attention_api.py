@@ -13,8 +13,10 @@ from app.api.routes import managed_clients as routes
 from app.domains.managed_clients.attention import AggregationStatus, Severity, SignalKind
 from app.domains.managed_clients.attention_service import collect_portfolio_attention
 from app.domains.managed_clients.lifecycle import ContractStatus, ManagedClientMode
+from app.models.briefings import BriefingEntry, BriefingJournal
+from app.models.fire_safety import FireDrill, FireSafetyDocument, FireSafetyEquipment
 from app.models.managed_clients import ManagedClient
-from app.models.master_data import Person
+from app.models.master_data import EmploymentStatus, Person, Site
 from app.models.medical import MedicalExam
 from app.models.ppe import PPEIssue
 from app.models.training import TrainingEnrollment
@@ -219,6 +221,110 @@ async def test_soft_deleted_person_does_not_signal(sessionmaker):
             session, tenant_id=_TENANT, today=_TODAY, now=_NOW, horizon_days=30
         )
     assert rows[0].signals == []
+
+
+@pytest.mark.asyncio
+async def test_fire_safety_overdue_is_one_signal_per_client_from_its_sites_and_people(sessionmaker):
+    """BIZ-54-57 срез-87 (разд. 54.1): просрочки ПБ — сигнал портфеля.
+
+    Слагаемые те же, что у светофора клиента (срез-86): перезарядка и поверка
+    средств на площадках клиента, тренировки и документы этих площадок,
+    противопожарные инструктажи его людей. Чужая площадка, средство без
+    площадки, перекрытый более новым инструктаж и уволенный — не считаются.
+    """
+
+    async with sessionmaker() as session:
+        a = await _client(session, name="Альфа", company_id="comp-a")
+        b = await _client(session, name="Бета", company_id="comp-b")
+        await _person(session, pid="p-a1", company_id="comp-a")
+        await _person(session, pid="p-b1", company_id="comp-b")
+        fired = await _person(session, pid="p-a9", company_id="comp-a")
+        fired.employment_status = EmploymentStatus.TERMINATED
+        own = Site(tenant_id=_TENANT, company_id="comp-a", name="Склад")
+        other = Site(tenant_id=_TENANT, company_id="comp-b", name="Чужой цех")
+        journal = BriefingJournal(
+            tenant_id=_TENANT, code="J-FIRE", title="Журнал ПБ", journal_type="fire"
+        )
+        session.add_all([own, other, journal])
+        await session.flush()
+
+        def _unit(site_id, label, *, recharge=None, inspection=None, status="active"):
+            return FireSafetyEquipment(
+                tenant_id=_TENANT,
+                site_id=site_id,
+                kind="extinguisher",
+                label=label,
+                status=status,
+                recharge_due=None if recharge is None else _TODAY + timedelta(days=recharge),
+                inspection_due=None if inspection is None else _TODAY + timedelta(days=inspection),
+            )
+
+        def _briefing(person_id, kind, days):
+            return BriefingEntry(
+                tenant_id=_TENANT,
+                briefing_journal_id=journal.id,
+                person_id=person_id,
+                briefing_type=kind,
+                briefing_date=_TODAY - timedelta(days=400),
+                valid_until=_NOW + timedelta(days=days),
+                status="completed",
+            )
+
+        session.add_all(
+            [
+                # Альфа: перезарядка И поверка одного средства просрочены — два слагаемых
+                _unit(own.id, "ОП-4 №1", recharge=-3, inspection=-1),
+                _unit(own.id, "ОП-4 №2", recharge=200),
+                # списанное средство и средство без площадки — не считаются
+                _unit(own.id, "ОП-4 №3", recharge=-30, status="written_off"),
+                _unit(None, "ОП-4 №4", recharge=-30),
+                # тренировка не проведена к дате и документ без пересмотра
+                FireDrill(
+                    tenant_id=_TENANT,
+                    site_id=own.id,
+                    kind="evacuation",
+                    title="Эвакуация",
+                    planned_on=_TODAY - timedelta(days=2),
+                ),
+                FireDrill(
+                    tenant_id=_TENANT,
+                    site_id=own.id,
+                    kind="evacuation",
+                    title="Проведена",
+                    planned_on=_TODAY - timedelta(days=9),
+                    held_on=_TODAY - timedelta(days=9),
+                ),
+                FireSafetyDocument(
+                    tenant_id=_TENANT,
+                    site_id=own.id,
+                    kind="instruction",
+                    title="Инструкция",
+                    review_due=_TODAY - timedelta(days=1),
+                ),
+                # ПТМ Альфы истёк; повторный — старый перекрыт новым действующим
+                _briefing("p-a1", "fire_ptm", -35),
+                _briefing("p-a1", "fire_repeat", -50),
+                _briefing("p-a1", "fire_repeat", 100),
+                # уволенный — не в счёт
+                _briefing("p-a9", "fire_ptm", -35),
+                # Бета: только чужая площадка с просрочкой и действующий ПТМ
+                _unit(other.id, "ОП-4 №5", recharge=-30),
+                _briefing("p-b1", "fire_ptm", 100),
+            ]
+        )
+        await session.commit()
+
+        rows = await collect_portfolio_attention(
+            session, tenant_id=_TENANT, today=_TODAY, now=_NOW, horizon_days=30
+        )
+    by_id = {r.client_id: r for r in rows}
+    fire_a = [s for s in by_id[a.id].signals if s.kind is SignalKind.FIRE_SAFETY_OVERDUE]
+    assert len(fire_a) == 1, "все слагаемые ПБ — один сигнал, а не пять"
+    # перезарядка 1 + поверка 1 + тренировка 1 + документ 1 + ПТМ 1
+    assert fire_a[0].count == 5
+    assert fire_a[0].severity is Severity.HIGH
+    fire_b = [s for s in by_id[b.id].signals if s.kind is SignalKind.FIRE_SAFETY_OVERDUE]
+    assert fire_b[0].count == 1, "средство чужой площадки — просрочка её клиента"
 
 
 @pytest.mark.asyncio

@@ -13,6 +13,13 @@
   арендаторе, и до делегированного доступа (разд. 49.3) мы их не читаем. Ноль
   в такой строке читался бы как «у клиента всё хорошо» — поэтому статус
   ``not_aggregated`` и ``total = None``, а не 0.
+
+Просрочки ПБ (BIZ-54-57 срез-87, разд. 54.1) — один сигнал на все слагаемые
+(перезарядка и поверка средств, тренировки, документы, противопожарные
+инструктажи): в портфеле важно «у клиента горит по ПБ и сколько», а
+расшифровку по слагаемым даёт светофор клиента (разд. 51.3), считающий те же
+числа. Сигнал — факт, а не эталон: он есть и у клиента, чей модуль ПБ
+выключен, если записи остались (срез-56).
 """
 
 from __future__ import annotations
@@ -58,6 +65,7 @@ class SignalKind(str, enum.Enum):
     TRAINING_OVERDUE = "training_overdue"
     CONTRACT_EXPIRING = "contract_expiring"
     CONTACTS_MISSING = "contacts_missing"
+    FIRE_SAFETY_OVERDUE = "fire_safety_overdue"
 
 
 class AggregationStatus(str, enum.Enum):
@@ -94,6 +102,16 @@ SIGNAL_META: dict[SignalKind, SignalMeta] = {
         severity=Severity.HIGH,
         title="Истекает договор",
         action_hint="Продлите договор или согласуйте завершение ведения",
+    ),
+    # Просроченная перезарядка или истёкший ПТМ — нарушение к приходу МЧС,
+    # но человека от работы не отстраняет: вес — как у СИЗ и обучения.
+    SignalKind.FIRE_SAFETY_OVERDUE: SignalMeta(
+        severity=Severity.HIGH,
+        title="Просрочки по пожарной безопасности",
+        action_hint=(
+            "Перезарядите или поверьте средства защиты, проведите тренировки и "
+            "противопожарные инструктажи, пересмотрите документы"
+        ),
     ),
     SignalKind.CONTACTS_MISSING: SignalMeta(
         severity=Severity.LOW,

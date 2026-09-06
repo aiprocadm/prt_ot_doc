@@ -56,10 +56,19 @@
 площадок много, а сводка арендатора приписала бы ему огнетушители всех
 клиентов сразу. Средство без площадки к клиенту не относится — как и к
 одной площадке: чьё оно, платформа не угадывает.
+
+Сводка внимания по портфелю клиентов (срез-87, разд. 49.2) считает ОДНО
+число — просрочки ПБ — сразу по всем организациям
+(``collect_fire_safety_overdue_by_company``): портфель бывает на сотню
+клиентов, и шесть запросов на каждого превратили бы экран в сотни
+round-trip'ов. Слагаемые — те же, что у ``FireSafetyNumbers.overdue``
+(перезарядка, поверка, тренировки, документы, инструктажи), и предикаты у
+двух функций общие: второй экземпляр формулы разошёлся бы с первым.
 """
 
 from __future__ import annotations
 
+from collections import defaultdict
 from collections.abc import Sequence
 from datetime import date, datetime, timedelta, timezone
 
@@ -74,6 +83,7 @@ from app.models.fire_safety import (
     FireSafetyDocument,
     FireSafetyEquipment,
 )
+from app.models.master_data import EmploymentStatus, Person, Site
 from app.services.briefing_validity import latest_briefing_validity
 
 __all__ = [
@@ -81,6 +91,7 @@ __all__ = [
     "FIRE_DUE_SOON_DAYS",
     "collect_fire_briefing_numbers",
     "collect_fire_safety_numbers",
+    "collect_fire_safety_overdue_by_company",
 ]
 
 #: горизонт «скоро истекает» — общий у сводки модуля и карточки площадки
@@ -93,6 +104,26 @@ FIRE_BRIEFING_TYPES: tuple[str, ...] = tuple(
     for code, discipline in BRIEFING_TYPE_DISCIPLINE.items()
     if discipline is Discipline.FIRE_SAFETY
 )
+
+
+def _recharge_overdue(unit: FireSafetyEquipment, today: date) -> bool:
+    return unit.recharge_due is not None and unit.recharge_due < today
+
+
+def _inspection_overdue(unit: FireSafetyEquipment, today: date) -> bool:
+    return unit.inspection_due is not None and unit.inspection_due < today
+
+
+def _overdue_drill_where(today: date) -> tuple:
+    """Тренировка без протокола, чей срок прошёл."""
+
+    return (FireDrill.held_on.is_(None), FireDrill.planned_on < today)
+
+
+def _overdue_document_where(today: date) -> tuple:
+    """Документ с датой пересмотра в прошлом; бессрочный — не срок."""
+
+    return (FireSafetyDocument.review_due.is_not(None), FireSafetyDocument.review_due < today)
 
 
 async def _fire_briefing_numbers(
@@ -181,10 +212,8 @@ async def collect_fire_safety_numbers(
         .scalars()
         .all()
     )
-    overdue_recharge = sum(1 for r in rows if r.recharge_due is not None and r.recharge_due < today)
-    overdue_inspection = sum(
-        1 for r in rows if r.inspection_due is not None and r.inspection_due < today
-    )
+    overdue_recharge = sum(1 for r in rows if _recharge_overdue(r, today))
+    overdue_inspection = sum(1 for r in rows if _inspection_overdue(r, today))
     due_soon = sum(
         1
         for r in rows
@@ -210,7 +239,7 @@ async def collect_fire_safety_numbers(
     pending = _scoped(select(func.count()).select_from(FireDrill), FireDrill).where(
         FireDrill.held_on.is_(None)
     )
-    overdue_drills = int(await session.scalar(pending.where(FireDrill.planned_on < today)) or 0)
+    overdue_drills = int(await session.scalar(pending.where(*_overdue_drill_where(today))) or 0)
     planned_drills = int(await session.scalar(pending.where(FireDrill.planned_on >= today)) or 0)
     last_drill_on = await session.scalar(
         _scoped(select(func.max(FireDrill.held_on)), FireDrill).where(
@@ -223,13 +252,7 @@ async def collect_fire_safety_numbers(
     )
     documents = int(await session.scalar(documents_stmt) or 0)
     overdue_documents = int(
-        await session.scalar(
-            documents_stmt.where(
-                FireSafetyDocument.review_due.is_not(None),
-                FireSafetyDocument.review_due < today,
-            )
-        )
-        or 0
+        await session.scalar(documents_stmt.where(*_overdue_document_where(today))) or 0
     )
 
     overdue_briefings, briefings_due_soon, briefings_valid = await _fire_briefing_numbers(
@@ -253,3 +276,105 @@ async def collect_fire_safety_numbers(
         briefings_due_soon=briefings_due_soon,
         briefings_valid=briefings_valid,
     )
+
+
+async def collect_fire_safety_overdue_by_company(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    company_ids: Sequence[str],
+    today: date | None = None,
+    now: datetime | None = None,
+) -> dict[str, int]:
+    """Просрочек ПБ по организациям клиентов — сразу по портфелю (срез-87).
+
+    Слагаемые те же, что у ``FireSafetyNumbers.overdue`` для одного клиента
+    (``collect_fire_safety_numbers(site_ids=..., person_ids=...)``): просроченные
+    перезарядка и поверка средств на площадках организации, тренировки без
+    протокола со сроком в прошлом, документы с датой пересмотра в прошлом и
+    противопожарные инструктажи её людей (человек × вид). Организации без
+    просрочек в ответе нет.
+    """
+
+    if not company_ids:
+        return {}
+    today = today or date.today()
+    now = now or datetime.now(tz=timezone.utc)
+    wanted = list(company_ids)
+    overdue: dict[str, int] = defaultdict(int)
+
+    site_company = {
+        str(site_id): str(company_id)
+        for site_id, company_id in (
+            await session.execute(
+                select(Site.id, Site.company_id).where(
+                    Site.tenant_id == tenant_id,
+                    Site.company_id.in_(wanted),
+                    Site.deleted_at.is_(None),
+                )
+            )
+        ).all()
+    }
+    if site_company:
+        site_ids = list(site_company)
+        units = (
+            (
+                await session.execute(
+                    select(FireSafetyEquipment).where(
+                        FireSafetyEquipment.tenant_id == tenant_id,
+                        FireSafetyEquipment.deleted_at.is_(None),
+                        FireSafetyEquipment.status == "active",
+                        FireSafetyEquipment.site_id.in_(site_ids),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for unit in units:
+            overdue[site_company[str(unit.site_id)]] += int(_recharge_overdue(unit, today)) + int(
+                _inspection_overdue(unit, today)
+            )
+        for model, where in (
+            (FireDrill, _overdue_drill_where(today)),
+            (FireSafetyDocument, _overdue_document_where(today)),
+        ):
+            counted = await session.execute(
+                select(model.site_id, func.count())
+                .where(
+                    model.tenant_id == tenant_id,
+                    model.deleted_at.is_(None),
+                    model.site_id.in_(site_ids),
+                    *where,
+                )
+                .group_by(model.site_id)
+            )
+            for site_id, count in counted.all():
+                overdue[site_company[str(site_id)]] += int(count)
+
+    # люди — те же, что у светофора клиента: не удалённые и не уволенные
+    person_company = {
+        str(person_id): str(company_id)
+        for person_id, company_id in (
+            await session.execute(
+                select(Person.id, Person.company_id).where(
+                    Person.tenant_id == tenant_id,
+                    Person.company_id.in_(wanted),
+                    Person.deleted_at.is_(None),
+                    Person.employment_status != EmploymentStatus.TERMINATED,
+                )
+            )
+        ).all()
+    }
+    if person_company:
+        latest = await latest_briefing_validity(
+            session,
+            tenant_id=tenant_id,
+            person_ids=list(person_company),
+            briefing_types=FIRE_BRIEFING_TYPES,
+        )
+        for (owner, _briefing_type), value in latest.items():
+            if value < now:
+                overdue[person_company[owner]] += 1
+
+    return dict(overdue)

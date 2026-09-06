@@ -156,6 +156,29 @@ def test_signal_kinds_all_have_severity_and_title():
         assert meta.action_hint.strip()
 
 
+def test_fire_safety_overdue_weighs_like_ppe_and_training():
+    """BIZ-54-57 срез-87 (разд. 54.1): просрочки ПБ — один сигнал с весом
+    «высокий», как у СИЗ и обучения: ниже медосмотров, выше контактов."""
+    from app.domains.managed_clients.attention import SIGNAL_META
+
+    fire = SIGNAL_META[SignalKind.FIRE_SAFETY_OVERDUE]
+    assert SignalKind.FIRE_SAFETY_OVERDUE.value == "fire_safety_overdue"
+    assert fire.severity is Severity.HIGH
+    assert fire.severity is SIGNAL_META[SignalKind.PPE_OVERDUE].severity
+    assert fire.severity.weight < SIGNAL_META[SignalKind.MEDICAL_OVERDUE].severity.weight
+    assert fire.severity.weight > SIGNAL_META[SignalKind.CONTACTS_MISSING].severity.weight
+    row = build_client_attention(
+        client_id="c",
+        client_name="Клиент",
+        counts=_counts(**{SignalKind.FIRE_SAFETY_OVERDUE: 4, SignalKind.MEDICAL_OVERDUE: 1}),
+        contract_expiring=False,
+    )
+    assert [s.kind for s in row.signals] == [
+        SignalKind.MEDICAL_OVERDUE,
+        SignalKind.FIRE_SAFETY_OVERDUE,
+    ]
+
+
 @pytest.mark.parametrize(
     "worse,better",
     [
