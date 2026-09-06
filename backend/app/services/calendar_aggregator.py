@@ -24,6 +24,17 @@ Design notes
   `MAX_ITEMS_PER_SOURCE * sources` items in chronological order. For
   typical month/quarter views this is more than enough; longer ranges
   should request narrower filters.
+* «Уволенный не в счёт» (BIZ-54-57 срез-93). Поимённые источники —
+  медосмотры, направления, СИЗ, обучение, зачисления, сертификаты,
+  инструктажи, удостоверения водителей — не показывают и не считают записи
+  удалённых и уволенных людей: тем же правилом, что портфель, светофоры и
+  карточка сотрудника (``services/person_scope``). Иначе Центр внимания и
+  разрез руководителя (разд. 57.2/57.4) горели бы истёкшим медосмотром того,
+  у кого обязательств уже нет, а ``discipline_deadline_events`` слал бы по
+  нему напоминания. Записи без человека (``person_id IS NULL`` — журнал,
+  площадка) остаются; «висячий» ``person_id`` без карточки — тоже, как и
+  раньше: календарь join'а с ``Person`` не требует. Наряды-допуски и сроки
+  соответствия — про работу и организацию, их не трогаем.
 """
 
 from __future__ import annotations
@@ -31,7 +42,7 @@ from __future__ import annotations
 from datetime import date, datetime, time, timezone
 from typing import Any, Iterable
 
-from sqlalchemy import Select, and_, func, select
+from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.disciplines import BRIEFING_TYPE_TITLES
@@ -82,6 +93,7 @@ from app.services.discipline_training import (
     overdue_training_enrollment_where,
     pending_training_enrollment_where,
 )
+from app.services.person_scope import not_employed_person_ids
 
 __all__ = [
     "CalendarAggregatorService",
@@ -678,6 +690,7 @@ class CalendarAggregatorService:
                 # Правило «допущенный водитель» одно с цифрами дисциплины и портфелем (срез-88).
                 *admitted_driver_where(self.tenant_id),
                 Driver.license_due.is_not(None),
+                self._employed_only(Driver),
             )
             .order_by(Driver.license_due.asc())
             .limit(self._limit)
@@ -730,7 +743,9 @@ class CalendarAggregatorService:
 
         base_count = self._apply_window(
             self._scoped_count(Driver, person_id=person_id).where(
-                *admitted_driver_where(self.tenant_id), Driver.license_due.is_not(None)
+                *admitted_driver_where(self.tenant_id),
+                Driver.license_due.is_not(None),
+                self._employed_only(Driver),
             ),
             Driver.license_due,
             from_at,
@@ -783,6 +798,7 @@ class CalendarAggregatorService:
                 TrainingCertificate.deleted_at.is_(None),
                 TrainingCertificate.status == "active",
                 TrainingCertificate.valid_until.is_not(None),
+                self._employed_only(TrainingCertificate),
             )
             .order_by(TrainingCertificate.valid_until.asc(), TrainingCertificate.issued_at.asc())
             .limit(self._limit)
@@ -846,6 +862,7 @@ class CalendarAggregatorService:
             self._scoped_count(TrainingCertificate, person_id=person_id).where(
                 TrainingCertificate.status == "active",
                 TrainingCertificate.valid_until.is_not(None),
+                self._employed_only(TrainingCertificate),
             ),
             TrainingCertificate.valid_until,
             from_at,
@@ -882,7 +899,10 @@ class CalendarAggregatorService:
                 TrainingProgram, TrainingProgram.id == TrainingEnrollment.training_program_id
             )
             .outerjoin(Person, Person.id == TrainingEnrollment.person_id)
-            .where(*pending_training_enrollment_where(self.tenant_id))
+            .where(
+                *pending_training_enrollment_where(self.tenant_id),
+                self._employed_only(TrainingEnrollment),
+            )
             .order_by(TrainingEnrollment.due_at.asc(), TrainingEnrollment.assigned_at.asc())
             .limit(self._limit)
         )
@@ -951,7 +971,8 @@ class CalendarAggregatorService:
 
         base_count = self._apply_window(
             self._scoped_count(TrainingEnrollment, person_id=person_id).where(
-                *pending_training_enrollment_where(self.tenant_id)
+                *pending_training_enrollment_where(self.tenant_id),
+                self._employed_only(TrainingEnrollment),
             ),
             TrainingEnrollment.due_at,
             from_at,
@@ -961,7 +982,8 @@ class CalendarAggregatorService:
         overdue = await self._count(
             self._apply_window(
                 self._scoped_count(TrainingEnrollment, person_id=person_id).where(
-                    *overdue_training_enrollment_where(self.tenant_id, now)
+                    *overdue_training_enrollment_where(self.tenant_id, now),
+                    self._employed_only(TrainingEnrollment),
                 ),
                 TrainingEnrollment.due_at,
                 from_at,
@@ -986,6 +1008,7 @@ class CalendarAggregatorService:
             .where(
                 MedicalExam.tenant_id == self.tenant_id,
                 MedicalExam.deleted_at.is_(None),
+                self._employed_only(MedicalExam),
             )
             .order_by(MedicalExam.valid_until.asc())
             .limit(self._limit)
@@ -1040,7 +1063,9 @@ class CalendarAggregatorService:
             )
 
         base_count = self._apply_window(
-            self._scoped_count(MedicalExam, person_id=person_id),
+            self._scoped_count(MedicalExam, person_id=person_id).where(
+                self._employed_only(MedicalExam)
+            ),
             MedicalExam.valid_until,
             from_at,
             to_at,
@@ -1067,6 +1092,7 @@ class CalendarAggregatorService:
                 MedicalReferral.tenant_id == self.tenant_id,
                 MedicalReferral.deleted_at.is_(None),
                 MedicalReferral.due_at.is_not(None),
+                self._employed_only(MedicalReferral),
             )
             .order_by(MedicalReferral.due_at.asc())
             .limit(self._limit)
@@ -1127,7 +1153,7 @@ class CalendarAggregatorService:
 
         base_count = self._apply_window(
             self._scoped_count(MedicalReferral, person_id=person_id).where(
-                MedicalReferral.due_at.is_not(None)
+                MedicalReferral.due_at.is_not(None), self._employed_only(MedicalReferral)
             ),
             MedicalReferral.due_at,
             from_at,
@@ -2027,6 +2053,7 @@ class CalendarAggregatorService:
                 PPEIssue.tenant_id == self.tenant_id,
                 PPEIssue.deleted_at.is_(None),
                 PPEIssue.expires_at.is_not(None),
+                self._employed_only(PPEIssue),
             )
             .order_by(PPEIssue.expires_at.asc())
             .limit(self._limit)
@@ -2094,7 +2121,7 @@ class CalendarAggregatorService:
 
         base_count = self._apply_window(
             self._scoped_count(PPEIssue, person_id=person_id).where(
-                PPEIssue.expires_at.is_not(None)
+                PPEIssue.expires_at.is_not(None), self._employed_only(PPEIssue)
             ),
             PPEIssue.expires_at,
             from_at,
@@ -2215,7 +2242,9 @@ class CalendarAggregatorService:
         stmt = (
             select(TrainingSession, TrainingCourse.title)
             .outerjoin(TrainingCourse, TrainingCourse.id == TrainingSession.course_id)
-            .where(TrainingSession.tenant_id == self.tenant_id)
+            .where(
+                TrainingSession.tenant_id == self.tenant_id, self._employed_only(TrainingSession)
+            )
             .order_by(anchor_col.asc())
             .limit(self._limit)
         )
@@ -2278,7 +2307,9 @@ class CalendarAggregatorService:
             )
 
         base_count = self._apply_window(
-            self._scoped_count(TrainingSession, person_id=person_id),
+            self._scoped_count(TrainingSession, person_id=person_id).where(
+                self._employed_only(TrainingSession)
+            ),
             anchor_col,
             from_at,
             to_at,
@@ -2515,6 +2546,7 @@ class CalendarAggregatorService:
             .where(
                 BriefingEntry.tenant_id == self.tenant_id,
                 BriefingEntry.deleted_at.is_(None),
+                self._employed_only(BriefingEntry),
             )
             .order_by(anchor_col.asc())
             .limit(self._limit)
@@ -2584,7 +2616,9 @@ class CalendarAggregatorService:
             )
 
         base_count = self._apply_window(
-            self._scoped_count(BriefingEntry, person_id=person_id, site_id=site_id),
+            self._scoped_count(BriefingEntry, person_id=person_id, site_id=site_id).where(
+                self._employed_only(BriefingEntry)
+            ),
             anchor_col,
             from_at,
             to_at,
@@ -2606,6 +2640,7 @@ class CalendarAggregatorService:
             .where(
                 BriefingEntry.tenant_id == self.tenant_id,
                 BriefingEntry.deleted_at.is_(None),
+                self._employed_only(BriefingEntry),
                 *overdue_where,
             )
             .group_by(BriefingEntry.briefing_type),
@@ -2706,6 +2741,16 @@ class CalendarAggregatorService:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    def _employed_only(self, model: type[Any]) -> Any:
+        """«Уволенный не в счёт» (срез-93): запись удалённого или уволенного
+        человека в календарь не попадает. Запись без человека остаётся — она
+        про журнал или площадку, а не про сотрудника."""
+
+        clause = model.person_id.not_in(not_employed_person_ids(self.tenant_id))
+        if model.__table__.c.person_id.nullable:
+            clause = or_(model.person_id.is_(None), clause)
+        return clause
 
     def _scoped_count(
         self,

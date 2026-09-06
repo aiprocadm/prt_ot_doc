@@ -15,7 +15,7 @@ from __future__ import annotations
 import pathlib
 import re
 
-from app.services.person_scope import employed_person_where
+from app.services.person_scope import employed_person_where, not_employed_person_ids
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 APP = REPO / "backend" / "app"
@@ -47,3 +47,11 @@ def test_работающий_это_не_удалён_и_не_уволен() ->
     assert len(conditions) == 2
     assert any("deleted_at IS NULL" in c for c in conditions)
     assert any("employment_status !=" in c for c in conditions)
+
+
+def test_кого_не_считать_это_отрицание_той_же_формулы() -> None:
+    """Срез-93: подзапрос для мест без join'а с Person строится из формулы, а не заново."""
+
+    sql = str(not_employed_person_ids("tenant-1").compile(compile_kwargs={"literal_binds": True}))
+    assert "person.tenant_id = 'tenant-1'" in sql
+    assert "NOT (person.deleted_at IS NULL AND person.employment_status !=" in sql

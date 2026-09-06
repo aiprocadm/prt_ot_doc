@@ -43,6 +43,7 @@ from app.services.discipline_attention import attention_events, overdue_by_disci
 from app.services.discipline_incidents import open_incidents_where
 from app.services.discipline_training import overdue_training_enrollment_where
 from app.services.person_link import resolve_person_id
+from app.services.person_scope import employed_person_where
 
 router = APIRouter(prefix="/workspace", tags=["workspace"])
 
@@ -272,7 +273,8 @@ async def _readiness_blockers(
                 .select_from(Person)
                 .where(
                     Person.tenant_id == tenant.id,
-                    Person.deleted_at.is_(None),
+                    # Уволенному контакты не нужны — одно правило с портфелем (срез-93).
+                    *employed_person_where(),
                     or_(Person.email.is_(None), Person.phone.is_(None)),
                 )
             )
