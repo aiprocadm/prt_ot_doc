@@ -93,7 +93,12 @@ export interface CrossClientAttention {
   items: ClientAttention[];
 }
 
-export type DeadlineKind = "medical" | "ppe" | "training" | "contract";
+export type DeadlineKind =
+  | "medical"
+  | "ppe"
+  | "training"
+  | "contract"
+  | "driver_license";
 
 export interface DeadlineEvent {
   kind: DeadlineKind;

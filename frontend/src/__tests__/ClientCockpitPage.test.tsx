@@ -541,6 +541,28 @@ describe("ClientCockpitPage", () => {
     });
   });
 
+  it("фильтр по типу знает удостоверения водителей", async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <ClientCockpitPage />
+      </MemoryRouter>,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("calendar-summary")).toBeInTheDocument(),
+    );
+    api.calendar.mockClear();
+
+    await user.selectOptions(
+      screen.getByLabelText("Тип"),
+      "Удостоверения водителей",
+    );
+    await waitFor(() => expect(api.calendar).toHaveBeenCalled());
+    expect(api.calendar.mock.calls.at(-1)?.[0]).toMatchObject({
+      kind: ["driver_license"],
+    });
+  });
+
   it("фильтр «все типы» не шлёт лишний параметр", async () => {
     const user = userEvent.setup();
     render(
