@@ -27,17 +27,23 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date, timedelta
+from pathlib import Path
 
 import pytest
 from sqlalchemy import select
 
+from app.models.ecology import EMISSION_SOURCE_KINDS
 from app.models.feature import Feature, FeatureEnablement
 from app.models.models import Tenant
 
 pytestmark = pytest.mark.anyio
 
 _API = "/api/v1/ecology"
+_FRONTEND_ECOLOGY_API = (
+    Path(__file__).resolve().parents[1] / "frontend" / "src" / "api" / "ecology.ts"
+)
 
 
 async def _grant(sessionmaker, code: str = "ecology", on: bool = True) -> None:
@@ -405,3 +411,28 @@ class TestИзоляцияАрендатора:
             headers=headers,
         )
         assert response.status_code == 404
+
+
+class TestСловарьВидовИсточниковНаФронте:
+    """Срез-100: вид источника выбирают в форме из копии словаря на фронте.
+
+    Список формы строится из ``EMISSION_SOURCE_KIND_TITLES`` в
+    ``api/ecology.ts``: значение, добавленное только на бэкенде, нельзя было бы
+    ни выбрать, ни прочитать словами.
+    """
+
+    def test_виды_источников_на_фронте_совпадают_с_бэкендом(self) -> None:
+        text = _FRONTEND_ECOLOGY_API.read_text(encoding="utf-8")
+        block = re.search(
+            r"EMISSION_SOURCE_KIND_TITLES:\s*Record<string,\s*string>\s*=\s*\{(.*?)\}",
+            text,
+            re.S,
+        )
+        assert block is not None, "не нашёлся map EMISSION_SOURCE_KIND_TITLES"
+        front = dict(
+            re.findall(r'^\s*([A-Za-z_]+):\s*"([^"]+)"', block.group(1), re.M)
+        )
+        assert front == EMISSION_SOURCE_KINDS, sorted(
+            front.items() ^ EMISSION_SOURCE_KINDS.items()
+        )
+

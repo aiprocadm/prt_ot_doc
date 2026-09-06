@@ -35,7 +35,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import select
 
-from app.models.ecology import WASTE_HAZARD_CLASSES
+from app.models.ecology import WASTE_HAZARD_CLASSES, WASTE_MOVEMENT_KINDS
 from app.models.feature import Feature, FeatureEnablement
 from app.models.models import Tenant
 
@@ -444,5 +444,26 @@ class TestСловарьКлассовНаФронте:
         )
         assert front == WASTE_HAZARD_CLASSES, sorted(
             front.items() ^ WASTE_HAZARD_CLASSES.items()
+        )
+
+    def test_виды_движения_на_фронте_совпадают_с_бэкендом(self) -> None:
+        """Срез-100: вид движения выбирают в форме журнала из копии словаря.
+
+        Свободная строка сделала бы учёт непересчитываемым, а 2-ТП
+        невозможной; поэтому список формы строится из ``WASTE_MOVEMENT_KIND_TITLES``.
+        """
+
+        text = _FRONTEND_ECOLOGY_API.read_text(encoding="utf-8")
+        block = re.search(
+            r"WASTE_MOVEMENT_KIND_TITLES:\s*Record<string,\s*string>\s*=\s*\{(.*?)\}",
+            text,
+            re.S,
+        )
+        assert block is not None, "не нашёлся map WASTE_MOVEMENT_KIND_TITLES"
+        front = dict(
+            re.findall(r'^\s*([A-Za-z_]+):\s*"([^"]+)"', block.group(1), re.M)
+        )
+        assert front == WASTE_MOVEMENT_KINDS, sorted(
+            front.items() ^ WASTE_MOVEMENT_KINDS.items()
         )
 
