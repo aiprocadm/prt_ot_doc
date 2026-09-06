@@ -325,6 +325,64 @@ export type WastePassportDto = {
   over_limit: boolean;
 };
 
+/**
+ * Виды движения отходов — копия `WASTE_MOVEMENT_KINDS` бэкенда. Свободная
+ * строка сделала бы учёт непересчитываемым, а 2-ТП невозможной; форма строит
+ * выбор из этого map, совпадение стережёт `tests/test_ecology_waste.py`.
+ */
+export const WASTE_MOVEMENT_KIND_TITLES: Record<string, string> = {
+  generated: "Образование",
+  accumulated: "Накопление",
+  transferred: "Передача оператору",
+  disposed: "Размещение (захоронение)",
+  neutralized: "Обезвреживание",
+  utilized: "Утилизация",
+};
+
+/** Виды источников выбросов — копия `EMISSION_SOURCE_KINDS` бэкенда. */
+export const EMISSION_SOURCE_KIND_TITLES: Record<string, string> = {
+  organized: "Организованный источник",
+  unorganized: "Неорганизованный источник",
+};
+
+/** Тело записи журнала учёта отходов: масса больше нуля, дата не в будущем. */
+export type WasteMovementCreateInput = {
+  passport_id: string;
+  kind: string;
+  happened_on: string;
+  quantity_tons: string;
+  counterparty?: string | null;
+  notes?: string | null;
+};
+
+export type WasteMovementUpdateInput = WasteMovementCreateInput;
+
+/** Тело источника выбросов: номер уникален в пределах объекта НВОС. */
+export type EmissionSourceCreateInput = {
+  facility_id: string;
+  source_number: string;
+  name: string;
+  kind: string;
+  location?: string | null;
+  inventoried_on?: string | null;
+  notes?: string | null;
+};
+
+export type EmissionSourceUpdateInput = EmissionSourceCreateInput;
+
+/** Тело норматива выброса: пустой срок разрешения — «бессрочно». */
+export type EmissionNormCreateInput = {
+  source_id: string;
+  substance: string;
+  limit_grams_per_second?: string | null;
+  limit_tons_per_year?: string | null;
+  permit_number?: string | null;
+  valid_until?: string | null;
+  notes?: string | null;
+};
+
+export type EmissionNormUpdateInput = EmissionNormCreateInput;
+
 export type WasteMovementDto = {
   id: string;
   passport_id: string;
@@ -470,6 +528,69 @@ export const ecologyApi = {
   ): Promise<WastePassportDto> => {
     const { data } = await apiClient.patch<WastePassportDto>(
       `/ecology/waste-passports/${id}`,
+      body,
+    );
+    return data;
+  },
+
+  createWasteMovement: async (
+    body: WasteMovementCreateInput,
+  ): Promise<WasteMovementDto> => {
+    const { data } = await apiClient.post<WasteMovementDto>(
+      "/ecology/waste-movements",
+      body,
+    );
+    return data;
+  },
+
+  updateWasteMovement: async (
+    id: string,
+    body: WasteMovementUpdateInput,
+  ): Promise<WasteMovementDto> => {
+    const { data } = await apiClient.patch<WasteMovementDto>(
+      `/ecology/waste-movements/${id}`,
+      body,
+    );
+    return data;
+  },
+
+  createEmissionSource: async (
+    body: EmissionSourceCreateInput,
+  ): Promise<EmissionSourceDto> => {
+    const { data } = await apiClient.post<EmissionSourceDto>(
+      "/ecology/emission-sources",
+      body,
+    );
+    return data;
+  },
+
+  updateEmissionSource: async (
+    id: string,
+    body: EmissionSourceUpdateInput,
+  ): Promise<EmissionSourceDto> => {
+    const { data } = await apiClient.patch<EmissionSourceDto>(
+      `/ecology/emission-sources/${id}`,
+      body,
+    );
+    return data;
+  },
+
+  createEmissionNorm: async (
+    body: EmissionNormCreateInput,
+  ): Promise<EmissionNormDto> => {
+    const { data } = await apiClient.post<EmissionNormDto>(
+      "/ecology/emission-norms",
+      body,
+    );
+    return data;
+  },
+
+  updateEmissionNorm: async (
+    id: string,
+    body: EmissionNormUpdateInput,
+  ): Promise<EmissionNormDto> => {
+    const { data } = await apiClient.patch<EmissionNormDto>(
+      `/ecology/emission-norms/${id}`,
       body,
     );
     return data;

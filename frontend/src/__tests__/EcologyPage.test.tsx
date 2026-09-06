@@ -20,6 +20,8 @@ const listFeeLinesMock = vi.fn();
 const listReportingDeadlinesMock = vi.fn();
 const createReportingDeadlineMock = vi.fn();
 const createFacilityMock = vi.fn();
+const createWasteMovementMock = vi.fn();
+const createEmissionSourceMock = vi.fn();
 const createWastePassportMock = vi.fn();
 const readinessMock = vi.fn();
 const listSitesMock = vi.fn();
@@ -44,6 +46,10 @@ vi.mock("@/api/ecology", async (importOriginal) => ({
     createReportingDeadline: (...args: unknown[]) =>
       createReportingDeadlineMock(...args),
     createFacility: (...args: unknown[]) => createFacilityMock(...args),
+    createWasteMovement: (...args: unknown[]) =>
+      createWasteMovementMock(...args),
+    createEmissionSource: (...args: unknown[]) =>
+      createEmissionSourceMock(...args),
     createWastePassport: (...args: unknown[]) =>
       createWastePassportMock(...args),
     readiness: (...args: unknown[]) => readinessMock(...args),
@@ -467,6 +473,8 @@ describe("EcologyPage", () => {
     listReportingDeadlinesMock.mockReset();
     createReportingDeadlineMock.mockReset();
     createFacilityMock.mockReset();
+    createWasteMovementMock.mockReset();
+    createEmissionSourceMock.mockReset();
     createWastePassportMock.mockReset();
     readinessMock.mockReset();
     listSitesMock.mockReset();
@@ -679,6 +687,101 @@ describe("EcologyPage", () => {
     expect(
       screen.getByText(/платформа его не рассчитывает/i),
     ).toBeInTheDocument();
+  });
+
+  it("движение отходов записывается с экрана (срез-100)", async () => {
+    const user = userEvent.setup();
+    const added = {
+      ...populatedMovements[0],
+      id: "wm-new",
+      counterparty: "ООО «Новый оператор»",
+    };
+    createWasteMovementMock.mockResolvedValue(added);
+    listMovementsMock
+      .mockResolvedValueOnce(populatedMovements)
+      .mockResolvedValue([...populatedMovements, added]);
+
+    render(
+      <MemoryRouter>
+        <EcologyPage />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByText("Производственная площадка №1"),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Журнал учёта отходов" }),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Записать движение" }));
+    await user.selectOptions(
+      screen.getByLabelText("Паспорт отхода"),
+      populatedPassports[0].id,
+    );
+    await user.type(screen.getByLabelText("Дата"), "2026-08-20");
+    await user.type(screen.getByLabelText("Масса, т"), "1,5");
+    await user.type(
+      screen.getByLabelText("Контрагент"),
+      "ООО «Новый оператор»",
+    );
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(createWasteMovementMock).toHaveBeenCalled());
+    expect(createWasteMovementMock.mock.calls[0][0]).toMatchObject({
+      passport_id: populatedPassports[0].id,
+      quantity_tons: "1.5",
+      counterparty: "ООО «Новый оператор»",
+    });
+    expect(await screen.findByText("ООО «Новый оператор»")).toBeInTheDocument();
+  });
+
+  it("источник выбросов заводится с экрана (срез-100)", async () => {
+    const user = userEvent.setup();
+    const added = {
+      ...populatedSources[0],
+      id: "src-new",
+      source_number: "0009",
+      name: "Сварочный пост",
+    };
+    createEmissionSourceMock.mockResolvedValue(added);
+    listSourcesMock
+      .mockResolvedValueOnce(populatedSources)
+      .mockResolvedValue([...populatedSources, added]);
+
+    render(
+      <MemoryRouter>
+        <EcologyPage />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByText("Производственная площадка №1"),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Выбросы" }));
+
+    // Две кнопки секции: источник заводится на объекте, норматив — на
+    // источнике; бюджет экрана при этом цел.
+    expect(
+      screen.getByRole("button", { name: "Внести норматив" }),
+    ).toBeInTheDocument();
+    expect(uxBudgetDelta(document.body, "EcologyPage").unexpected).toEqual([]);
+
+    await user.click(screen.getByRole("button", { name: "Завести источник" }));
+    await user.selectOptions(
+      screen.getByLabelText("Объект НВОС"),
+      populatedFacilities[0].id,
+    );
+    await user.type(screen.getByLabelText("Номер источника"), "0009");
+    await user.type(screen.getByLabelText("Источник"), "Сварочный пост");
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(createEmissionSourceMock).toHaveBeenCalled());
+    expect(createEmissionSourceMock.mock.calls[0][0]).toMatchObject({
+      facility_id: populatedFacilities[0].id,
+      source_number: "0009",
+      name: "Сварочный пост",
+      kind: "organized",
+    });
+    expect(await screen.findByText("Сварочный пост")).toBeInTheDocument();
   });
 
   it("журнал учёта отходов открывается третьей секцией", async () => {

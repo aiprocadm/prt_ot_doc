@@ -10,7 +10,10 @@ import { disciplineIncidentsStat } from "@/components/common/disciplineIncidents
 import { RegistryTable } from "@/components/common/RegistryTable";
 import { Button } from "@/components/ui/button";
 import { EcologyDeadlineFormDialog } from "@/features/ecology/EcologyDeadlineFormDialog";
+import { EcologyEmissionNormFormDialog } from "@/features/ecology/EcologyEmissionNormFormDialog";
+import { EcologyEmissionSourceFormDialog } from "@/features/ecology/EcologyEmissionSourceFormDialog";
 import { EcologyFacilityFormDialog } from "@/features/ecology/EcologyFacilityFormDialog";
+import { EcologyWasteMovementFormDialog } from "@/features/ecology/EcologyWasteMovementFormDialog";
 import { EcologyWastePassportFormDialog } from "@/features/ecology/EcologyWastePassportFormDialog";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { useLocalRegistry } from "@/hooks/useLocalRegistry";
@@ -503,6 +506,24 @@ const EcologyPage = () => {
       ) : null}
       {section === "journal" && !loading && !error ? (
         <>
+          {/*
+            Срез-100: записать движение можно только по заведённому паспорту —
+            без паспортов кнопка не нужна, выбирать в ней нечего.
+          */}
+          {data.passports.length > 0 ? (
+            <div>
+              <EcologyWasteMovementFormDialog
+                passports={data.passports}
+                onSubmitted={() => void reload()}
+                trigger={<Button>Записать движение</Button>}
+              />
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Движения записываются по паспорту отхода: сначала заведите паспорт
+              в секции «Паспорта отходов».
+            </p>
+          )}
           {movementRegistry.total === 0 ? (
             <EmptyState
               title="Журнал учёта отходов пуст"
@@ -537,6 +558,22 @@ const EcologyPage = () => {
                   cell: ({ row }) =>
                     row.original.contract_id ? "по договору" : "—",
                 },
+                {
+                  id: "actions",
+                  header: "Действия",
+                  cell: ({ row }) => (
+                    <EcologyWasteMovementFormDialog
+                      passports={data.passports}
+                      initialData={row.original}
+                      onSubmitted={() => void reload()}
+                      trigger={
+                        <Button variant="ghost" size="sm">
+                          Изменить
+                        </Button>
+                      }
+                    />
+                  ),
+                },
               ]}
               data={movementRegistry.pagedItems}
               pageIndex={movementRegistry.pageIndex}
@@ -563,6 +600,33 @@ const EcologyPage = () => {
             разрешением: платформа их не рассчитывает и хранит как внесённые.
             Пустой срок разрешения означает «бессрочно», а не «просрочено».
           </p>
+          {/*
+            Срез-100: источник заводится на объекте НВОС, норматив — на
+            источнике. Поэтому кнопки появляются только тогда, когда есть из
+            чего выбирать: иначе форма предлагала бы пустой список.
+          */}
+          <div className="flex flex-wrap gap-2">
+            {data.facilities.length > 0 ? (
+              <EcologyEmissionSourceFormDialog
+                facilities={data.facilities}
+                onSubmitted={() => void reload()}
+                trigger={<Button>Завести источник</Button>}
+              />
+            ) : null}
+            {data.sources.length > 0 ? (
+              <EcologyEmissionNormFormDialog
+                sources={data.sources}
+                onSubmitted={() => void reload()}
+                trigger={<Button>Внести норматив</Button>}
+              />
+            ) : null}
+          </div>
+          {data.facilities.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Источники заводятся на объекте НВОС: сначала внесите объект в
+              секции «Объекты НВОС».
+            </p>
+          ) : null}
           {sourceRegistry.total === 0 ? (
             <EmptyState
               title="Источники выбросов не заведены"
@@ -598,6 +662,22 @@ const EcologyPage = () => {
                     row.original.norms_count > 0
                       ? `${row.original.norms_count}`
                       : "нет",
+                },
+                {
+                  id: "actions",
+                  header: "Действия",
+                  cell: ({ row }) => (
+                    <EcologyEmissionSourceFormDialog
+                      facilities={data.facilities}
+                      initialData={row.original}
+                      onSubmitted={() => void reload()}
+                      trigger={
+                        <Button variant="ghost" size="sm">
+                          Изменить
+                        </Button>
+                      }
+                    />
+                  ),
                 },
               ]}
               data={sourceRegistry.pagedItems}
@@ -637,6 +717,22 @@ const EcologyPage = () => {
                   accessorKey: "validity_status_label",
                   header: "Состояние",
                   cell: ({ row }) => row.original.validity_status_label,
+                },
+                {
+                  id: "actions",
+                  header: "Действия",
+                  cell: ({ row }) => (
+                    <EcologyEmissionNormFormDialog
+                      sources={data.sources}
+                      initialData={row.original}
+                      onSubmitted={() => void reload()}
+                      trigger={
+                        <Button variant="ghost" size="sm">
+                          Изменить
+                        </Button>
+                      }
+                    />
+                  ),
                 },
               ]}
               data={normRegistry.pagedItems}
