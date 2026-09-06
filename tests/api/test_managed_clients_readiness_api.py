@@ -25,6 +25,8 @@ import pytest
 from httpx import AsyncClient
 
 from app.db.session import AsyncSessionLocal
+from app.domains.managed_clients.attention import SignalKind
+from app.domains.managed_clients.attention_service import collect_portfolio_attention
 from app.domains.managed_clients.lifecycle import ContractStatus, ManagedClientMode
 from app.models.briefings import BriefingEntry, BriefingJournal
 from app.models.fire_safety import FireSafetyEquipment
@@ -304,6 +306,16 @@ class TestClientReadiness:
         )
         # два средства своей площадки + один ПТМ; просрочено — по одному
         assert (after["required"], after["lapsed"], after["expiring"]) == (3, 2, 0)
+
+        # Срез-87: сигнал «Просрочки по ПБ» в сводке портфеля — та же формула,
+        # что и «просрочено» светофора клиента; расхождение — две правды.
+        async with await _trusted() as session:
+            portfolio = await collect_portfolio_attention(
+                session, tenant_id=tenant.id, today=TODAY, now=NOW, horizon_days=30
+            )
+        mine = next(r for r in portfolio if r.client_id == mcid)
+        fire = next(s for s in mine.signals if s.kind is SignalKind.FIRE_SAFETY_OVERDUE)
+        assert fire.count == after["lapsed"] == 2
 
     async def test_клиент_без_площадок_считает_только_инструктажи_людей(
         self, async_client: AsyncClient, make_auth_headers, served_client

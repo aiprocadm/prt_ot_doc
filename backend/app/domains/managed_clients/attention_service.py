@@ -11,7 +11,9 @@
 ``not_aggregated`` вместо тихого нуля.
 
 **Один запрос на сигнал, а не на клиента.** Портфель бывает на сотню клиентов;
-запрос в цикле дал бы сотни round-trip'ов на каждое открытие экрана.
+запрос в цикле дал бы сотни round-trip'ов на каждое открытие экрана. Просрочки
+ПБ (срез-87) поэтому считает ``collect_fire_safety_overdue_by_company`` — по
+всем организациям разом, теми же слагаемыми, что светофор клиента.
 """
 
 from __future__ import annotations
@@ -34,6 +36,7 @@ from app.models.master_data import Person
 from app.models.medical import MedicalExam
 from app.models.ppe import PPEIssue
 from app.models.training import TrainingEnrollment
+from app.services.discipline_fire_safety import collect_fire_safety_overdue_by_company
 from app.services.discipline_training import overdue_training_enrollment_where
 
 __all__ = ["DEDICATED_REASON", "collect_portfolio_attention"]
@@ -83,6 +86,7 @@ async def collect_portfolio_attention(
     ppe: dict[str, int] = {}
     training: dict[str, int] = {}
     contacts: dict[str, int] = {}
+    fire_safety: dict[str, int] = {}
 
     if company_ids:
         medical = await _count_by_company(
@@ -140,6 +144,9 @@ async def collect_portfolio_attention(
             )
             .group_by(Person.company_id),
         )
+        fire_safety = await collect_fire_safety_overdue_by_company(
+            session, tenant_id=tenant_id, company_ids=list(company_ids), today=today, now=now
+        )
 
     rows: list[ClientAttention] = []
     for client in clients:
@@ -182,6 +189,7 @@ async def collect_portfolio_attention(
                     SignalKind.PPE_OVERDUE: ppe.get(cid, 0),
                     SignalKind.TRAINING_OVERDUE: training.get(cid, 0),
                     SignalKind.CONTACTS_MISSING: contacts.get(cid, 0),
+                    SignalKind.FIRE_SAFETY_OVERDUE: fire_safety.get(cid, 0),
                 },
                 contract_expiring=expiring,
             )
