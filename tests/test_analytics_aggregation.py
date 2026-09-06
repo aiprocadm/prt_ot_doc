@@ -13,12 +13,14 @@ read-models, which keeps the suite fast and deterministic.
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import select
 
-from app.models.models import Tenant
+from app.models.master_data import EmploymentStatus
+from app.models.models import PPEIssue, PPEIssueStatus, Tenant, TrainingCourse, TrainingPlan
+from app.modules.analytics.breakdown import compute_breakdown
 from app.modules.analytics.services import (
     AnalyticsAggregationService,
     DashboardFilters,
@@ -485,6 +487,79 @@ async def test_detailed_counters_returns_all_eleven_keys(sessionmaker) -> None:
     }
     # All zero on an empty tenant.
     assert all(value == 0 for value in counters.values())
+
+
+@pytest.mark.anyio
+async def test_detailed_counters_и_разбивка_уволенного_не_считают(
+    sessionmaker, data_factory
+) -> None:
+    """«Уволенный не в счёт» (BIZ-54-57 срез-96): просрочки обучения и СИЗ
+    уволенного и удалённого человека не идут ни в виджеты «просрочено», ни в
+    разбивку по организациям. План без человека (на организацию) считается."""
+    now = datetime.now(tz=timezone.utc)
+    yesterday = date.today() - timedelta(days=1)
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(slug="test", session=session)
+        company = await data_factory.create_company(
+            tenant=tenant, name="ООО Срез-96", session=session
+        )
+        here = await data_factory.create_person(
+            tenant=tenant, company=company, last_name="Работает", session=session
+        )
+        gone = await data_factory.create_person(
+            tenant=tenant,
+            company=company,
+            last_name="Уволен",
+            session=session,
+            employment_status=EmploymentStatus.TERMINATED,
+        )
+        erased = await data_factory.create_person(
+            tenant=tenant, company=company, last_name="Удалён", session=session, deleted_at=now
+        )
+        course = TrainingCourse(tenant_id=tenant.id, title="Курс-96")
+        session.add(course)
+        await session.flush()
+        for person in (here, gone, erased):
+            session.add(
+                TrainingPlan(
+                    tenant_id=tenant.id,
+                    company_id=company.id,
+                    course_id=course.id,
+                    person_id=person.id,
+                    due_date=yesterday,
+                )
+            )
+            session.add(
+                PPEIssue(
+                    tenant_id=tenant.id,
+                    person_id=person.id,
+                    item_name="Каска",
+                    quantity=1,
+                    status=PPEIssueStatus.ISSUED,
+                    issued_at=now - timedelta(days=400),
+                    expires_at=now - timedelta(days=30),
+                )
+            )
+        # План на организацию, без человека — остаётся в счёте.
+        session.add(
+            TrainingPlan(
+                tenant_id=tenant.id,
+                company_id=company.id,
+                course_id=course.id,
+                due_date=yesterday,
+            )
+        )
+        await session.commit()
+        tenant_id = str(tenant.id)
+        counters = await AnalyticsAggregationService(session, tenant_id).detailed_counters(
+            DashboardFilters()
+        )
+        breakdown = await compute_breakdown(session, tenant_id, "company")
+    assert counters["trainings_overdue"] == 2
+    assert counters["ppe_overdue"] == 1
+    row = next(item for item in breakdown["items"] if item["id"] == str(company.id))
+    assert row["trainings_overdue"] == 2
+    assert row["ppe_overdue"] == 1
 
 
 # =============================================================================

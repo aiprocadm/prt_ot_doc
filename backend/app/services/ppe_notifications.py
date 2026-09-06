@@ -18,6 +18,7 @@ from app.models.models import Outbox, PPEIssue
 from app.modules.ppe.lifecycle import ISSUE_STATUS_ISSUED
 from app.services.events import EventType
 from app.services.outbox import OutboxService
+from app.services.person_scope import employed_record_where
 
 _NOTIFY_STATUSES = {ContingentItemStatus.DUE_SOON, ContingentItemStatus.OVERDUE}
 
@@ -44,12 +45,17 @@ async def _outbox_key_exists(session: AsyncSession, *, tenant_id: str, key: str)
 async def notify_replacement_due(
     session: AsyncSession, *, tenant_id: str, within_days: int = 30
 ) -> int:
-    """Enqueue PPE_REPLACEMENT_DUE for due-soon/overdue active issues. Returns count."""
+    """Enqueue PPE_REPLACEMENT_DUE for due-soon/overdue active issues. Returns count.
+
+    «Уволенный не в счёт» (BIZ-54-57 срез-96): напоминание о замене СИЗ
+    уволенного — шум, менять ему нечего; его выдача остаётся в реестре.
+    """
     stmt = select(PPEIssue).where(
         PPEIssue.tenant_id == tenant_id,
         PPEIssue.deleted_at.is_(None),
         PPEIssue.status == ISSUE_STATUS_ISSUED,
         PPEIssue.expires_at.is_not(None),
+        employed_record_where(PPEIssue, tenant_id),
     )
     issues = list((await session.execute(stmt)).scalars().all())
 

@@ -56,6 +56,7 @@ from app.services.discipline_attention import (
     overdue_by_discipline,
 )
 from app.services.discipline_incidents import open_incidents_where
+from app.services.person_scope import employed_person_where, employed_record_where
 
 BREAKDOWN_DIMENSIONS = ("company", "site", "contractor", "discipline")
 BREAKDOWN_ROW_CAP = 200
@@ -148,6 +149,8 @@ async def compute_breakdown(
     trainings: dict[str, int] = {}
     ppe: dict[str, int] = {}
     if dimension == "company":
+        # «Уволенный не в счёт» (BIZ-54-57 срез-96) — те же цифры, что в
+        # виджете «просрочено», только по организациям.
         trainings, _ = await _grouped_counts(
             session,
             select(TrainingPlan.company_id, func.count())
@@ -156,6 +159,7 @@ async def compute_breakdown(
                 TrainingPlan.deleted_at.is_(None),
                 TrainingPlan.due_date.is_not(None),
                 TrainingPlan.due_date < today,
+                employed_record_where(TrainingPlan, tenant_id),
             )
             .group_by(TrainingPlan.company_id),
         )
@@ -170,6 +174,7 @@ async def compute_breakdown(
                 PPEIssue.status == PPEIssueStatus.ISSUED.value,
                 PPEIssue.expires_at.is_not(None),
                 func.date(PPEIssue.expires_at) < today,
+                *employed_person_where(),
             )
             .group_by(Person.company_id),
         )
