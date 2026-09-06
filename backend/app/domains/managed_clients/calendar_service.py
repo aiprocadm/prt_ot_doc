@@ -19,6 +19,11 @@
 пустая» (``discipline_road_safety.admitted_driver_where``), что сигнал
 ``driver_license_expired`` сводки внимания, светофор клиента и общий
 календарь: отстранённый водитель и удостоверение без срока — не дедлайн.
+
+**Сроки ПБ (срез-92).** Собирает ``discipline_fire_safety
+.collect_fire_safety_deadlines_by_company`` — тем же отбором, что сигнал
+``fire_safety_overdue`` сводки: площадки организаций клиентов и их
+работающие люди; здесь только склейка в события.
 """
 
 from __future__ import annotations
@@ -43,6 +48,7 @@ from app.models.medical import MedicalExam
 from app.models.ppe import PPEIssue
 from app.models.road_safety import Driver
 from app.models.training import TrainingEnrollment
+from app.services.discipline_fire_safety import collect_fire_safety_deadlines_by_company
 from app.services.discipline_road_safety import admitted_driver_where
 from app.services.discipline_training import pending_training_enrollment_where
 from app.services.person_scope import employed_person_where
@@ -229,6 +235,23 @@ async def collect_portfolio_deadlines(
                     client_id=client.id,
                     client_name=client.name,
                     subject=_fio(person),
+                    responsible_person_id=client.responsible_person_id,
+                    today=today,
+                )
+            )
+
+        fire_items = await collect_fire_safety_deadlines_by_company(
+            session, tenant_id=tenant_id, company_ids=list(company_ids), since=since, until=until
+        )
+        for item in fire_items:
+            client = by_company[item.company_id]
+            events.append(
+                build_event(
+                    kind=DeadlineKind.FIRE_SAFETY,
+                    due_date=item.due_date,
+                    client_id=client.id,
+                    client_name=client.name,
+                    subject=item.subject,
                     responsible_person_id=client.responsible_person_id,
                     today=today,
                 )

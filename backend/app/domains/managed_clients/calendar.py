@@ -17,6 +17,12 @@
 как у медосмотра: истёкшее удостоверение — это не «нарушение к проверке», а
 остановка перевозок (тот же ряд, что сигнал ``driver_license_expired`` в
 сводке внимания, срез-88): специалист видел сигнал, но не видел даты.
+
+Пожарная безопасность (срез-92, разд. 54.1) — один вид на все слагаемые
+(перезарядка и поверка средств, тренировки, пересмотр документов,
+противопожарные инструктажи), как один сигнал ``fire_safety_overdue`` в
+сводке: «что именно и где» — в предмете события. Вес — как у СИЗ и
+обучения: нарушение к приходу МЧС, но не отстранение человека.
 """
 
 from __future__ import annotations
@@ -44,6 +50,7 @@ class DeadlineKind(str, enum.Enum):
     TRAINING = "training"
     CONTRACT = "contract"
     DRIVER_LICENSE = "driver_license"
+    FIRE_SAFETY = "fire_safety"
 
 
 @dataclass(frozen=True)
@@ -60,6 +67,7 @@ DEADLINE_META: dict[DeadlineKind, DeadlineMeta] = {
     DeadlineKind.PPE: DeadlineMeta(title="Срок СИЗ", weight=3),
     DeadlineKind.TRAINING: DeadlineMeta(title="Обучение", weight=3),
     DeadlineKind.CONTRACT: DeadlineMeta(title="Договор", weight=2),
+    DeadlineKind.FIRE_SAFETY: DeadlineMeta(title="Пожарная безопасность", weight=3),
 }
 
 

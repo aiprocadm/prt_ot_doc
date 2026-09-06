@@ -64,19 +64,31 @@
 round-trip'ов. Слагаемые — те же, что у ``FireSafetyNumbers.overdue``
 (перезарядка, поверка, тренировки, документы, инструктажи), и предикаты у
 двух функций общие: второй экземпляр формулы разошёлся бы с первым.
+
+Календарь портфеля (срез-92, разд. 49.2) — те же слагаемые, но с ДАТОЙ:
+``collect_fire_safety_deadlines_by_company`` отдаёт каждый срок ПБ
+организаций клиентов в окне дат (просрочка + горизонт) с предметом «что
+именно и где». Отбор записей — тот же, что у сигнала (действующее средство
+площадки организации, тренировка без протокола, документ с датой
+пересмотра, инструктаж работающего человека по самой поздней записи
+человек × вид), поэтому просроченных в календаре столько же, сколько в
+сигнале — с двумя оговорками, общими для всего календаря: окно смотрит в
+прошлое на год, а «сегодня» в календаре ещё не просрочка (в сигнале срок
+инструктажа сравнивается с моментом ``now``).
 """
 
 from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.discipline_status import FireSafetyNumbers
-from app.core.disciplines import BRIEFING_TYPE_DISCIPLINE, Discipline
+from app.core.disciplines import BRIEFING_TYPE_DISCIPLINE, BRIEFING_TYPE_TITLES, Discipline
 from app.models.fire_safety import (
     FireDrill,
     FireMaintenanceRecord,
@@ -90,7 +102,9 @@ from app.services.person_scope import employed_person_where
 __all__ = [
     "FIRE_BRIEFING_TYPES",
     "FIRE_DUE_SOON_DAYS",
+    "FireSafetyDeadline",
     "collect_fire_briefing_numbers",
+    "collect_fire_safety_deadlines_by_company",
     "collect_fire_safety_numbers",
     "collect_fire_safety_overdue_by_company",
 ]
@@ -378,3 +392,170 @@ async def collect_fire_safety_overdue_by_company(
                 overdue[person_company[owner]] += 1
 
     return dict(overdue)
+
+
+@dataclass(frozen=True)
+class FireSafetyDeadline:
+    """Один датированный срок ПБ организации клиента — для календаря портфеля."""
+
+    company_id: str
+    due_date: date
+    #: «что именно и где»: «Перезарядка ОП-4 №1 (Склад)», «ПТМ: Иванов Иван».
+    subject: str
+
+
+def _person_fio(last: str | None, first: str | None, middle: str | None, fallback: str) -> str:
+    return " ".join(part for part in (last, first, middle) if part) or fallback
+
+
+async def collect_fire_safety_deadlines_by_company(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    company_ids: Sequence[str],
+    since: date,
+    until: date,
+) -> list[FireSafetyDeadline]:
+    """Сроки ПБ организаций клиентов в окне ``since..until`` — для календаря (срез-92).
+
+    Отбор записей — тот же, что у ``collect_fire_safety_overdue_by_company``:
+    действующие средства площадок организации (перезарядка и поверка —
+    два срока одного средства), тренировки без протокола, документы с датой
+    пересмотра, противопожарные инструктажи работающих людей — по самой
+    поздней записи человек × вид (перекрытая запись — не срок). Порядок —
+    дело календаря; здесь только факты.
+    """
+
+    if not company_ids:
+        return []
+    wanted = list(company_ids)
+    found: list[FireSafetyDeadline] = []
+
+    def _in_window(value: date | None) -> bool:
+        return value is not None and since <= value <= until
+
+    sites = (
+        await session.execute(
+            select(Site.id, Site.name, Site.company_id).where(
+                Site.tenant_id == tenant_id,
+                Site.company_id.in_(wanted),
+                Site.deleted_at.is_(None),
+            )
+        )
+    ).all()
+    site_company = {str(site_id): str(company_id) for site_id, _name, company_id in sites}
+    site_name = {str(site_id): str(name) for site_id, name, _company_id in sites}
+    if site_company:
+        site_ids = list(site_company)
+        units = (
+            (
+                await session.execute(
+                    select(FireSafetyEquipment).where(
+                        FireSafetyEquipment.tenant_id == tenant_id,
+                        FireSafetyEquipment.deleted_at.is_(None),
+                        FireSafetyEquipment.status == "active",
+                        FireSafetyEquipment.site_id.in_(site_ids),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for unit in units:
+            sid = str(unit.site_id)
+            where = f"{unit.label} ({site_name[sid]})"
+            if _in_window(unit.recharge_due):
+                found.append(
+                    FireSafetyDeadline(site_company[sid], unit.recharge_due, f"Перезарядка {where}")
+                )
+            if _in_window(unit.inspection_due):
+                found.append(
+                    FireSafetyDeadline(site_company[sid], unit.inspection_due, f"Поверка {where}")
+                )
+        drills = (
+            (
+                await session.execute(
+                    select(FireDrill).where(
+                        FireDrill.tenant_id == tenant_id,
+                        FireDrill.deleted_at.is_(None),
+                        FireDrill.site_id.in_(site_ids),
+                        FireDrill.held_on.is_(None),
+                        FireDrill.planned_on >= since,
+                        FireDrill.planned_on <= until,
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for drill in drills:
+            sid = str(drill.site_id)
+            found.append(
+                FireSafetyDeadline(
+                    site_company[sid],
+                    drill.planned_on,
+                    f"Тренировка «{drill.title}» ({site_name[sid]})",
+                )
+            )
+        documents = (
+            (
+                await session.execute(
+                    select(FireSafetyDocument).where(
+                        FireSafetyDocument.tenant_id == tenant_id,
+                        FireSafetyDocument.deleted_at.is_(None),
+                        FireSafetyDocument.site_id.in_(site_ids),
+                        FireSafetyDocument.review_due.is_not(None),
+                        FireSafetyDocument.review_due >= since,
+                        FireSafetyDocument.review_due <= until,
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for document in documents:
+            sid = str(document.site_id)
+            found.append(
+                FireSafetyDeadline(
+                    site_company[sid],
+                    document.review_due,
+                    f"Пересмотр «{document.title}» ({site_name[sid]})",
+                )
+            )
+
+    # люди — те же, что у сигнала и светофора клиента: «уволенный не в счёт» (срез-89)
+    people = (
+        await session.execute(
+            select(
+                Person.id, Person.company_id, Person.last_name, Person.first_name, Person.middle_name
+            ).where(
+                Person.tenant_id == tenant_id,
+                Person.company_id.in_(wanted),
+                *employed_person_where(),
+            )
+        )
+    ).all()
+    person_company = {str(pid): str(company_id) for pid, company_id, *_ in people}
+    person_name = {
+        str(pid): _person_fio(last, first, middle, str(pid))
+        for pid, _company_id, last, first, middle in people
+    }
+    if person_company:
+        latest = await latest_briefing_validity(
+            session,
+            tenant_id=tenant_id,
+            person_ids=list(person_company),
+            briefing_types=FIRE_BRIEFING_TYPES,
+        )
+        for (owner, briefing_type), value in latest.items():
+            if _in_window(value.date()):
+                found.append(
+                    FireSafetyDeadline(
+                        person_company[owner],
+                        value.date(),
+                        f"{BRIEFING_TYPE_TITLES.get(briefing_type, briefing_type)}: "
+                        f"{person_name[owner]}",
+                    )
+                )
+
+    return found

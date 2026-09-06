@@ -15,8 +15,10 @@ from app.domains.managed_clients.attention_service import collect_portfolio_atte
 from app.domains.managed_clients.calendar import CalendarFilters, DeadlineKind
 from app.domains.managed_clients.calendar_service import collect_portfolio_deadlines
 from app.domains.managed_clients.lifecycle import ContractStatus, ManagedClientMode
+from app.models.briefings import BriefingEntry, BriefingJournal
+from app.models.fire_safety import FireDrill, FireSafetyDocument, FireSafetyEquipment
 from app.models.managed_clients import ManagedClient
-from app.models.master_data import EmploymentStatus, Person
+from app.models.master_data import EmploymentStatus, Person, Site
 from app.models.medical import MedicalExam
 from app.models.ppe import PPEIssue
 from app.models.road_safety import Driver
@@ -121,6 +123,19 @@ async def test_collects_all_deadline_kinds(sessionmaker):
             )
         )
         session.add(_driver("p1", "77 АА 000001", days=9))
+        site = Site(tenant_id=_TENANT, company_id="comp-a", name="Склад")
+        session.add(site)
+        await session.flush()
+        session.add(
+            FireSafetyEquipment(
+                tenant_id=_TENANT,
+                site_id=site.id,
+                kind="extinguisher",
+                label="ОП-4",
+                status="active",
+                recharge_due=_TODAY + timedelta(days=11),
+            )
+        )
         await session.commit()
 
         events = await collect_portfolio_deadlines(
@@ -133,6 +148,7 @@ async def test_collects_all_deadline_kinds(sessionmaker):
         DeadlineKind.TRAINING,
         DeadlineKind.CONTRACT,
         DeadlineKind.DRIVER_LICENSE,
+        DeadlineKind.FIRE_SAFETY,
     }
     assert all(e.client_name == "Ромашка" for e in events)
     assert all(e.client_id == c.id for e in events)
@@ -330,6 +346,130 @@ async def test_driver_license_deadlines_of_admitted_drivers_only(sessionmaker):
         if e.kind is DeadlineKind.DRIVER_LICENSE and e.overdue and e.client_name == "Альфа"
     )
     assert signal.count == overdue_in_calendar == 1
+
+
+@pytest.mark.asyncio
+async def test_fire_safety_deadlines_of_client_sites_and_people(sessionmaker):
+    """Сроки ПБ в календаре — тем же отбором, что сигнал сводки (срез-92).
+
+    Сводка поднимала один сигнал ``fire_safety_overdue`` (срез-87), а календарь
+    дат ПБ не знал. Считаются действующие средства площадок организации
+    (перезарядка и поверка — два срока), тренировки без протокола, документы
+    с датой пересмотра, инструктажи работающих людей по самой поздней записи
+    человек × вид. Списанное, без площадки, проведённое, бессрочное,
+    перекрытое и у уволенного — нет. Просроченных столько же, сколько в сигнале.
+    """
+
+    async with sessionmaker() as session:
+        await _client(session, name="Альфа", company_id="comp-a")
+        await _client(session, name="Бета", company_id="comp-b")
+        await _person(session, pid="p-a1", company_id="comp-a", last="Петров", first="Пётр")
+        await _person(
+            session,
+            pid="p-a9",
+            company_id="comp-a",
+            last="Уволенный",
+            employment_status=EmploymentStatus.TERMINATED,
+        )
+        await _person(session, pid="p-b1", company_id="comp-b", last="Соседский")
+        own = Site(tenant_id=_TENANT, company_id="comp-a", name="Склад")
+        other = Site(tenant_id=_TENANT, company_id="comp-b", name="Чужой цех")
+        journal = BriefingJournal(
+            tenant_id=_TENANT, code="J-FIRE", title="Журнал ПБ", journal_type="fire"
+        )
+        session.add_all([own, other, journal])
+        await session.flush()
+
+        def _unit(site_id, label, *, recharge=None, inspection=None, status="active"):
+            return FireSafetyEquipment(
+                tenant_id=_TENANT,
+                site_id=site_id,
+                kind="extinguisher",
+                label=label,
+                status=status,
+                recharge_due=None if recharge is None else _TODAY + timedelta(days=recharge),
+                inspection_due=None if inspection is None else _TODAY + timedelta(days=inspection),
+            )
+
+        def _briefing(person_id, kind, days):
+            return BriefingEntry(
+                tenant_id=_TENANT,
+                briefing_journal_id=journal.id,
+                person_id=person_id,
+                briefing_type=kind,
+                briefing_date=_TODAY - timedelta(days=400),
+                valid_until=_NOW + timedelta(days=days),
+                status="completed",
+            )
+
+        session.add_all(
+            [
+                # Альфа: перезарядка просрочена, поверка того же средства — в окне
+                _unit(own.id, "ОП-4 №1", recharge=-3, inspection=4),
+                # за горизонтом, списанное, без площадки — нет
+                _unit(own.id, "ОП-4 №2", recharge=200),
+                _unit(own.id, "ОП-4 №3", recharge=-30, status="written_off"),
+                _unit(None, "ОП-4 №4", recharge=-30),
+                # тренировка не проведена к дате; проведённая — факт, не срок
+                FireDrill(
+                    tenant_id=_TENANT,
+                    site_id=own.id,
+                    kind="evacuation",
+                    title="Эвакуация",
+                    planned_on=_TODAY - timedelta(days=2),
+                ),
+                FireDrill(
+                    tenant_id=_TENANT,
+                    site_id=own.id,
+                    kind="evacuation",
+                    title="Проведена",
+                    planned_on=_TODAY - timedelta(days=9),
+                    held_on=_TODAY - timedelta(days=9),
+                ),
+                # документ с датой пересмотра в окне; бессрочный — нет
+                FireSafetyDocument(
+                    tenant_id=_TENANT,
+                    site_id=own.id,
+                    kind="instruction",
+                    title="Инструкция",
+                    review_due=_TODAY + timedelta(days=10),
+                ),
+                FireSafetyDocument(tenant_id=_TENANT, site_id=own.id, kind="order", title="Приказ"),
+                # ПТМ Петрова истёк; повторный — старый перекрыт новым в окне
+                _briefing("p-a1", "fire_ptm", -35),
+                _briefing("p-a1", "fire_repeat", -50),
+                _briefing("p-a1", "fire_repeat", 20),
+                # уволенный — не в счёт
+                _briefing("p-a9", "fire_ptm", -35),
+                # Бета: чужая площадка со своим сроком
+                _unit(other.id, "ОП-4 №5", recharge=1),
+            ]
+        )
+        await session.commit()
+
+        events = await collect_portfolio_deadlines(
+            session, tenant_id=_TENANT, today=_TODAY, horizon_days=30, now=_NOW
+        )
+        attention = await collect_portfolio_attention(
+            session, tenant_id=_TENANT, today=_TODAY, now=_NOW, horizon_days=30
+        )
+
+    assert [(e.client_name, e.subject, e.days_left) for e in events] == [
+        ("Альфа", "Пожарно-технический минимум (ПТМ): Петров Пётр", -35),
+        ("Альфа", "Перезарядка ОП-4 №1 (Склад)", -3),
+        ("Альфа", "Тренировка «Эвакуация» (Склад)", -2),
+        ("Бета", "Перезарядка ОП-4 №5 (Чужой цех)", 1),
+        ("Альфа", "Поверка ОП-4 №1 (Склад)", 4),
+        ("Альфа", "Пересмотр «Инструкция» (Склад)", 10),
+        ("Альфа", "Противопожарный повторный: Петров Пётр", 20),
+    ]
+    assert all(e.kind is DeadlineKind.FIRE_SAFETY for e in events)
+    assert all(e.title == "Пожарная безопасность" for e in events)
+    # паритет со сводкой внимания: просроченных в календаре столько же, сколько в сигнале
+    alpha = next(row for row in attention if row.client_name == "Альфа")
+    signal = next(s for s in alpha.signals if s.kind is SignalKind.FIRE_SAFETY_OVERDUE)
+    overdue_in_calendar = sum(1 for e in events if e.overdue and e.client_name == "Альфа")
+    assert signal.count == overdue_in_calendar == 3
 
 
 @pytest.mark.asyncio
