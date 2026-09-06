@@ -15,19 +15,26 @@ from app.models.models import (
     BriefingTemplate,
     CalendarEvent,
     ComplianceDeadline,
+    EmploymentStatus,
     Inspection,
     InspectionStatus,
     InspectionType,
     MedicalExam,
+    MedicalExamKind,
+    MedicalReferral,
     Permit,
     PermitStatus,
     PPEIssue,
     PPEIssueStatus,
     RoleEnum,
+    TrainingCertificate,
     TrainingCourse,
+    TrainingEnrollment,
+    TrainingProgram,
     TrainingSession,
     TrainingSessionStatus,
 )
+from app.models.road_safety import Driver
 from app.services.calendar_aggregator import (
     ALL_SOURCES,
     CalendarAggregatorService,
@@ -560,6 +567,169 @@ class TestCalendarAggregatorService:
         assert len(windowed.items) == 1
         assert by_source["compliance_deadline"].count == 1
         assert windowed.total == 1
+
+    async def test_terminated_or_deleted_person_is_neither_listed_nor_counted(
+        self,
+        test_db_session: AsyncSession,
+        data_factory: TestDataFactory,
+    ) -> None:
+        """«Уволенный не в счёт» (BIZ-54-57 срез-93) — во всех поимённых источниках.
+
+        До среза общий календарь людей не отбирал вовсе: истёкший медосмотр
+        уволенного горел в Центре внимания и у руководителя (разд. 57.2/57.4)
+        и получал напоминания, хотя портфель, светофоры и карточка сотрудника
+        его уже не считали. Записи без человека (журнал, площадка) остаются.
+        """
+
+        tenant = await data_factory.ensure_tenant(session=test_db_session)
+        company = await data_factory.create_company(tenant=tenant, session=test_db_session)
+        site = await data_factory.create_site(
+            tenant=tenant, company=company, session=test_db_session
+        )
+        here = await data_factory.create_person(
+            tenant=tenant, company=company, session=test_db_session, last_name="Работающий"
+        )
+        gone = await data_factory.create_person(
+            tenant=tenant,
+            company=company,
+            session=test_db_session,
+            last_name="Уволенный",
+            employment_status=EmploymentStatus.TERMINATED,
+        )
+        erased = await data_factory.create_person(
+            tenant=tenant,
+            company=company,
+            session=test_db_session,
+            last_name="Удалённый",
+            deleted_at=datetime.now(timezone.utc),
+        )
+
+        today = date.today()
+        now = datetime.now(timezone.utc)
+        course = TrainingCourse(tenant_id=tenant.id, title="Курс", duration_hours=8)
+        program = TrainingProgram(
+            tenant_id=tenant.id, code="ОТ-1", title="Программа", category="ot", kind="program"
+        )
+        template = BriefingTemplate(
+            tenant_id=tenant.id, code="bt-r", title="Повторный", briefing_type="repeat"
+        )
+        journal = BriefingJournal(
+            tenant_id=tenant.id, code="bj-r", title="Журнал", journal_type="repeat"
+        )
+        test_db_session.add_all([course, program, template, journal])
+        await test_db_session.flush()
+
+        # У каждого из троих — по просроченной записи в каждом поимённом источнике.
+        for person in (here, gone, erased):
+            test_db_session.add_all(
+                [
+                    MedicalExam(
+                        tenant_id=tenant.id,
+                        person_id=person.id,
+                        exam_type="periodic",
+                        exam_date=today - timedelta(days=400),
+                        valid_until=today - timedelta(days=10),
+                        conclusion="fit",
+                    ),
+                    MedicalReferral(
+                        tenant_id=tenant.id,
+                        person_id=person.id,
+                        exam_kind=MedicalExamKind.PERIODIC,
+                        due_at=today - timedelta(days=5),
+                    ),
+                    PPEIssue(
+                        tenant_id=tenant.id,
+                        person_id=person.id,
+                        item_name="Каска",
+                        quantity=1,
+                        issued_at=now - timedelta(days=10),
+                        expires_at=now - timedelta(days=2),
+                        status=PPEIssueStatus.ISSUED,
+                    ),
+                    TrainingSession(
+                        tenant_id=tenant.id,
+                        person_id=person.id,
+                        course_id=course.id,
+                        status=TrainingSessionStatus.SCHEDULED,
+                        started_at=now - timedelta(days=5),
+                    ),
+                    TrainingCertificate(
+                        tenant_id=tenant.id,
+                        number=f"УД-{person.last_name}",
+                        training_program_id=program.id,
+                        person_id=person.id,
+                        issued_at=today - timedelta(days=375),
+                        valid_until=today - timedelta(days=10),
+                    ),
+                    TrainingEnrollment(
+                        tenant_id=tenant.id,
+                        person_id=person.id,
+                        training_program_id=program.id,
+                        status="assigned",
+                        due_at=now - timedelta(days=1),
+                    ),
+                    BriefingEntry(
+                        tenant_id=tenant.id,
+                        briefing_journal_id=journal.id,
+                        briefing_template_id=template.id,
+                        person_id=person.id,
+                        site_id=site.id,
+                        briefing_type="repeat",
+                        briefing_date=now - timedelta(days=400),
+                        valid_until=now - timedelta(days=30),
+                        status="signed",
+                    ),
+                    Driver(
+                        tenant_id=tenant.id,
+                        person_id=person.id,
+                        license_number=f"77 {person.last_name}",
+                        categories=["B"],
+                        license_due=today - timedelta(days=3),
+                    ),
+                ]
+            )
+        # Записи без человека: про журнал и программу, а не про сотрудника.
+        test_db_session.add_all(
+            [
+                BriefingEntry(
+                    tenant_id=tenant.id,
+                    briefing_journal_id=journal.id,
+                    briefing_template_id=template.id,
+                    person_id=None,
+                    site_id=site.id,
+                    briefing_type="repeat",
+                    briefing_date=now - timedelta(days=400),
+                    valid_until=now - timedelta(days=30),
+                    status="signed",
+                ),
+                TrainingCertificate(
+                    tenant_id=tenant.id,
+                    number="УД-без-человека",
+                    training_program_id=program.id,
+                    person_id=None,
+                    issued_at=today - timedelta(days=375),
+                    valid_until=today - timedelta(days=10),
+                ),
+            ]
+        )
+        await test_db_session.commit()
+
+        service = CalendarAggregatorService(tenant_id=str(tenant.id), db=test_db_session)
+        response = await service.list_events()
+
+        counts = {row.source_type: (row.count, row.overdue_count) for row in response.by_source}
+        assert counts["medical_exam"] == (1, 1)
+        assert counts["medical_referral"] == (1, 1)
+        assert counts["ppe_issue"] == (1, 1)
+        assert counts["training_session"] == (1, 1)
+        assert counts["training_certificate"] == (2, 2), "сертификат без человека остаётся"
+        assert counts["training_enrollment"] == (1, 1)
+        assert counts["briefing_entry"] == (2, 2), "запись журнала без человека остаётся"
+        assert counts["road_safety_driver"] == (1, 1)
+        assert {item.person_id for item in response.items if item.person_id} == {here.id}
+        # Разбивка инструктажей по видам (срез-58) — теми же людьми.
+        briefings = next(row for row in response.by_source if row.source_type == "briefing_entry")
+        assert briefings.overdue_by_kind == {"repeat": 2}
 
     async def test_unknown_source_type_raises(
         self,

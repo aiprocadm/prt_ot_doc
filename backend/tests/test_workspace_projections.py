@@ -22,6 +22,7 @@ from app.models.industrial_safety import HazardousFacility, TechnicalDevice
 from app.models.medical import MedicalExam
 from app.models.models import (
     ComplianceDeadline,
+    EmploymentStatus,
     OfflineSyncBatch,
     Person,
     PPEIssue,
@@ -244,6 +245,43 @@ async def test_attention_shows_overdue_medical_with_discipline(db_session) -> No
     assert medical_items[0].severity == "critical"
     assert medical_items[0].item_type == "medical_exam"
     assert any("Просрочено по дисциплинам" in rec for rec in payload.recommendations)
+
+
+@pytest.mark.asyncio
+async def test_attention_ignores_terminated_person(db_session) -> None:
+    """«Уволенный не в счёт» (BIZ-54-57 срез-93): ни в ленте, ни в разрезе, ни в блокерах.
+
+    Общий календарь под Центром внимания людей не отбирал: истёкший медосмотр
+    уволенного горел красным, а блокер «неполные контакты» считал того, кому
+    контакты уже не нужны, — хотя портфель и светофоры того же арендатора
+    (срезы 89–92) уволенных не считают.
+    """
+
+    tenant = SimpleNamespace(id="tenant-1", slug="tenant-a", name="Tenant A", is_active=True)
+    access = _access("user-1", "admin", tenant.id, tenant.slug)
+    today = datetime.now(timezone.utc).date()
+
+    here = _person(tenant.id, email="here@tenant.test", phone="+7 900 000-00-01")
+    gone = _person(tenant.id, employment_status=EmploymentStatus.TERMINATED)
+    db_session.add_all([here, gone])
+    await db_session.flush()
+    db_session.add(
+        MedicalExam(
+            tenant_id=tenant.id,
+            person_id=gone.id,
+            exam_type="периодический",
+            exam_date=today - timedelta(days=400),
+            valid_until=today - timedelta(days=35),
+        )
+    )
+    await db_session.commit()
+
+    payload = await workspace_attention(tenant=tenant, session=db_session, access=access)
+
+    assert [item for item in payload.items if item.discipline == "medical"] == []
+    # Медосмотры вне редакции и без фактов — строки нет вовсе (срез-56), с фактом был бы 1.
+    assert [row.code for row in payload.disciplines if row.overdue] == []
+    assert "employees_missing_contacts" not in {blocker.code for blocker in payload.blockers}
 
 
 @pytest.mark.asyncio
