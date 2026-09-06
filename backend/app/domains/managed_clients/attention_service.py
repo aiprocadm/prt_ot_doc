@@ -16,6 +16,12 @@
 всем организациям разом, теми же слагаемыми, что светофор клиента; истёкшие
 удостоверения водителей (срез-88) — одним сгруппированным запросом по правилу
 ``discipline_road_safety.expired_license_where``.
+
+**Уволенный не в счёт (срез-89).** Все поимённые сигналы берут людей одним
+правилом ``person_scope.employed_person_where`` — тем же, что светофор
+клиента, площадка 360° и карточка сотрудника: истёкший медосмотр уволенного
+— история, а не разрыв, и портфель не должен гореть там, где светофор того
+же клиента чист.
 """
 
 from __future__ import annotations
@@ -34,7 +40,7 @@ from app.domains.managed_clients.attention import (
 )
 from app.domains.managed_clients.lifecycle import ManagedClientMode, is_contract_expiring
 from app.models.managed_clients import ManagedClient
-from app.models.master_data import EmploymentStatus, Person
+from app.models.master_data import Person
 from app.models.medical import MedicalExam
 from app.models.ppe import PPEIssue
 from app.models.road_safety import Driver
@@ -42,6 +48,7 @@ from app.models.training import TrainingEnrollment
 from app.services.discipline_fire_safety import collect_fire_safety_overdue_by_company
 from app.services.discipline_road_safety import expired_license_where
 from app.services.discipline_training import overdue_training_enrollment_where
+from app.services.person_scope import employed_person_where
 
 __all__ = ["DEDICATED_REASON", "collect_portfolio_attention"]
 
@@ -104,7 +111,7 @@ async def collect_portfolio_attention(
                 MedicalExam.deleted_at.is_(None),
                 MedicalExam.valid_until < today,
                 Person.company_id.in_(company_ids),
-                Person.deleted_at.is_(None),
+                *employed_person_where(),
             )
             .group_by(Person.company_id),
         )
@@ -121,7 +128,7 @@ async def collect_portfolio_attention(
                 PPEIssue.expires_at.is_not(None),
                 PPEIssue.expires_at < now,
                 Person.company_id.in_(company_ids),
-                Person.deleted_at.is_(None),
+                *employed_person_where(),
             )
             .group_by(Person.company_id),
         )
@@ -134,7 +141,7 @@ async def collect_portfolio_attention(
                 # Формула просрочки одна с общим календарём (срез-77).
                 *overdue_training_enrollment_where(tenant_id, now),
                 Person.company_id.in_(company_ids),
-                Person.deleted_at.is_(None),
+                *employed_person_where(),
             )
             .group_by(Person.company_id),
         )
@@ -143,7 +150,7 @@ async def collect_portfolio_attention(
             select(Person.company_id, func.count())
             .where(
                 Person.tenant_id == tenant_id,
-                Person.deleted_at.is_(None),
+                *employed_person_where(),
                 Person.company_id.in_(company_ids),
                 or_(Person.email.is_(None), Person.phone.is_(None)),
             )
@@ -159,11 +166,10 @@ async def collect_portfolio_attention(
             .join(Person, Person.id == Driver.person_id)
             .where(
                 # Только допущенные водители — одно правило со светофором клиента
-                # и календарём (срез-88); уволенный светофору клиента не виден.
+                # и календарём (срез-88).
                 *expired_license_where(tenant_id, today),
                 Person.company_id.in_(company_ids),
-                Person.deleted_at.is_(None),
-                Person.employment_status != EmploymentStatus.TERMINATED,
+                *employed_person_where(),
             )
             .group_by(Person.company_id),
         )
