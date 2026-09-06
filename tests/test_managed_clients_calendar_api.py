@@ -14,7 +14,7 @@ from app.domains.managed_clients.calendar import CalendarFilters, DeadlineKind
 from app.domains.managed_clients.calendar_service import collect_portfolio_deadlines
 from app.domains.managed_clients.lifecycle import ContractStatus, ManagedClientMode
 from app.models.managed_clients import ManagedClient
-from app.models.master_data import Person
+from app.models.master_data import EmploymentStatus, Person
 from app.models.medical import MedicalExam
 from app.models.ppe import PPEIssue
 from app.models.training import TrainingEnrollment
@@ -52,7 +52,7 @@ async def _client(session, *, name, company_id=None, mode=ManagedClientMode.LIGH
     return row
 
 
-async def _person(session, *, pid, company_id, last="Иванов", first="Иван"):
+async def _person(session, *, pid, company_id, last="Иванов", first="Иван", **over):
     row = Person(
         id=pid,
         tenant_id=_TENANT,
@@ -61,6 +61,7 @@ async def _person(session, *, pid, company_id, last="Иванов", first="Ив�
         last_name=last,
         email="a@b.c",
         phone="+7",
+        **over,
     )
     session.add(row)
     await session.flush()
@@ -201,6 +202,53 @@ async def test_returned_ppe_has_no_deadline(sessionmaker):
             session, tenant_id=_TENANT, today=_TODAY, horizon_days=30, now=_NOW
         )
     assert events == []
+
+
+@pytest.mark.asyncio
+async def test_terminated_person_has_no_deadlines(sessionmaker):
+    """Уволенный — не дедлайн, а история: одно правило со сводкой внимания (срез-90).
+
+    До среза календарь брал людей по ``deleted_at`` и показывал «просрочен
+    медосмотр» у уволенного, хотя сводка внимания (срез-89) и светофор того же
+    клиента про него молчат; нагрузка специалиста складывала обе цифры на одном
+    экране.
+    """
+
+    async with sessionmaker() as session:
+        await _client(session, name="Ромашка", company_id="comp-a")
+        await _person(
+            session,
+            pid="p-gone",
+            company_id="comp-a",
+            last="Ушедший",
+            employment_status=EmploymentStatus.TERMINATED,
+        )
+        session.add(_med(person_id="p-gone", valid_until=_TODAY - timedelta(days=5)))
+        session.add(
+            PPEIssue(
+                tenant_id=_TENANT,
+                person_id="p-gone",
+                item_name="Каска",
+                expires_at=_at(_TODAY + timedelta(days=2)),
+            )
+        )
+        session.add(
+            TrainingEnrollment(
+                tenant_id=_TENANT,
+                person_id="p-gone",
+                training_program_id="prog-1",
+                status="assigned",
+                due_at=_at(_TODAY - timedelta(days=1)),
+            )
+        )
+        await _person(session, pid="p-here", company_id="comp-a", last="Работающий")
+        session.add(_med(person_id="p-here", valid_until=_TODAY + timedelta(days=3)))
+        await session.commit()
+
+        events = await collect_portfolio_deadlines(
+            session, tenant_id=_TENANT, today=_TODAY, horizon_days=30, now=_NOW
+        )
+    assert [(e.kind, e.subject) for e in events] == [(DeadlineKind.MEDICAL, "Работающий Иван")]
 
 
 @pytest.mark.asyncio
