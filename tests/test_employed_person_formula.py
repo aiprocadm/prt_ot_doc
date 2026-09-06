@@ -7,7 +7,9 @@
 чист. Срез-89: формула живёт в ``services/person_scope`` и одна.
 
 ЧТО ПРОВЕРЯЕТСЯ: сторож — никто в ``backend/app`` не пишет условие
-«не уволен» по SQL сам; состав условий.
+«не уволен» по SQL сам; состав условий. Срез-95: и условие на запись
+(``not_in(not_employed_person_ids(...))``) собирает только ``person_scope`` —
+иначе где-то забудут про пустой ``person_id``, и запись без человека пропадёт.
 """
 
 from __future__ import annotations
@@ -15,7 +17,13 @@ from __future__ import annotations
 import pathlib
 import re
 
-from app.services.person_scope import employed_person_where, not_employed_person_ids
+from app.models.briefings import BriefingEntry
+from app.models.medical import MedicalExam
+from app.services.person_scope import (
+    employed_person_where,
+    employed_record_where,
+    not_employed_person_ids,
+)
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 APP = REPO / "backend" / "app"
@@ -24,6 +32,7 @@ APP = REPO / "backend" / "app"
 FORMULA_HOME = "services/person_scope.py"
 
 _CONDITION = re.compile(r"employment_status\s*!=\s*(EmploymentStatus\.TERMINATED|\"terminated\")")
+_RECORD_CONDITION = re.compile(r"\.(not_in|in_)\(\s*not_employed_person_ids\(")
 
 
 def test_сторож_условие_не_уволен_пишется_один_раз() -> None:
@@ -55,3 +64,41 @@ def test_кого_не_считать_это_отрицание_той_же_фо
     sql = str(not_employed_person_ids("tenant-1").compile(compile_kwargs={"literal_binds": True}))
     assert "person.tenant_id = 'tenant-1'" in sql
     assert "NOT (person.deleted_at IS NULL AND person.employment_status !=" in sql
+
+
+def test_сторож_условие_на_запись_собирает_только_person_scope() -> None:
+    """Срез-95: ``Model.person_id.not_in(not_employed_person_ids(...))`` руками — снова
+    копии, только другой формы; берите ``employed_record_where``."""
+
+    offenders: list[str] = []
+    for path in APP.rglob("*.py"):
+        rel = path.relative_to(APP).as_posix()
+        if rel.startswith("migrations/") or rel == FORMULA_HOME:
+            continue
+        if _RECORD_CONDITION.search(path.read_text(encoding="utf-8")):
+            offenders.append(rel)
+    assert offenders == [], (
+        "условие на запись написано заново — возьмите "
+        f"employed_record_where из {FORMULA_HOME}: {offenders}"
+    )
+
+
+def test_условие_на_запись_помнит_про_пустой_person_id() -> None:
+    """Обязательный ``person_id`` — только NOT IN; необязательный — и записи без человека."""
+
+    strict = str(
+        employed_record_where(MedicalExam, "tenant-1").compile(
+            compile_kwargs={"literal_binds": True}
+        )
+    )
+    loose = str(
+        employed_record_where(BriefingEntry, "tenant-1").compile(
+            compile_kwargs={"literal_binds": True}
+        )
+    )
+    assert strict.startswith("(medical_exam.person_id NOT IN (SELECT person.id")
+    assert "person.tenant_id = 'tenant-1'" in strict
+    assert "NOT (person.deleted_at IS NULL AND person.employment_status !=" in strict
+    assert loose.startswith(
+        "briefing_entries.person_id IS NULL OR (briefing_entries.person_id NOT IN"
+    )

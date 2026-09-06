@@ -42,7 +42,7 @@ from __future__ import annotations
 from datetime import date, datetime, time, timezone
 from typing import Any, Iterable
 
-from sqlalchemy import Select, and_, func, or_, select
+from sqlalchemy import Select, and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.disciplines import BRIEFING_TYPE_TITLES
@@ -93,7 +93,7 @@ from app.services.discipline_training import (
     overdue_training_enrollment_where,
     pending_training_enrollment_where,
 )
-from app.services.person_scope import not_employed_person_ids
+from app.services.person_scope import employed_record_where
 
 __all__ = [
     "CalendarAggregatorService",
@@ -2745,12 +2745,10 @@ class CalendarAggregatorService:
     def _employed_only(self, model: type[Any]) -> Any:
         """«Уволенный не в счёт» (срез-93): запись удалённого или уволенного
         человека в календарь не попадает. Запись без человека остаётся — она
-        про журнал или площадку, а не про сотрудника."""
+        про журнал или площадку, а не про сотрудника. Само условие — общее
+        с блокерами готовности и Командным центром (срез-95)."""
 
-        clause = model.person_id.not_in(not_employed_person_ids(self.tenant_id))
-        if model.__table__.c.person_id.nullable:
-            clause = or_(model.person_id.is_(None), clause)
-        return clause
+        return employed_record_where(model, self.tenant_id)
 
     def _scoped_count(
         self,

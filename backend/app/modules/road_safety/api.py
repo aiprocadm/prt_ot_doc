@@ -86,6 +86,7 @@ from app.schemas.road_safety import (
 )
 from app.services.audit import AuditService, field_level_diff
 from app.services.discipline_incidents import open_incidents_count
+from app.services.person_scope import employed_record_where
 
 router = APIRouter(prefix="/road-safety", tags=["road-safety"])
 
@@ -508,7 +509,24 @@ async def road_safety_readiness(
     for driver in drivers:
         if driver.status in drivers_by_status:
             drivers_by_status[driver.status] += 1
-    admitted = [d for d in drivers if d.status == "admitted"]
+    # «Уволенный не в счёт» (срез-95): карточка уволенного в составе и в
+    # счёте по статусам остаётся — история цела, как в списке; но его
+    # удостоверение, просроченное или невнесённое, — не проблема, тот же
+    # довод, что у отстранённого. Условие общее с календарём и блокерами.
+    admitted = (
+        (
+            await session.execute(
+                select(Driver).where(
+                    Driver.tenant_id == tenant.id,
+                    Driver.deleted_at.is_(None),
+                    Driver.status == "admitted",
+                    employed_record_where(Driver, tenant.id),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     # Срез-3: путевые листы. В отличие от парка и водительского состава,
     # реестр листов растёт КАЖДУЮ СМЕНУ, поэтому сводка считается за окно и
@@ -608,6 +626,8 @@ async def road_safety_readiness(
         )
         or 0
     )
+    # Просрочка — по работающим (срез-95); в общем счёте журнала уволенный
+    # остаётся, как и в самом журнале.
     briefings_overdue = int(
         await session.scalar(
             select(func.count())
@@ -618,6 +638,7 @@ async def road_safety_readiness(
                 BriefingEntry.briefing_type.in_(road_briefing_types),
                 BriefingEntry.valid_until.is_not(None),
                 BriefingEntry.valid_until < func.now(),
+                employed_record_where(BriefingEntry, tenant.id),
             )
         )
         or 0

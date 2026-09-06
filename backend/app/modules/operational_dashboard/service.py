@@ -17,6 +17,7 @@ from app.modules.operational_dashboard.schemas import (
     OperationalDashboardResponse,
 )
 from app.services.discipline_training import overdue_training_enrollment_where
+from app.services.person_scope import employed_record_where
 
 logger = logging.getLogger("app.modules.operational_dashboard")
 
@@ -104,11 +105,17 @@ class OperationalDashboardService:
                     )
                 )
 
+        # «Уволенный не в счёт» (срез-95): Командный центр — сводка «что горит
+        # сейчас», как календарь и блокеры готовности; истёкший срок уволенного
+        # там — история, а не тревога.
         try:
             await _add_count(
                 select(func.count()).select_from(TrainingEnrollment)
                 # Формула одна с календарём и Центром внимания (срез-77).
-                .where(*overdue_training_enrollment_where(tenant_id, now)),
+                .where(
+                    *overdue_training_enrollment_where(tenant_id, now),
+                    employed_record_where(TrainingEnrollment, tenant_id),
+                ),
                 "training_enrollment",
             )
             await _add_count(
@@ -118,6 +125,7 @@ class OperationalDashboardService:
                     MedicalExam.tenant_id == tenant_id,
                     MedicalExam.deleted_at.is_(None),
                     MedicalExam.valid_until < today,
+                    employed_record_where(MedicalExam, tenant_id),
                 ),
                 "medical_exam",
             )
@@ -130,6 +138,7 @@ class OperationalDashboardService:
                     PPEIssue.status == PPEIssueStatus.ISSUED,
                     PPEIssue.expires_at.is_not(None),
                     PPEIssue.expires_at < now,
+                    employed_record_where(PPEIssue, tenant_id),
                 ),
                 "ppe_issue",
             )
@@ -140,6 +149,7 @@ class OperationalDashboardService:
                     MedicalSuspension.tenant_id == tenant_id,
                     MedicalSuspension.deleted_at.is_(None),
                     MedicalSuspension.status == MedicalSuspensionStatus.ACTIVE,
+                    employed_record_where(MedicalSuspension, tenant_id),
                 ),
                 "medical_suspension",
             )

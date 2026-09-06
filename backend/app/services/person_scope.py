@@ -17,15 +17,26 @@
 ``not_employed_person_ids`` — подзапрос людей, которых считать не надо
 (удалённых и уволенных); он строится из ``employed_person_where``, а не
 пишется заново, так что формула остаётся одна.
+
+**Одно условие на запись (срез-95).** Подставлять подзапрос в каждый запрос
+руками — снова пять копий, только другой формы: где-то забудут, что
+``person_id`` бывает пустым (удостоверение по группе, инструктаж без
+человека), и запись без человека пропадёт. Поэтому условие для записи по
+человеку собирает ``employed_record_where(Model, tenant_id)``: оно само
+смотрит, обязателен ли ``person_id`` у таблицы, и оставляет записи без
+человека видимыми. Сторож ``tests/test_employed_person_formula.py`` не даёт
+писать ``not_in(not_employed_person_ids(...))`` вне этого модуля.
 """
 
 from __future__ import annotations
 
-from sqlalchemy import ColumnElement, Select, and_, not_, select
+from typing import Any
+
+from sqlalchemy import ColumnElement, Select, and_, not_, or_, select
 
 from app.models.master_data import EmploymentStatus, Person
 
-__all__ = ["employed_person_where", "not_employed_person_ids"]
+__all__ = ["employed_person_where", "employed_record_where", "not_employed_person_ids"]
 
 
 def employed_person_where() -> tuple[ColumnElement[bool], ...]:
@@ -49,3 +60,20 @@ def not_employed_person_ids(tenant_id: str) -> Select[tuple[str]]:
     return select(Person.id).where(
         Person.tenant_id == tenant_id, not_(and_(*employed_person_where()))
     )
+
+
+def employed_record_where(model: type[Any], tenant_id: str) -> ColumnElement[bool]:
+    """Условие «запись по работающему человеку» для таблицы с ``person_id``.
+
+    Для запросов без join'а с ``Person`` (общий календарь, блокеры готовности,
+    Командный центр, сводка БДД): человек записи не удалён и не уволен, а
+    «висячий» ``person_id`` (карточки уже нет) по-прежнему виден — так было и
+    до правила. Если ``person_id`` у таблицы необязателен, запись без человека
+    остаётся в счёте: у неё нет того, кого можно было бы уволить.
+    """
+
+    column = model.person_id
+    clause = column.not_in(not_employed_person_ids(tenant_id))
+    if model.__table__.c.person_id.nullable:
+        clause = or_(column.is_(None), clause)
+    return clause
