@@ -63,6 +63,7 @@ from app.modules.packs.definitions import (
     PACK_CODE_GOCHS_REPORTS,
     PACK_CODE_OPO_REPORTS,
 )
+from app.services.discipline_road_safety import admitted_driver_where
 
 __all__ = ["Suggestion", "suggestions_for_pack"]
 
@@ -121,11 +122,8 @@ async def _road_safety_suggestions(
         await session.scalar(
             select(func.count())
             .select_from(Driver)
-            .where(
-                Driver.tenant_id == tenant_id,
-                Driver.deleted_at.is_(None),
-                Driver.status == "admitted",
-            )
+            # Правило «допущенный водитель» одно на платформу (срез-88).
+            .where(*admitted_driver_where(tenant_id))
         )
         or 0
     )

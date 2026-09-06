@@ -77,6 +77,7 @@ from app.schemas.calendar import (
     CalendarEventsResponse,
     CalendarSourceCount,
 )
+from app.services.discipline_road_safety import admitted_driver_where
 from app.services.discipline_training import (
     overdue_training_enrollment_where,
     pending_training_enrollment_where,
@@ -674,9 +675,8 @@ class CalendarAggregatorService:
             select(Driver, Person.last_name, Person.first_name)
             .join(Person, Person.id == Driver.person_id)
             .where(
-                Driver.tenant_id == self.tenant_id,
-                Driver.deleted_at.is_(None),
-                Driver.status == "admitted",
+                # Правило «допущенный водитель» одно с цифрами дисциплины и портфелем (срез-88).
+                *admitted_driver_where(self.tenant_id),
                 Driver.license_due.is_not(None),
             )
             .order_by(Driver.license_due.asc())
@@ -730,7 +730,7 @@ class CalendarAggregatorService:
 
         base_count = self._apply_window(
             self._scoped_count(Driver, person_id=person_id).where(
-                Driver.status == "admitted", Driver.license_due.is_not(None)
+                *admitted_driver_where(self.tenant_id), Driver.license_due.is_not(None)
             ),
             Driver.license_due,
             from_at,
