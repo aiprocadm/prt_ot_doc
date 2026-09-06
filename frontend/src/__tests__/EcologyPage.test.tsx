@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -18,6 +18,7 @@ const listWaterRecordsMock = vi.fn();
 const listFeeRatesMock = vi.fn();
 const listFeeLinesMock = vi.fn();
 const listReportingDeadlinesMock = vi.fn();
+const createReportingDeadlineMock = vi.fn();
 const readinessMock = vi.fn();
 
 vi.mock("@/api/ecology", async (importOriginal) => ({
@@ -37,9 +38,13 @@ vi.mock("@/api/ecology", async (importOriginal) => ({
     listFeeLines: (...args: unknown[]) => listFeeLinesMock(...args),
     listReportingDeadlines: (...args: unknown[]) =>
       listReportingDeadlinesMock(...args),
+    createReportingDeadline: (...args: unknown[]) =>
+      createReportingDeadlineMock(...args),
     readiness: (...args: unknown[]) => readinessMock(...args),
   },
 }));
+
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 /** Объекты НВОС: один со свежими сведениями, другой без актуализации. */
 const populatedFacilities = [
@@ -450,6 +455,7 @@ describe("EcologyPage", () => {
     listFeeRatesMock.mockReset();
     listFeeLinesMock.mockReset();
     listReportingDeadlinesMock.mockReset();
+    createReportingDeadlineMock.mockReset();
     readinessMock.mockReset();
     listFacilitiesMock.mockResolvedValue(populatedFacilities);
     listPassportsMock.mockResolvedValue(populatedPassports);
@@ -749,6 +755,69 @@ describe("EcologyPage", () => {
     // Граница названа на экране: даты вносит эколог, платформа не вычисляет.
     expect(
       screen.getByText(/платформа их не назначает и не вычисляет/i),
+    ).toBeInTheDocument();
+    // Исполненный срок несёт дату исполнения при состоянии, а не колонкой
+    // (срез-98: семь колонок — предел, восьмая ушла бы за бюджет).
+    expect(screen.getByText("05.03.2026 00:00")).toBeInTheDocument();
+  });
+
+  it("сроки вносятся с экрана, а не только через API (срез-98)", async () => {
+    const user = userEvent.setup();
+    const added = {
+      id: "rd-4",
+      kind: "report",
+      kind_label: "Отчётность",
+      title: "2-ТП (воздух) за 2025 год",
+      period: "2025",
+      due_on: "2026-01-22",
+      done_on: null,
+      responsible: null,
+      notes: null,
+      status: "overdue",
+      status_label: "Просрочено",
+    };
+    createReportingDeadlineMock.mockResolvedValue(added);
+    listReportingDeadlinesMock
+      .mockResolvedValueOnce(populatedReportingDeadlines)
+      .mockResolvedValue([...populatedReportingDeadlines, added]);
+
+    render(
+      <MemoryRouter>
+        <EcologyPage />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByText("Производственная площадка №1"),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Сроки отчётности" }));
+    await screen.findByText("2-ТП (отходы) за 2025 год");
+
+    // Одно главное действие на секцию и правка из каждой строки.
+    expect(
+      screen.getByRole("button", { name: "Внести срок" }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Изменить" })).toHaveLength(3);
+    const budget = uxBudgetDelta(document.body, "EcologyPage");
+    expect(budget.unexpected).toEqual([]);
+
+    await user.click(screen.getByRole("button", { name: "Внести срок" }));
+    await user.type(
+      screen.getByLabelText("Что сдать или оплатить"),
+      "2-ТП (воздух) за 2025 год",
+    );
+    await user.type(screen.getByLabelText("Период"), "2025");
+    await user.type(screen.getByLabelText("Срок"), "2026-01-22");
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(createReportingDeadlineMock).toHaveBeenCalled());
+    expect(createReportingDeadlineMock.mock.calls[0][0]).toMatchObject({
+      kind: "report",
+      title: "2-ТП (воздух) за 2025 год",
+      due_on: "2026-01-22",
+    });
+    // Экран перечитал реестр: новый срок в таблице без перезагрузки страницы.
+    expect(
+      await screen.findByText("2-ТП (воздух) за 2025 год"),
     ).toBeInTheDocument();
   });
 

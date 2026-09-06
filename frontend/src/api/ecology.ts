@@ -141,6 +141,34 @@ export type ReportingDeadlineDto = {
   status_label: string;
 };
 
+/**
+ * Виды срока — копия `REPORTING_KINDS` бэкенда (`models/ecology.py`).
+ * Форма строит выпадающий список из этого map, поэтому вид, которого здесь
+ * нет, нельзя ни выбрать, ни прочитать словами. Совпадение с бэкендом стережёт
+ * `tests/test_ecology_reporting.py` (срез-98).
+ */
+export const REPORTING_KIND_TITLES: Record<string, string> = {
+  report: "Отчётность",
+  payment: "Платёж",
+};
+
+/** Тело создания срока: дату и вид вносит эколог, состояние не передаётся. */
+export type ReportingDeadlineCreateInput = {
+  kind: string;
+  title: string;
+  period?: string | null;
+  due_on: string;
+  done_on?: string | null;
+  responsible?: string | null;
+  notes?: string | null;
+};
+
+/** Правка срока; `done_on: null` снимает отметку об исполнении. */
+export type ReportingDeadlineUpdateInput = Omit<
+  ReportingDeadlineCreateInput,
+  "kind"
+>;
+
 export type WaterPointDto = {
   id: string;
   facility_id: string;
@@ -364,6 +392,27 @@ export const ecologyApi = {
       { params: { limit: 200, offset: 0 } },
     );
     return Array.isArray(data?.items) ? data.items : [];
+  },
+
+  createReportingDeadline: async (
+    body: ReportingDeadlineCreateInput,
+  ): Promise<ReportingDeadlineDto> => {
+    const { data } = await apiClient.post<ReportingDeadlineDto>(
+      "/ecology/reporting-deadlines",
+      body,
+    );
+    return data;
+  },
+
+  updateReportingDeadline: async (
+    id: string,
+    body: ReportingDeadlineUpdateInput,
+  ): Promise<ReportingDeadlineDto> => {
+    const { data } = await apiClient.patch<ReportingDeadlineDto>(
+      `/ecology/reporting-deadlines/${id}`,
+      body,
+    );
+    return data;
   },
 
   readiness: async (): Promise<EcologyReadinessDto> => {
