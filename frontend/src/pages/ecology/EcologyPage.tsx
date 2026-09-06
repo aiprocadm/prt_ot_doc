@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 
 import { ecologyApi } from "@/api/ecology";
+import { sitesApi } from "@/api/sites";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -9,6 +10,8 @@ import { disciplineIncidentsStat } from "@/components/common/disciplineIncidents
 import { RegistryTable } from "@/components/common/RegistryTable";
 import { Button } from "@/components/ui/button";
 import { EcologyDeadlineFormDialog } from "@/features/ecology/EcologyDeadlineFormDialog";
+import { EcologyFacilityFormDialog } from "@/features/ecology/EcologyFacilityFormDialog";
+import { EcologyWastePassportFormDialog } from "@/features/ecology/EcologyWastePassportFormDialog";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { useLocalRegistry } from "@/hooks/useLocalRegistry";
 import { formatDate } from "@/utils/datetime";
@@ -50,6 +53,9 @@ const EcologyPage = () => {
         feeLines: await ecologyApi.listFeeLines(),
         reportingDeadlines: await ecologyApi.listReportingDeadlines(),
         readiness: await ecologyApi.readiness(),
+        // Площадки — ядровой справочник: объект НВОС можно к ней привязать,
+        // и форма выбирает из заведённых, а не просит вводить id руками.
+        sites: (await sitesApi.list()).items,
       }),
       [],
     ),
@@ -93,6 +99,7 @@ const EcologyPage = () => {
         fee_lines_without_rate: 0,
         fee_total_rubles: "0.00",
       },
+      sites: [],
     },
     errorMessage: "Не удалось загрузить реестр объектов НВОС",
   });
@@ -323,6 +330,20 @@ const EcologyPage = () => {
           которых в системе нет.
         </p>
       ) : null}
+      {/*
+        Срез-99: ручки заведения и правки объекта (срез-1) были доступны
+        только через API — экран звал «внесите объекты из свидетельства», а
+        внести их было негде. Одна главная кнопка на секцию (UX-бюджет).
+      */}
+      {section === "facilities" && !loading && !error ? (
+        <div>
+          <EcologyFacilityFormDialog
+            sites={data.sites}
+            onSubmitted={() => void reload()}
+            trigger={<Button>Завести объект</Button>}
+          />
+        </div>
+      ) : null}
       {section === "facilities" &&
       !loading &&
       !error &&
@@ -368,6 +389,22 @@ const EcologyPage = () => {
               header: "Состояние",
               cell: ({ row }) => row.original.status_label,
             },
+            {
+              id: "actions",
+              header: "Действия",
+              cell: ({ row }) => (
+                <EcologyFacilityFormDialog
+                  sites={data.sites}
+                  initialData={row.original}
+                  onSubmitted={() => void reload()}
+                  trigger={
+                    <Button variant="ghost" size="sm">
+                      Изменить
+                    </Button>
+                  }
+                />
+              ),
+            },
           ]}
           data={registry.pagedItems}
           pageIndex={registry.pageIndex}
@@ -393,6 +430,13 @@ const EcologyPage = () => {
             (НООЛР или декларации) — платформа его не рассчитывает и без лимита
             о превышении не судит.
           </p>
+          <div>
+            <EcologyWastePassportFormDialog
+              facilities={data.facilities}
+              onSubmitted={() => void reload()}
+              trigger={<Button>Завести паспорт</Button>}
+            />
+          </div>
           {passportRegistry.total === 0 ? (
             <EmptyState
               title="Паспорта отходов не заведены"
@@ -426,6 +470,22 @@ const EcologyPage = () => {
                           row.original.over_limit ? " · превышен" : ""
                         }`
                       : "не установлен",
+                },
+                {
+                  id: "actions",
+                  header: "Действия",
+                  cell: ({ row }) => (
+                    <EcologyWastePassportFormDialog
+                      facilities={data.facilities}
+                      initialData={row.original}
+                      onSubmitted={() => void reload()}
+                      trigger={
+                        <Button variant="ghost" size="sm">
+                          Изменить
+                        </Button>
+                      }
+                    />
+                  ),
                 },
               ]}
               data={passportRegistry.pagedItems}

@@ -28,17 +28,23 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date, timedelta
+from pathlib import Path
 
 import pytest
 from sqlalchemy import select
 
+from app.models.ecology import WASTE_HAZARD_CLASSES
 from app.models.feature import Feature, FeatureEnablement
 from app.models.models import Tenant
 
 pytestmark = pytest.mark.anyio
 
 _API = "/api/v1/ecology"
+_FRONTEND_ECOLOGY_API = (
+    Path(__file__).resolve().parents[1] / "frontend" / "src" / "api" / "ecology.ts"
+)
 
 
 async def _grant(sessionmaker, code: str = "ecology", on: bool = True) -> None:
@@ -415,3 +421,28 @@ class TestИзоляцияАрендатора:
             headers=headers,
         )
         assert response.status_code == 404
+
+
+class TestСловарьКлассовНаФронте:
+    """Срез-99: класс опасности выбирают в форме из копии словаря на фронте.
+
+    Значений ровно четыре, и пятого быть не должно: отходы V класса
+    паспортизации не подлежат. Сторож ловит и лишнее значение, и расхождение
+    подписей — список формы строится из этого map.
+    """
+
+    def test_классы_на_фронте_совпадают_с_бэкендом(self) -> None:
+        text = _FRONTEND_ECOLOGY_API.read_text(encoding="utf-8")
+        block = re.search(
+            r"WASTE_HAZARD_CLASS_TITLES:\s*Record<string,\s*string>\s*=\s*\{(.*?)\}",
+            text,
+            re.S,
+        )
+        assert block is not None, "не нашёлся map WASTE_HAZARD_CLASS_TITLES"
+        front = dict(
+            re.findall(r'^\s*([A-Za-z]+):\s*"([^"]+)"', block.group(1), re.M)
+        )
+        assert front == WASTE_HAZARD_CLASSES, sorted(
+            front.items() ^ WASTE_HAZARD_CLASSES.items()
+        )
+

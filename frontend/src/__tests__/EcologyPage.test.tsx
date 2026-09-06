@@ -19,7 +19,10 @@ const listFeeRatesMock = vi.fn();
 const listFeeLinesMock = vi.fn();
 const listReportingDeadlinesMock = vi.fn();
 const createReportingDeadlineMock = vi.fn();
+const createFacilityMock = vi.fn();
+const createWastePassportMock = vi.fn();
 const readinessMock = vi.fn();
+const listSitesMock = vi.fn();
 
 vi.mock("@/api/ecology", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -40,8 +43,15 @@ vi.mock("@/api/ecology", async (importOriginal) => ({
       listReportingDeadlinesMock(...args),
     createReportingDeadline: (...args: unknown[]) =>
       createReportingDeadlineMock(...args),
+    createFacility: (...args: unknown[]) => createFacilityMock(...args),
+    createWastePassport: (...args: unknown[]) =>
+      createWastePassportMock(...args),
     readiness: (...args: unknown[]) => readinessMock(...args),
   },
+}));
+
+vi.mock("@/api/sites", () => ({
+  sitesApi: { list: (...args: unknown[]) => listSitesMock(...args) },
 }));
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -456,7 +466,14 @@ describe("EcologyPage", () => {
     listFeeLinesMock.mockReset();
     listReportingDeadlinesMock.mockReset();
     createReportingDeadlineMock.mockReset();
+    createFacilityMock.mockReset();
+    createWastePassportMock.mockReset();
     readinessMock.mockReset();
+    listSitesMock.mockReset();
+    listSitesMock.mockResolvedValue({
+      items: [{ id: "site-1", name: "Площадка №1" }],
+      total: 1,
+    });
     listFacilitiesMock.mockResolvedValue(populatedFacilities);
     listPassportsMock.mockResolvedValue(populatedPassports);
     listMovementsMock.mockResolvedValue(populatedMovements);
@@ -547,6 +564,93 @@ describe("EcologyPage", () => {
 
   // Доп. №1 разд. 55.2 срез-2: отходы. Паспорт — только I–IV класса; лимит
   // берётся из документа, платформа его не рассчитывает.
+  it("объект НВОС заводится с экрана, а не только через API (срез-99)", async () => {
+    const user = userEvent.setup();
+    const added = {
+      ...populatedFacilities[0],
+      id: "nvos-new",
+      name: "Котельная №3",
+      register_number: "12-0177-009999-П",
+    };
+    createFacilityMock.mockResolvedValue(added);
+    listFacilitiesMock
+      .mockResolvedValueOnce(populatedFacilities)
+      .mockResolvedValue([...populatedFacilities, added]);
+
+    render(
+      <MemoryRouter>
+        <EcologyPage />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByText("Производственная площадка №1"),
+    ).toBeInTheDocument();
+
+    // Одно главное действие на секцию и правка из каждой строки.
+    expect(
+      screen.getByRole("button", { name: "Завести объект" }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Изменить" })).toHaveLength(2);
+    expect(uxBudgetDelta(document.body, "EcologyPage").unexpected).toEqual([]);
+
+    await user.click(screen.getByRole("button", { name: "Завести объект" }));
+    await user.type(screen.getByLabelText("Объект"), "Котельная №3");
+    await user.type(screen.getByLabelText("Код в реестре"), "12-0177-009999-П");
+    await user.selectOptions(screen.getByLabelText("Категория"), "III");
+    // Площадки приходят из ядрового справочника, а не вводятся id руками.
+    await user.selectOptions(screen.getByLabelText("Площадка"), "site-1");
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(createFacilityMock).toHaveBeenCalled());
+    expect(createFacilityMock.mock.calls[0][0]).toMatchObject({
+      name: "Котельная №3",
+      register_number: "12-0177-009999-П",
+      category: "III",
+      site_id: "site-1",
+      status: "registered",
+    });
+    expect(await screen.findByText("Котельная №3")).toBeInTheDocument();
+  });
+
+  it("паспорт отхода заводится с экрана (срез-99)", async () => {
+    const user = userEvent.setup();
+    const added = {
+      ...populatedPassports[0],
+      id: "wp-new",
+      name: "Обтирочный материал",
+      fkko_code: "9 19 204 01 60 4",
+    };
+    createWastePassportMock.mockResolvedValue(added);
+    listPassportsMock
+      .mockResolvedValueOnce(populatedPassports)
+      .mockResolvedValue([...populatedPassports, added]);
+
+    render(
+      <MemoryRouter>
+        <EcologyPage />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByText("Производственная площадка №1"),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Паспорта отходов" }));
+
+    await user.click(screen.getByRole("button", { name: "Завести паспорт" }));
+    await user.type(screen.getByLabelText("Вид отхода"), "Обтирочный материал");
+    await user.type(screen.getByLabelText("Код ФККО"), "9 19 204 01 60 4");
+    await user.selectOptions(screen.getByLabelText("Класс опасности"), "IV");
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(createWastePassportMock).toHaveBeenCalled());
+    expect(createWastePassportMock.mock.calls[0][0]).toMatchObject({
+      name: "Обтирочный материал",
+      fkko_code: "9 19 204 01 60 4",
+      hazard_class: "IV",
+      annual_limit_tons: null,
+    });
+    expect(await screen.findByText("Обтирочный материал")).toBeInTheDocument();
+  });
+
   it("паспорта отходов открываются второй секцией", async () => {
     const user = userEvent.setup();
 

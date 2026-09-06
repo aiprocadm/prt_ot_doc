@@ -18,6 +18,16 @@ export const NVOS_CATEGORY_TITLES: Record<string, string> = {
   IV: "IV категория — минимальное негативное воздействие",
 };
 
+/**
+ * Состояние объекта в государственном реестре — копия `NVOS_STATUSES`
+ * бэкенда. Форма строит выбор из этого map; совпадение стережёт
+ * `tests/test_ecology_nvos.py` (срез-99).
+ */
+export const NVOS_STATUS_TITLES: Record<string, string> = {
+  registered: "На государственном учёте",
+  excluded: "Снят с учёта",
+};
+
 export type EnvironmentalFacilityDto = {
   id: string;
   name: string;
@@ -121,6 +131,35 @@ export type FeeLineDto = {
   /** null, а НЕ ноль, когда ставка не внесена. */
   amount_rubles?: string | null;
 };
+
+/** Тело заведения объекта НВОС: сведения из свидетельства об учёте. */
+export type EnvironmentalFacilityCreateInput = {
+  name: string;
+  register_number: string;
+  category: string;
+  site_id?: string | null;
+  registered_on?: string | null;
+  actualized_on?: string | null;
+  excluded_on?: string | null;
+  status?: string;
+  responsible?: string | null;
+  notes?: string | null;
+};
+
+export type EnvironmentalFacilityUpdateInput = EnvironmentalFacilityCreateInput;
+
+/** Тело паспорта отхода: лимит — из НООЛР или декларации, не расчёт. */
+export type WastePassportCreateInput = {
+  name: string;
+  fkko_code: string;
+  hazard_class: string;
+  facility_id?: string | null;
+  approved_on?: string | null;
+  annual_limit_tons?: string | null;
+  notes?: string | null;
+};
+
+export type WastePassportUpdateInput = WastePassportCreateInput;
 
 /** Срок экологической отчётности или платежа (разд. 55.3, срез-71). */
 export type ReportingDeadlineDto = {
@@ -392,6 +431,48 @@ export const ecologyApi = {
       { params: { limit: 200, offset: 0 } },
     );
     return Array.isArray(data?.items) ? data.items : [];
+  },
+
+  createFacility: async (
+    body: EnvironmentalFacilityCreateInput,
+  ): Promise<EnvironmentalFacilityDto> => {
+    const { data } = await apiClient.post<EnvironmentalFacilityDto>(
+      "/ecology/facilities",
+      body,
+    );
+    return data;
+  },
+
+  updateFacility: async (
+    id: string,
+    body: EnvironmentalFacilityUpdateInput,
+  ): Promise<EnvironmentalFacilityDto> => {
+    const { data } = await apiClient.patch<EnvironmentalFacilityDto>(
+      `/ecology/facilities/${id}`,
+      body,
+    );
+    return data;
+  },
+
+  createWastePassport: async (
+    body: WastePassportCreateInput,
+  ): Promise<WastePassportDto> => {
+    const { data } = await apiClient.post<WastePassportDto>(
+      "/ecology/waste-passports",
+      body,
+    );
+    return data;
+  },
+
+  updateWastePassport: async (
+    id: string,
+    body: WastePassportUpdateInput,
+  ): Promise<WastePassportDto> => {
+    const { data } = await apiClient.patch<WastePassportDto>(
+      `/ecology/waste-passports/${id}`,
+      body,
+    );
+    return data;
   },
 
   createReportingDeadline: async (
