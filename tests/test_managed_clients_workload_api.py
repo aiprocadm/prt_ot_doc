@@ -14,7 +14,7 @@ from app.domains.managed_clients.lifecycle import ContractStatus, ManagedClientM
 from app.domains.managed_clients.workload import UNASSIGNED_KEY, OverloadReason
 from app.domains.managed_clients.workload_service import collect_specialist_workload
 from app.models.managed_clients import ManagedClient
-from app.models.master_data import Person
+from app.models.master_data import EmploymentStatus, Person
 from app.models.medical import MedicalExam
 
 _TODAY = date(2026, 8, 4)
@@ -47,7 +47,7 @@ async def _client(session, *, name, company_id=None, responsible=None, **over):
     return row
 
 
-async def _person(session, *, pid, company_id=None, last="Петров", first="Пётр"):
+async def _person(session, *, pid, company_id=None, last="Петров", first="Пётр", **over):
     row = Person(
         id=pid,
         tenant_id=_TENANT,
@@ -56,6 +56,7 @@ async def _person(session, *, pid, company_id=None, last="Петров", first="
         last_name=last,
         email="a@b.c",
         phone="+7",
+        **over,
     )
     session.add(row)
     await session.flush()
@@ -127,6 +128,36 @@ async def test_signals_and_overdue_are_attributed_to_specialist(sessionmaker):
     assert row.clients_critical == 1
     assert row.overloaded is True
     assert OverloadReason.CRITICAL_CLIENT in row.overload_reasons
+
+
+@pytest.mark.asyncio
+async def test_terminated_person_adds_neither_signal_nor_overdue(sessionmaker):
+    """Сигналы и просрочки на одной строке нагрузки считают людей одним правилом (срез-90).
+
+    Истёкший медосмотр уволенного до среза давал ``overdue_deadlines == 1`` при
+    ``signals_total == 0`` — строка специалиста противоречила сама себе.
+    """
+
+    async with sessionmaker() as session:
+        await _person(session, pid="spec-1")
+        await _client(session, name="Тихо", company_id="comp-a", responsible="spec-1")
+        await _person(
+            session,
+            pid="w-gone",
+            company_id="comp-a",
+            last="Ушедший",
+            employment_status=EmploymentStatus.TERMINATED,
+        )
+        session.add(_med(person_id="w-gone", valid_until=_TODAY - timedelta(days=5)))
+        await session.commit()
+
+        rows = await collect_specialist_workload(
+            session, tenant_id=_TENANT, today=_TODAY, horizon_days=30, now=_NOW
+        )
+    row = rows[0]
+    assert (row.signals_total, row.overdue_deadlines) == (0, 0)
+    assert row.clients_critical == 0
+    assert row.overloaded is False
 
 
 @pytest.mark.asyncio

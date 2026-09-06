@@ -8,6 +8,12 @@
 **Горизонт обязателен.** Календарь «на всё будущее» бесполезен человеку и
 тяжёл для базы; окно задаётся вызывающим, просрочка попадает в выборку всегда —
 именно она самая срочная.
+
+**Уволенный не в счёт (срез-90).** Люди берутся тем же правилом
+``person_scope.employed_person_where``, что в сводке внимания (срез-89) и
+светофоре клиента: истёкший медосмотр уволенного — история, а не дедлайн, и
+в календаре (а через него — в нагрузке специалиста) он не должен всплывать
+«просрочкой» там, где сводка внимания того же клиента молчит.
 """
 
 from __future__ import annotations
@@ -32,6 +38,7 @@ from app.models.medical import MedicalExam
 from app.models.ppe import PPEIssue
 from app.models.training import TrainingEnrollment
 from app.services.discipline_training import pending_training_enrollment_where
+from app.services.person_scope import employed_person_where
 
 __all__ = ["collect_portfolio_deadlines"]
 
@@ -109,7 +116,7 @@ async def collect_portfolio_deadlines(
                     MedicalExam.valid_until >= since,
                     MedicalExam.valid_until <= until,
                     Person.company_id.in_(company_ids),
-                    Person.deleted_at.is_(None),
+                    *employed_person_where(),
                 )
             )
         ).all()
@@ -142,7 +149,7 @@ async def collect_portfolio_deadlines(
                     PPEIssue.expires_at
                     <= datetime.combine(until, datetime.max.time()).replace(tzinfo=timezone.utc),
                     Person.company_id.in_(company_ids),
-                    Person.deleted_at.is_(None),
+                    *employed_person_where(),
                 )
             )
         ).all()
@@ -172,7 +179,7 @@ async def collect_portfolio_deadlines(
                     TrainingEnrollment.due_at
                     <= datetime.combine(until, datetime.max.time()).replace(tzinfo=timezone.utc),
                     Person.company_id.in_(company_ids),
-                    Person.deleted_at.is_(None),
+                    *employed_person_where(),
                 )
             )
         ).all()
