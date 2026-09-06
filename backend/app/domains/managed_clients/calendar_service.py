@@ -14,6 +14,11 @@
 светофоре клиента: истёкший медосмотр уволенного — история, а не дедлайн, и
 в календаре (а через него — в нагрузке специалиста) он не должен всплывать
 «просрочкой» там, где сводка внимания того же клиента молчит.
+
+**Удостоверения водителей (срез-91).** Тем же правилом «допущен + дата не
+пустая» (``discipline_road_safety.admitted_driver_where``), что сигнал
+``driver_license_expired`` сводки внимания, светофор клиента и общий
+календарь: отстранённый водитель и удостоверение без срока — не дедлайн.
 """
 
 from __future__ import annotations
@@ -36,7 +41,9 @@ from app.models.managed_clients import ManagedClient
 from app.models.master_data import Person
 from app.models.medical import MedicalExam
 from app.models.ppe import PPEIssue
+from app.models.road_safety import Driver
 from app.models.training import TrainingEnrollment
+from app.services.discipline_road_safety import admitted_driver_where
 from app.services.discipline_training import pending_training_enrollment_where
 from app.services.person_scope import employed_person_where
 
@@ -189,6 +196,36 @@ async def collect_portfolio_deadlines(
                 build_event(
                     kind=DeadlineKind.TRAINING,
                     due_date=enrollment.due_at.date(),
+                    client_id=client.id,
+                    client_name=client.name,
+                    subject=_fio(person),
+                    responsible_person_id=client.responsible_person_id,
+                    today=today,
+                )
+            )
+
+        license_rows = (
+            await session.execute(
+                select(Driver, Person)
+                .join(Person, Person.id == Driver.person_id)
+                .where(
+                    # Только допущенные водители с датой — одно правило со сводкой
+                    # внимания, светофором клиента и общим календарём (срез-88).
+                    *admitted_driver_where(tenant_id),
+                    Driver.license_due.is_not(None),
+                    Driver.license_due >= since,
+                    Driver.license_due <= until,
+                    Person.company_id.in_(company_ids),
+                    *employed_person_where(),
+                )
+            )
+        ).all()
+        for driver, person in license_rows:
+            client = by_company[person.company_id]
+            events.append(
+                build_event(
+                    kind=DeadlineKind.DRIVER_LICENSE,
+                    due_date=driver.license_due,
                     client_id=client.id,
                     client_name=client.name,
                     subject=_fio(person),

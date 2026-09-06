@@ -10,6 +10,8 @@ import pytest
 from fastapi import HTTPException, Response
 
 from app.api.routes import managed_clients as routes
+from app.domains.managed_clients.attention import SignalKind
+from app.domains.managed_clients.attention_service import collect_portfolio_attention
 from app.domains.managed_clients.calendar import CalendarFilters, DeadlineKind
 from app.domains.managed_clients.calendar_service import collect_portfolio_deadlines
 from app.domains.managed_clients.lifecycle import ContractStatus, ManagedClientMode
@@ -17,6 +19,7 @@ from app.models.managed_clients import ManagedClient
 from app.models.master_data import EmploymentStatus, Person
 from app.models.medical import MedicalExam
 from app.models.ppe import PPEIssue
+from app.models.road_safety import Driver
 from app.models.training import TrainingEnrollment
 
 _TODAY = date(2026, 8, 4)
@@ -68,6 +71,16 @@ async def _person(session, *, pid, company_id, last="Иванов", first="Ив�
     return row
 
 
+def _driver(person_id, number, *, days=None, status="admitted") -> Driver:
+    return Driver(
+        tenant_id=_TENANT,
+        person_id=person_id,
+        license_number=number,
+        license_due=None if days is None else _TODAY + timedelta(days=days),
+        status=status,
+    )
+
+
 def _med(*, person_id, valid_until) -> MedicalExam:
     return MedicalExam(
         tenant_id=_TENANT,
@@ -107,6 +120,7 @@ async def test_collects_all_deadline_kinds(sessionmaker):
                 due_at=_at(_TODAY + timedelta(days=7)),
             )
         )
+        session.add(_driver("p1", "77 АА 000001", days=9))
         await session.commit()
 
         events = await collect_portfolio_deadlines(
@@ -118,6 +132,7 @@ async def test_collects_all_deadline_kinds(sessionmaker):
         DeadlineKind.PPE,
         DeadlineKind.TRAINING,
         DeadlineKind.CONTRACT,
+        DeadlineKind.DRIVER_LICENSE,
     }
     assert all(e.client_name == "Ромашка" for e in events)
     assert all(e.client_id == c.id for e in events)
@@ -249,6 +264,72 @@ async def test_terminated_person_has_no_deadlines(sessionmaker):
             session, tenant_id=_TENANT, today=_TODAY, horizon_days=30, now=_NOW
         )
     assert [(e.kind, e.subject) for e in events] == [(DeadlineKind.MEDICAL, "Работающий Иван")]
+
+
+@pytest.mark.asyncio
+async def test_driver_license_deadlines_of_admitted_drivers_only(sessionmaker):
+    """Удостоверения водителей в календаре — одним правилом со сводкой внимания (срез-91).
+
+    Сводка поднимала сигнал ``driver_license_expired`` (срез-88), а календарь
+    даты удостоверений не знал: специалист видел «горит», но не видел когда.
+    Считаются только допущенные с датой, не уволенные; истёкшее — просрочка и
+    первым; просроченных в календаре столько же, сколько в сигнале.
+    """
+
+    async with sessionmaker() as session:
+        await _client(session, name="Альфа", company_id="comp-a")
+        await _client(session, name="Бета", company_id="comp-b")
+        for pid, last, over in (
+            ("p-a1", "Истёкший", {}),
+            ("p-a2", "Скорый", {}),
+            ("p-a3", "Далёкий", {}),
+            ("p-a4", "Бессрочный", {}),
+            ("p-a5", "Отстранённый", {}),
+            ("p-a9", "Уволенный", {"employment_status": EmploymentStatus.TERMINATED}),
+            ("p-b1", "Соседский", {}),
+        ):
+            await _person(
+                session,
+                pid=pid,
+                company_id="comp-b" if pid == "p-b1" else "comp-a",
+                last=last,
+                **over,
+            )
+        session.add_all(
+            [
+                _driver("p-a1", "77 АА 000001", days=-3),
+                _driver("p-a2", "77 АА 000002", days=5),
+                _driver("p-a3", "77 АА 000003", days=200),
+                _driver("p-a4", "77 АА 000004"),
+                _driver("p-a5", "77 АА 000005", days=1, status="suspended"),
+                _driver("p-a9", "77 АА 000009", days=-1),
+                _driver("p-b1", "77 АА 000011", days=2),
+            ]
+        )
+        await session.commit()
+
+        events = await collect_portfolio_deadlines(
+            session, tenant_id=_TENANT, today=_TODAY, horizon_days=30, now=_NOW
+        )
+        attention = await collect_portfolio_attention(
+            session, tenant_id=_TENANT, today=_TODAY, now=_NOW, horizon_days=30
+        )
+
+    assert [(e.kind, e.client_name, e.subject, e.overdue) for e in events] == [
+        (DeadlineKind.DRIVER_LICENSE, "Альфа", "Истёкший Иван", True),
+        (DeadlineKind.DRIVER_LICENSE, "Бета", "Соседский Иван", False),
+        (DeadlineKind.DRIVER_LICENSE, "Альфа", "Скорый Иван", False),
+    ]
+    assert all(e.title == "Удостоверение водителя" for e in events)
+    # паритет со сводкой внимания: просроченных в календаре столько же, сколько в сигнале
+    alpha = next(row for row in attention if row.client_name == "Альфа")
+    signal = next(s for s in alpha.signals if s.kind is SignalKind.DRIVER_LICENSE_EXPIRED)
+    overdue_in_calendar = sum(
+        1
+        for e in events
+        if e.kind is DeadlineKind.DRIVER_LICENSE and e.overdue and e.client_name == "Альфа"
+    )
+    assert signal.count == overdue_in_calendar == 1
 
 
 @pytest.mark.asyncio

@@ -94,6 +94,21 @@ class TestSortDeadlines:
         result = [e.subject for e in sort_deadlines(events)]
         assert result[0] == "медосмотр"
 
+    def test_driver_license_weighs_like_medical(self):
+        """Удостоверение — допуск к управлению, как медосмотр — к работе (срез-91):
+        в один день оно выше СИЗ, обучения и договора."""
+        events = [
+            _event(kind=DeadlineKind.CONTRACT, subject="договор"),
+            _event(kind=DeadlineKind.PPE, subject="сиз"),
+            _event(kind=DeadlineKind.DRIVER_LICENSE, subject="удостоверение"),
+            _event(kind=DeadlineKind.TRAINING, subject="обучение"),
+        ]
+        assert [e.subject for e in sort_deadlines(events)][0] == "удостоверение"
+        assert (
+            DEADLINE_META[DeadlineKind.DRIVER_LICENSE].weight
+            == DEADLINE_META[DeadlineKind.MEDICAL].weight
+        )
+
     def test_stable_by_client_then_subject(self):
         events = [
             _event(client_name="Бета", subject="б"),

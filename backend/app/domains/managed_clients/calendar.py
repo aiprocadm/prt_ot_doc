@@ -11,6 +11,12 @@
   красить его в красный значит приучить не верить красному;
 * **вес вида дедлайна.** В один день сверху идёт то, что тяжелее: медосмотр
   раньше договора — во втором случае страдает бумага, в первом человек.
+
+Удостоверения водителей (BIZ-54-57 срез-91, разд. 54.1 / 56.2) — дата
+``license_due`` допущенных к управлению водителей организации клиента; вес —
+как у медосмотра: истёкшее удостоверение — это не «нарушение к проверке», а
+остановка перевозок (тот же ряд, что сигнал ``driver_license_expired`` в
+сводке внимания, срез-88): специалист видел сигнал, но не видел даты.
 """
 
 from __future__ import annotations
@@ -37,6 +43,7 @@ class DeadlineKind(str, enum.Enum):
     PPE = "ppe"
     TRAINING = "training"
     CONTRACT = "contract"
+    DRIVER_LICENSE = "driver_license"
 
 
 @dataclass(frozen=True)
@@ -48,6 +55,8 @@ class DeadlineMeta:
 
 DEADLINE_META: dict[DeadlineKind, DeadlineMeta] = {
     DeadlineKind.MEDICAL: DeadlineMeta(title="Медосмотр", weight=4),
+    # Удостоверение — допуск к управлению, как медосмотр — допуск к работе.
+    DeadlineKind.DRIVER_LICENSE: DeadlineMeta(title="Удостоверение водителя", weight=4),
     DeadlineKind.PPE: DeadlineMeta(title="Срок СИЗ", weight=3),
     DeadlineKind.TRAINING: DeadlineMeta(title="Обучение", weight=3),
     DeadlineKind.CONTRACT: DeadlineMeta(title="Договор", weight=2),
