@@ -8,6 +8,7 @@ import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
 import { disciplineIncidentsStat } from "@/components/common/disciplineIncidentsStat";
 import { RegistryTable } from "@/components/common/RegistryTable";
 import { Button } from "@/components/ui/button";
+import { EcologyDeadlineFormDialog } from "@/features/ecology/EcologyDeadlineFormDialog";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { useLocalRegistry } from "@/hooks/useLocalRegistry";
 import { formatDate } from "@/utils/datetime";
@@ -897,6 +898,18 @@ const EcologyPage = () => {
             Центре внимания до отметки об исполнении. Исполненный срок из
             календаря уходит — это не событие и не просрочка.
           </p>
+          {/*
+            Срез-98: до него ручки создания и правки (срез-71) были доступны
+            только через API — экран просил «внесите сроки», а вносить было
+            негде. Одно главное действие на секцию (UX-бюджет разд. 59.2);
+            правка и отметка об исполнении — той же формой из строки.
+          */}
+          <div>
+            <EcologyDeadlineFormDialog
+              onSubmitted={() => void reload()}
+              trigger={<Button>Внести срок</Button>}
+            />
+          </div>
           {reportingRegistry.total === 0 ? (
             <EmptyState
               title="Сроки отчётности не внесены"
@@ -924,20 +937,38 @@ const EcologyPage = () => {
                 {
                   accessorKey: "status_label",
                   header: "Состояние",
-                  cell: ({ row }) => row.original.status_label,
-                },
-                {
-                  accessorKey: "done_on",
-                  header: "Дата исполнения",
-                  cell: ({ row }) =>
-                    row.original.done_on
-                      ? formatDate(row.original.done_on)
-                      : "—",
+                  // Дата исполнения — при состоянии, а не отдельной колонкой:
+                  // семь колонок — предел бюджета, а действия строке нужнее.
+                  cell: ({ row }) => (
+                    <span>
+                      {row.original.status_label}
+                      {row.original.done_on ? (
+                        <span className="ml-1 text-muted-foreground">
+                          {formatDate(row.original.done_on)}
+                        </span>
+                      ) : null}
+                    </span>
+                  ),
                 },
                 {
                   accessorKey: "responsible",
                   header: "Ответственный",
                   cell: ({ row }) => row.original.responsible || "—",
+                },
+                {
+                  id: "actions",
+                  header: "Действия",
+                  cell: ({ row }) => (
+                    <EcologyDeadlineFormDialog
+                      initialData={row.original}
+                      onSubmitted={() => void reload()}
+                      trigger={
+                        <Button variant="ghost" size="sm">
+                          Изменить
+                        </Button>
+                      }
+                    />
+                  ),
                 },
               ]}
               data={reportingRegistry.pagedItems}

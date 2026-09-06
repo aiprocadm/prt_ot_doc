@@ -20,18 +20,26 @@
 Событие просрочки и правило библиотеки для этого источника — срез-72
 (``DEADLINE_EVENT_SOURCES``, ``tests/test_discipline_deadline_events.py``,
 ``tests/api/test_rules_library_api.py``).
+
+Срез-98: форма на экране (``features/ecology/EcologyDeadlineFormDialog.tsx``)
+строит выпадающий список видов из своей копии словаря ``REPORTING_KIND_TITLES``;
+класс ``TestСловарьВидовНаФронте`` стережёт, что копия совпадает с
+``REPORTING_KINDS`` бэкенда — как у видов комиссий
+(``backend/tests/test_civil_defense_committees.py``).
 """
 
 from __future__ import annotations
 
+import re
 from datetime import date, timedelta
+from pathlib import Path
 
 import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.disciplines import Discipline, discipline_of
-from app.models.ecology import EcologyReportingDeadline
+from app.models.ecology import REPORTING_KINDS, EcologyReportingDeadline
 from app.models.feature import Feature, FeatureEnablement
 from app.models.models import RoleEnum, Tenant
 from app.services.calendar_aggregator import ALL_SOURCES, CalendarAggregatorService
@@ -40,6 +48,9 @@ from tests.utils.factories import TestDataFactory
 pytestmark = pytest.mark.anyio
 
 _API = "/api/v1/ecology"
+_FRONTEND_ECOLOGY_API = (
+    Path(__file__).resolve().parents[1] / "frontend" / "src" / "api" / "ecology.ts"
+)
 
 
 async def _grant(sessionmaker, code: str = "ecology", on: bool = True) -> None:
@@ -324,3 +335,21 @@ class TestКалендарьИЦентрВнимания:
         assert items[0]["severity"] in {"critical", "high"}
         ecology = next(row for row in body["disciplines"] if row["code"] == "ecology")
         assert ecology["overdue"] >= 1
+
+
+class TestСловарьВидовНаФронте:
+    """Срез-98: вид срока выбирают в форме из копии словаря на фронте.
+
+    Подписи написаны руками (``REPORTING_KIND_TITLES`` в ``api/ecology.ts``):
+    добавь вид на бэкенде — форма его не предложит, а в реестре он читался
+    бы сырым кодом. Тот же класс дрейфа, что виды комиссий.
+    """
+
+    def test_копия_словаря_видов_совпадает_с_бэкендом(self) -> None:
+        text = _FRONTEND_ECOLOGY_API.read_text(encoding="utf-8")
+        block = re.search(
+            r"REPORTING_KIND_TITLES:\s*Record<string,\s*string>\s*=\s*\{(.*?)\}", text, re.S
+        )
+        assert block is not None, "не нашёлся map REPORTING_KIND_TITLES"
+        front = dict(re.findall(r'^\s*([a-z_]+):\s*"([^"]+)"', block.group(1), re.M))
+        assert front == REPORTING_KINDS, sorted(front.items() ^ REPORTING_KINDS.items())
