@@ -109,6 +109,21 @@ class TestSortDeadlines:
             == DEADLINE_META[DeadlineKind.MEDICAL].weight
         )
 
+    def test_fire_safety_weighs_like_ppe_and_training(self):
+        """Срок ПБ — нарушение к приходу МЧС, не отстранение человека (срез-92):
+        ниже медосмотра и удостоверения, наравне с СИЗ и обучением, выше договора."""
+        events = [
+            _event(kind=DeadlineKind.CONTRACT, subject="договор"),
+            _event(kind=DeadlineKind.FIRE_SAFETY, subject="пб"),
+            _event(kind=DeadlineKind.MEDICAL, subject="медосмотр"),
+        ]
+        assert [e.subject for e in sort_deadlines(events)] == ["медосмотр", "пб", "договор"]
+        assert (
+            DEADLINE_META[DeadlineKind.FIRE_SAFETY].weight
+            == DEADLINE_META[DeadlineKind.PPE].weight
+            == DEADLINE_META[DeadlineKind.TRAINING].weight
+        )
+
     def test_stable_by_client_then_subject(self):
         events = [
             _event(client_name="Бета", subject="б"),

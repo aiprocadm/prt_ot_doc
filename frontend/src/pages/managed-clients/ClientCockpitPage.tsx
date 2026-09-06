@@ -203,6 +203,7 @@ const KIND_FILTERS: Array<{ value: DeadlineKind | "all"; label: string }> = [
   { value: "training", label: "Обучение" },
   { value: "contract", label: "Договоры" },
   { value: "driver_license", label: "Удостоверения водителей" },
+  { value: "fire_safety", label: "Пожарная безопасность" },
 ];
 
 interface CalendarPanelProps {

@@ -98,7 +98,8 @@ export type DeadlineKind =
   | "ppe"
   | "training"
   | "contract"
-  | "driver_license";
+  | "driver_license"
+  | "fire_safety";
 
 export interface DeadlineEvent {
   kind: DeadlineKind;
