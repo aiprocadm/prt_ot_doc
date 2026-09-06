@@ -26,6 +26,13 @@
 смотрит, обязателен ли ``person_id`` у таблицы, и оставляет записи без
 человека видимыми. Сторож ``tests/test_employed_person_formula.py`` не даёт
 писать ``not_in(not_employed_person_ids(...))`` вне этого модуля.
+
+**Проекции (срез-97).** Read model по человеку (``PersonComplianceReadModel``)
+пересобирается, а не читается с фильтром: строка уволенного или удалённого
+после пересборки должна исчезнуть, иначе сумма по проекции считает её вечно.
+Условие «запись по тому, кого не в счёт» для такой чистки —
+``not_employed_record_where(Model, tenant_id)``: та же формула, только
+от обратного, и тоже только отсюда.
 """
 
 from __future__ import annotations
@@ -36,7 +43,12 @@ from sqlalchemy import ColumnElement, Select, and_, not_, or_, select
 
 from app.models.master_data import EmploymentStatus, Person
 
-__all__ = ["employed_person_where", "employed_record_where", "not_employed_person_ids"]
+__all__ = [
+    "employed_person_where",
+    "employed_record_where",
+    "not_employed_person_ids",
+    "not_employed_record_where",
+]
 
 
 def employed_person_where() -> tuple[ColumnElement[bool], ...]:
@@ -77,3 +89,14 @@ def employed_record_where(model: type[Any], tenant_id: str) -> ColumnElement[boo
     if model.__table__.c.person_id.nullable:
         clause = or_(column.is_(None), clause)
     return clause
+
+
+def not_employed_record_where(model: type[Any], tenant_id: str) -> ColumnElement[bool]:
+    """Условие «запись по человеку, которого не в счёт» — для чистки проекций.
+
+    Обратное к ``employed_record_where``: строки read model по удалённым и
+    уволенным, которые пересборка должна убрать (срез-97). Запись без
+    человека сюда не попадает никогда: увольнять там некого.
+    """
+
+    return model.person_id.in_(not_employed_person_ids(tenant_id))

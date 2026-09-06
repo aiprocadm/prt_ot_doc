@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.finance import Contract, Order
@@ -18,6 +18,7 @@ from app.models.models import (
     Prescription,
     Site,
     TrainingEnrollment,
+    Workplace,
 )
 from app.models.notifications import PlanTask
 from app.modules.client_portal.services import SafePortalPayloadService
@@ -35,6 +36,7 @@ from app.modules.projections.models import (
 from app.modules.workflow.models import WorkflowTask, WorkflowTaskStatus
 from app.services.contractor_admission import evaluate_with_documents
 from app.services.discipline_incidents import open_incidents_where
+from app.services.person_scope import employed_person_where, not_employed_record_where
 
 
 class PackageProjectionService:
@@ -65,15 +67,20 @@ class SiteSafetyProjectionService:
         self.tenant_id = tenant_id
 
     async def rebuild(self) -> int:
+        # Человек привязан к площадке через рабочее место (ARCH-2: у Person нет
+        # site_id — до среза-97 пересборка здесь падала), считаются работающие,
+        # как в карточке площадки 360° (`domains/sites/overview`).
         persons_by_site = (
             await self.session.execute(
-                select(Person.site_id, func.count(Person.id))
+                select(Workplace.site_id, func.count(Person.id))
+                .join(Workplace, Workplace.id == Person.workplace_id)
                 .where(
                     Person.tenant_id == self.tenant_id,
-                    Person.deleted_at.is_(None),
-                    Person.site_id.is_not(None),
+                    *employed_person_where(),
+                    Workplace.deleted_at.is_(None),
+                    Workplace.site_id.is_not(None),
                 )
-                .group_by(Person.site_id)
+                .group_by(Workplace.site_id)
             )
         ).all()
         incidents_by_site = (
@@ -345,16 +352,27 @@ class ProjectionOrchestrator:
         return count
 
     async def rebuild_person_projection(self) -> int:
+        # «Уволенный не в счёт» (BIZ-54-57 срез-97): проекцию читают только
+        # сводные цифры аналитики (`overdue_compliance_items`, тренды, снимок
+        # KPI) — это «что горит сейчас», а не карточка человека. Строки
+        # уволенных и удалённых после пересборки убираются, иначе сумма по
+        # проекции считала бы их вечно.
         persons = (
             (
                 await self.session.execute(
                     select(Person).where(
-                        Person.tenant_id == self.tenant_id, Person.deleted_at.is_(None)
+                        Person.tenant_id == self.tenant_id, *employed_person_where()
                     )
                 )
             )
             .scalars()
             .all()
+        )
+        await self.session.execute(
+            delete(PersonComplianceReadModel).where(
+                PersonComplianceReadModel.tenant_id == self.tenant_id,
+                not_employed_record_where(PersonComplianceReadModel, self.tenant_id),
+            )
         )
         # Per-person overdue counts, grouped once to avoid N+1. Decision (documented
         # in the review sweep #16): "overdue" = a lapsed validity — a training

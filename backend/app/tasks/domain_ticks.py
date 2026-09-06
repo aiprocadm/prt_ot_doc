@@ -416,3 +416,44 @@ async def _api_deprecation_notify_tick() -> int:
         notified = await notify_deprecated_usages(session, now=now)
         await session.commit()
     return notified
+
+
+@celery_app.task(
+    name="analytics.projections.tick",
+    autoretry_for=RETRYABLE_EXCEPTIONS,
+    retry_backoff=True,
+    retry_jitter=True,
+    max_retries=5,
+)
+def analytics_projections_tick() -> int:
+    """BIZ-54-57 срез-97: ночная пересборка read model'ов аналитики."""
+
+    return _run_coroutine(_analytics_projections_tick())
+
+
+async def _analytics_projections_tick() -> int:
+    # Read model'ы аналитики (пакеты, соответствие по людям, площадки) до
+    # среза-97 пересобирались только Celery-задачами, которые никто не звал:
+    # `overdue_compliance_items` и тренды на дашбордах жили по последней ручной
+    # пересборке. Подрядчиков так же ночью пересобирает contractors.readiness.tick.
+    from app.modules.projections.services import ProjectionOrchestrator
+
+    async with AsyncSessionLocal(tenant=settings.default_tenant_slug) as session:
+        tenants = list(
+            (await session.execute(select(Tenant).where(Tenant.is_active.is_(True))))
+            .scalars()
+            .all()
+        )
+    total = 0
+    # Изоляция арендаторов — как у _medical_contingent_tick: падение одного
+    # прерывает прогон, autoretry перезапустит; пересборка — upsert, повтор безопасен.
+    for tenant in tenants:
+        with tenant_context(tenant.slug):
+            ensure_tenant_schema(tenant.slug)
+            async with session_scope(tenant=tenant.slug) as session:
+                tenant_id, _scope = await _resolve_task_tenant_scope(session, tenant.slug)
+                orchestrator = ProjectionOrchestrator(session, tenant_id)
+                total += await orchestrator.rebuild_package_projection()
+                total += await orchestrator.rebuild_person_projection()
+                total += await orchestrator.rebuild_site_safety_projection()
+    return total

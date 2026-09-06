@@ -23,6 +23,7 @@ from app.services.person_scope import (
     employed_person_where,
     employed_record_where,
     not_employed_person_ids,
+    not_employed_record_where,
 )
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
@@ -102,3 +103,17 @@ def test_условие_на_запись_помнит_про_пустой_perso
     assert loose.startswith(
         "briefing_entries.person_id IS NULL OR (briefing_entries.person_id NOT IN"
     )
+
+
+def test_условие_для_чистки_проекций_это_то_же_правило_от_обратного() -> None:
+    """``not_employed_record_where`` — IN того же подзапроса, без «или без человека»."""
+
+    clause = str(
+        not_employed_record_where(MedicalExam, "tenant-1").compile(
+            compile_kwargs={"literal_binds": True}
+        )
+    )
+    assert clause.startswith("medical_exam.person_id IN (SELECT person.id")
+    assert "person.tenant_id = 'tenant-1'" in clause
+    assert "NOT (person.deleted_at IS NULL AND person.employment_status !=" in clause
+    assert "IS NULL OR" not in clause
