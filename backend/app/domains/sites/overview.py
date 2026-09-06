@@ -87,7 +87,7 @@ from app.core.disciplines import (
     Discipline,
     discipline_of_permit,
 )
-from app.models.master_data import EmploymentStatus, Person, Site, Workplace
+from app.models.master_data import Person, Site, Workplace
 from app.models.work_permit import WorkPermit
 from app.services.discipline_applicability import (
     ALL_APPLICABLE,
@@ -97,6 +97,7 @@ from app.services.discipline_applicability import (
 )
 from app.services.discipline_fire_safety import collect_fire_safety_numbers
 from app.services.discipline_numbers import DisciplineNumbers, collect_people_numbers
+from app.services.person_scope import employed_person_where
 
 __all__ = [
     "NOT_COUNTED",
@@ -284,8 +285,7 @@ async def _site_people(
             select(Person).where(
                 Person.tenant_id == tenant_id,
                 Person.workplace_id.in_(workplace_ids),
-                Person.deleted_at.is_(None),
-                Person.employment_status != EmploymentStatus.TERMINATED,
+                *employed_person_where(),
             )
         )
     ).scalars()
@@ -300,8 +300,7 @@ async def _people_without_workplace(session: AsyncSession, tenant_id: str, compa
                     Person.tenant_id == tenant_id,
                     Person.company_id == company_id,
                     Person.workplace_id.is_(None),
-                    Person.deleted_at.is_(None),
-                    Person.employment_status != EmploymentStatus.TERMINATED,
+                    *employed_person_where(),
                 )
             )
         ).scalar_one()

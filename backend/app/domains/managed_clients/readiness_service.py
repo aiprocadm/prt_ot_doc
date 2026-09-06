@@ -24,9 +24,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.discipline_status import DisciplineCounts, FireSafetyNumbers, RoadSafetyNumbers
-from app.models.master_data import EmploymentStatus, Person, Site
+from app.models.master_data import Person, Site
 from app.services.discipline_fire_safety import collect_fire_safety_numbers
 from app.services.discipline_numbers import collect_people_numbers
+from app.services.person_scope import employed_person_where
 
 __all__ = ["ClientReadinessNumbers", "collect_client_numbers"]
 
@@ -61,8 +62,7 @@ async def _company_people(session: AsyncSession, tenant_id: str, company_id: str
             select(Person).where(
                 Person.tenant_id == tenant_id,
                 Person.company_id == company_id,
-                Person.deleted_at.is_(None),
-                Person.employment_status != EmploymentStatus.TERMINATED,
+                *employed_person_where(),
             )
         )
     ).scalars()

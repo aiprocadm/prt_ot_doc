@@ -225,6 +225,41 @@ async def test_soft_deleted_person_does_not_signal(sessionmaker):
 
 
 @pytest.mark.asyncio
+async def test_terminated_person_does_not_signal_anything(sessionmaker):
+    """BIZ-54-57 срез-89: уволенный не в счёт — одно правило со светофором клиента.
+
+    Истёкший медосмотр, просроченный СИЗ, обучение и пустые контакты
+    уволенного — история, а не разрыв: светофор того же клиента их не видит,
+    и портфель гореть не должен. Работающий сосед даёт сигналы как прежде.
+    """
+
+    async with sessionmaker() as session:
+        c = await _client(session, name="Клиент", company_id="comp-a")
+        gone = await _person(session, pid="p-gone", company_id="comp-a", email=None, phone=None)
+        gone.employment_status = EmploymentStatus.TERMINATED
+        await _person(session, pid="p-here", company_id="comp-a")
+        session.add_all(
+            [
+                _med(person_id="p-gone", valid_until=_TODAY - timedelta(days=1)),
+                PPEIssue(
+                    tenant_id=_TENANT,
+                    person_id="p-gone",
+                    item_name="Каска",
+                    expires_at=_NOW - timedelta(days=10),
+                ),
+                _enrollment(person_id="p-gone", due_at=_NOW - timedelta(days=2)),
+                _med(person_id="p-here", valid_until=_TODAY - timedelta(days=1)),
+            ]
+        )
+        await session.commit()
+        rows = await collect_portfolio_attention(
+            session, tenant_id=_TENANT, today=_TODAY, now=_NOW, horizon_days=30
+        )
+    by_id = {r.client_id: r for r in rows}
+    assert [(s.kind, s.count) for s in by_id[c.id].signals] == [(SignalKind.MEDICAL_OVERDUE, 1)]
+
+
+@pytest.mark.asyncio
 async def test_fire_safety_overdue_is_one_signal_per_client_from_its_sites_and_people(sessionmaker):
     """BIZ-54-57 срез-87 (разд. 54.1): просрочки ПБ — сигнал портфеля.
 

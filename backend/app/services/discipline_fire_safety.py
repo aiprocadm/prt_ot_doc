@@ -83,8 +83,9 @@ from app.models.fire_safety import (
     FireSafetyDocument,
     FireSafetyEquipment,
 )
-from app.models.master_data import EmploymentStatus, Person, Site
+from app.models.master_data import Person, Site
 from app.services.briefing_validity import latest_briefing_validity
+from app.services.person_scope import employed_person_where
 
 __all__ = [
     "FIRE_BRIEFING_TYPES",
@@ -352,7 +353,7 @@ async def collect_fire_safety_overdue_by_company(
             for site_id, count in counted.all():
                 overdue[site_company[str(site_id)]] += int(count)
 
-    # люди — те же, что у светофора клиента: не удалённые и не уволенные
+    # люди — те же, что у светофора клиента: одно правило «уволенный не в счёт» (срез-89)
     person_company = {
         str(person_id): str(company_id)
         for person_id, company_id in (
@@ -360,8 +361,7 @@ async def collect_fire_safety_overdue_by_company(
                 select(Person.id, Person.company_id).where(
                     Person.tenant_id == tenant_id,
                     Person.company_id.in_(wanted),
-                    Person.deleted_at.is_(None),
-                    Person.employment_status != EmploymentStatus.TERMINATED,
+                    *employed_person_where(),
                 )
             )
         ).all()
