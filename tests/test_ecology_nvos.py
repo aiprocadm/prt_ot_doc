@@ -31,17 +31,34 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date, timedelta
+from pathlib import Path
 
 import pytest
 from sqlalchemy import select
 
+from app.models.ecology import NVOS_CATEGORIES, NVOS_STATUSES
 from app.models.feature import Feature, FeatureEnablement
 from app.models.models import Tenant
 
 pytestmark = pytest.mark.anyio
 
 _API = "/api/v1/ecology"
+_FRONTEND_ECOLOGY_API = (
+    Path(__file__).resolve().parents[1] / "frontend" / "src" / "api" / "ecology.ts"
+)
+
+
+def _front_map(name: str) -> dict[str, str]:
+    """Читает map подписей из ``frontend/src/api/ecology.ts``."""
+
+    text = _FRONTEND_ECOLOGY_API.read_text(encoding="utf-8")
+    block = re.search(
+        rf"{name}:\s*Record<string,\s*string>\s*=\s*\{{(.*?)\}}", text, re.S
+    )
+    assert block is not None, f"не нашёлся map {name}"
+    return dict(re.findall(r'^\s*([A-Za-z_]+):\s*"([^"]+)"', block.group(1), re.M))
 
 
 async def _grant(sessionmaker, code: str = "ecology", on: bool = True) -> None:
@@ -326,3 +343,22 @@ class TestИзоляцияАрендатора:
             headers=headers,
         )
         assert response.status_code == 404
+
+
+class TestСловариНаФронте:
+    """Срез-99: форма объекта строит выбор из копий словарей на фронте.
+
+    Категорию и состояние выбирают списком, а список берётся из
+    ``NVOS_CATEGORY_TITLES`` / ``NVOS_STATUS_TITLES`` в ``api/ecology.ts``.
+    Добавь значение только на бэкенде — выбрать его будет нельзя, а в реестре
+    оно читалось бы сырым кодом. Тот же приём, что у видов сроков (срез-98).
+    """
+
+    def test_категории_на_фронте_совпадают_с_бэкендом(self) -> None:
+        front = _front_map("NVOS_CATEGORY_TITLES")
+        assert front == NVOS_CATEGORIES, sorted(front.items() ^ NVOS_CATEGORIES.items())
+
+    def test_состояния_на_фронте_совпадают_с_бэкендом(self) -> None:
+        front = _front_map("NVOS_STATUS_TITLES")
+        assert front == NVOS_STATUSES, sorted(front.items() ^ NVOS_STATUSES.items())
+
