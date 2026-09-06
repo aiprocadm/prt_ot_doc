@@ -22,6 +22,8 @@ const createReportingDeadlineMock = vi.fn();
 const createFacilityMock = vi.fn();
 const createWasteMovementMock = vi.fn();
 const createEmissionSourceMock = vi.fn();
+const createMonitoringPlanItemMock = vi.fn();
+const createWaterRecordMock = vi.fn();
 const createWastePassportMock = vi.fn();
 const readinessMock = vi.fn();
 const listSitesMock = vi.fn();
@@ -50,6 +52,9 @@ vi.mock("@/api/ecology", async (importOriginal) => ({
       createWasteMovementMock(...args),
     createEmissionSource: (...args: unknown[]) =>
       createEmissionSourceMock(...args),
+    createMonitoringPlanItem: (...args: unknown[]) =>
+      createMonitoringPlanItemMock(...args),
+    createWaterRecord: (...args: unknown[]) => createWaterRecordMock(...args),
     createWastePassport: (...args: unknown[]) =>
       createWastePassportMock(...args),
     readiness: (...args: unknown[]) => readinessMock(...args),
@@ -475,6 +480,8 @@ describe("EcologyPage", () => {
     createFacilityMock.mockReset();
     createWasteMovementMock.mockReset();
     createEmissionSourceMock.mockReset();
+    createMonitoringPlanItemMock.mockReset();
+    createWaterRecordMock.mockReset();
     createWastePassportMock.mockReset();
     readinessMock.mockReset();
     listSitesMock.mockReset();
@@ -872,6 +879,100 @@ describe("EcologyPage", () => {
 
   // Доп. №1 разд. 55.2 срез-5: водопользование. Забор и сброс — разные
   // величины, поэтому в сводке они стоят раздельно.
+  it("строка плана ПЭК вносится с экрана (срез-101)", async () => {
+    const user = userEvent.setup();
+    const added = {
+      ...populatedPlan[0],
+      id: "plan-new",
+      substance: "Пыль неорганическая",
+    };
+    createMonitoringPlanItemMock.mockResolvedValue(added);
+    listPlanMock
+      .mockResolvedValueOnce(populatedPlan)
+      .mockResolvedValue([...populatedPlan, added]);
+
+    render(
+      <MemoryRouter>
+        <EcologyPage />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByText("Производственная площадка №1"),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "ПЭК и замеры" }));
+
+    // Две кнопки секции: строка графика и замер; бюджет экрана цел.
+    expect(
+      screen.getByRole("button", { name: "Внести замер" }),
+    ).toBeInTheDocument();
+    expect(uxBudgetDelta(document.body, "EcologyPage").unexpected).toEqual([]);
+
+    await user.click(
+      screen.getByRole("button", { name: "Внести строку плана" }),
+    );
+    await user.selectOptions(
+      screen.getByLabelText("Источник выбросов"),
+      populatedSources[0].id,
+    );
+    await user.type(screen.getByLabelText("Вещество"), "Пыль неорганическая");
+    await user.type(screen.getByLabelText("Периодичность, месяцев"), "6");
+    await user.type(screen.getByLabelText("Ближайший замер"), "2026-12-01");
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() =>
+      expect(createMonitoringPlanItemMock).toHaveBeenCalled(),
+    );
+    expect(createMonitoringPlanItemMock.mock.calls[0][0]).toMatchObject({
+      source_id: populatedSources[0].id,
+      substance: "Пыль неорганическая",
+      periodicity_months: 6,
+      next_due_on: "2026-12-01",
+    });
+    expect(await screen.findByText("Пыль неорганическая")).toBeInTheDocument();
+  });
+
+  it("объём водопользования записывается с экрана (срез-101)", async () => {
+    const user = userEvent.setup();
+    const added = {
+      ...populatedWaterRecords[0],
+      id: "wr-new",
+      period_label: "апрель 2026",
+      period_month: 4,
+    };
+    createWaterRecordMock.mockResolvedValue(added);
+    listWaterRecordsMock
+      .mockResolvedValueOnce(populatedWaterRecords)
+      .mockResolvedValue([...populatedWaterRecords, added]);
+
+    render(
+      <MemoryRouter>
+        <EcologyPage />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByText("Производственная площадка №1"),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Водопользование" }));
+
+    await user.click(screen.getByRole("button", { name: "Записать объём" }));
+    await user.selectOptions(
+      screen.getByLabelText("Точка водопользования"),
+      populatedWaterPoints[0].id,
+    );
+    await user.selectOptions(screen.getByLabelText("Месяц"), "4");
+    await user.type(screen.getByLabelText("Объём, м³"), "980,25");
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(createWaterRecordMock).toHaveBeenCalled());
+    expect(createWaterRecordMock.mock.calls[0][0]).toMatchObject({
+      point_id: populatedWaterPoints[0].id,
+      period_month: 4,
+      volume_cubic_meters: "980.25",
+      basis: "meter",
+    });
+    expect(await screen.findByText("апрель 2026")).toBeInTheDocument();
+  });
+
   it("водопользование открывается шестой секцией", async () => {
     const user = userEvent.setup();
 

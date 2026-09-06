@@ -32,17 +32,36 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date, timedelta
+from pathlib import Path
 
 import pytest
 from sqlalchemy import select
 
+from app.models.ecology import MONTH_TITLES, WATER_POINT_KINDS, WATER_RECORD_BASES
 from app.models.feature import Feature, FeatureEnablement
 from app.models.models import Tenant
 
 pytestmark = pytest.mark.anyio
 
 _API = "/api/v1/ecology"
+_FRONTEND_ECOLOGY_API = (
+    Path(__file__).resolve().parents[1] / "frontend" / "src" / "api" / "ecology.ts"
+)
+
+
+def _front_map(name: str) -> dict[str, str]:
+    """Читает map подписей из ``frontend/src/api/ecology.ts``."""
+
+    text = _FRONTEND_ECOLOGY_API.read_text(encoding="utf-8")
+    block = re.search(
+        rf"{name}:\s*Record<string,\s*string>\s*=\s*\{{(.*?)\}}", text, re.S
+    )
+    assert block is not None, f"не нашёлся map {name}"
+    return dict(
+        re.findall(r'^\s*"?([A-Za-z_0-9]+)"?:\s*"([^"]+)"', block.group(1), re.M)
+    )
 
 
 async def _grant(sessionmaker, code: str = "ecology", on: bool = True) -> None:
@@ -459,3 +478,27 @@ class TestСводкаИГраница:
         assert forbidden.isdisjoint(item.keys())
         readiness = await async_client.get(f"{_API}/readiness", headers=headers)
         assert forbidden.isdisjoint(readiness.json().keys())
+
+
+class TestСловариНаФронте:
+    """Срез-101: формы точки и записи строят выбор из копий словарей.
+
+    Вид точки, основание учёта и месяц периода выбирают списком; значение,
+    добавленное только на бэкенде, нельзя было бы ни выбрать, ни прочитать
+    словами. Тот же приём, что у видов сроков и классов отходов.
+    """
+
+    def test_виды_точек_на_фронте_совпадают_с_бэкендом(self) -> None:
+        front = _front_map("WATER_POINT_KIND_TITLES")
+        assert front == WATER_POINT_KINDS, sorted(front.items() ^ WATER_POINT_KINDS.items())
+
+    def test_основания_учёта_на_фронте_совпадают_с_бэкендом(self) -> None:
+        front = _front_map("WATER_RECORD_BASIS_TITLES")
+        assert front == WATER_RECORD_BASES, sorted(
+            front.items() ^ WATER_RECORD_BASES.items()
+        )
+
+    def test_месяцы_на_фронте_совпадают_с_бэкендом(self) -> None:
+        front = {int(k): v for k, v in _front_map("MONTH_TITLES").items()}
+        assert front == MONTH_TITLES, sorted(front.items() ^ MONTH_TITLES.items())
+

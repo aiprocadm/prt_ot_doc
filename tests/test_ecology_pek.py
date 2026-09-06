@@ -31,17 +31,23 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date, timedelta
+from pathlib import Path
 
 import pytest
 from sqlalchemy import select
 
+from app.models.ecology import PERIODICITY_LABELS
 from app.models.feature import Feature, FeatureEnablement
 from app.models.models import Tenant
 
 pytestmark = pytest.mark.anyio
 
 _API = "/api/v1/ecology"
+_FRONTEND_ECOLOGY_API = (
+    Path(__file__).resolve().parents[1] / "frontend" / "src" / "api" / "ecology.ts"
+)
 
 
 async def _grant(sessionmaker, code: str = "ecology", on: bool = True) -> None:
@@ -550,3 +556,32 @@ class TestСводкаИГраница:
         assert forbidden.isdisjoint(item.keys())
         readiness = await async_client.get(f"{_API}/readiness", headers=headers)
         assert forbidden.isdisjoint(readiness.json().keys())
+
+
+class TestТиповыеПериодичностиНаФронте:
+    """Срез-101: подсказка «типовые сроки» у поля периодичности.
+
+    Форма плана ПЭК не ограничивает выбор четырьмя значениями (сервер
+    принимает 1–60 месяцев), но подсказывает те же типовые сроки, что
+    подписывает бэкенд. Разойдись подписи — человек читал бы в подсказке
+    «раз в квартал» там, где реестр пишет другое.
+    """
+
+    def test_типовые_сроки_на_фронте_совпадают_с_бэкендом(self) -> None:
+        text = _FRONTEND_ECOLOGY_API.read_text(encoding="utf-8")
+        block = re.search(
+            r"MONITORING_PERIODICITY_TITLES:\s*Record<string,\s*string>\s*=\s*\{(.*?)\}",
+            text,
+            re.S,
+        )
+        assert block is not None, "не нашёлся map MONITORING_PERIODICITY_TITLES"
+        front = {
+            int(months): title
+            for months, title in re.findall(
+                r'^\s*"(\d+)":\s*"([^"]+)"', block.group(1), re.M
+            )
+        }
+        assert front == PERIODICITY_LABELS, sorted(
+            front.items() ^ PERIODICITY_LABELS.items()
+        )
+

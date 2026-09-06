@@ -345,6 +345,119 @@ export const EMISSION_SOURCE_KIND_TITLES: Record<string, string> = {
   unorganized: "Неорганизованный источник",
 };
 
+/**
+ * Типовые периодичности замеров ПЭК — копия `PERIODICITY_LABELS` бэкенда
+ * (ключ — месяцы). Нетиповой срок сервер подписывает «раз в N месяцев»,
+ * поэтому форма разрешает и его.
+ */
+export const MONITORING_PERIODICITY_TITLES: Record<string, string> = {
+  "1": "ежемесячно",
+  "3": "раз в квартал",
+  "6": "раз в полугодие",
+  "12": "ежегодно",
+};
+
+/** Виды точек водопользования — копия `WATER_POINT_KINDS` бэкенда. */
+export const WATER_POINT_KIND_TITLES: Record<string, string> = {
+  intake: "Водозабор",
+  discharge: "Сброс сточных вод",
+};
+
+/** Чем измерен объём — копия `WATER_RECORD_BASES` бэкенда. */
+export const WATER_RECORD_BASIS_TITLES: Record<string, string> = {
+  meter: "Прибор учёта",
+  calculation: "Расчётный метод",
+};
+
+/** Месяцы периода учёта — копия `MONTH_TITLES` бэкенда (ключ — номер). */
+export const MONTH_TITLES: Record<string, string> = {
+  "1": "январь",
+  "2": "февраль",
+  "3": "март",
+  "4": "апрель",
+  "5": "май",
+  "6": "июнь",
+  "7": "июль",
+  "8": "август",
+  "9": "сентябрь",
+  "10": "октябрь",
+  "11": "ноябрь",
+  "12": "декабрь",
+};
+
+/** Тело строки плана-графика ПЭК: периодичность из программы, 1–60 месяцев. */
+export type MonitoringPlanItemCreateInput = {
+  source_id: string;
+  substance: string;
+  periodicity_months: number;
+  next_due_on: string;
+  method?: string | null;
+  laboratory?: string | null;
+  notes?: string | null;
+};
+
+/** Правка строки плана: источник не меняется — ручка его не принимает. */
+export type MonitoringPlanItemUpdateInput = Omit<
+  MonitoringPlanItemCreateInput,
+  "source_id"
+>;
+
+/** Тело замера ПЭК: строка плана необязательна — замер бывает внеплановым. */
+export type EmissionMeasurementCreateInput = {
+  plan_id?: string | null;
+  source_id: string;
+  substance: string;
+  measured_on: string;
+  value_grams_per_second: string;
+  protocol_number?: string | null;
+  laboratory?: string | null;
+  notes?: string | null;
+};
+
+/** Правка замера: источник, вещество и строка плана не меняются. */
+export type EmissionMeasurementUpdateInput = {
+  measured_on: string;
+  value_grams_per_second: string;
+  protocol_number?: string | null;
+  laboratory?: string | null;
+  notes?: string | null;
+};
+
+/** Тело точки водопользования: номер уникален в пределах объекта НВОС. */
+export type WaterPointCreateInput = {
+  facility_id: string;
+  point_number: string;
+  name: string;
+  kind: string;
+  water_body?: string | null;
+  permit_number?: string | null;
+  permit_valid_until?: string | null;
+  annual_limit_cubic_meters?: string | null;
+  notes?: string | null;
+};
+
+/** Правка точки: объект НВОС не меняется — ручка его не принимает. */
+export type WaterPointUpdateInput = Omit<WaterPointCreateInput, "facility_id">;
+
+/** Тело записи водопользования: единица учёта — месяц. */
+export type WaterRecordCreateInput = {
+  point_id: string;
+  period_year: number;
+  period_month: number;
+  volume_cubic_meters: string;
+  basis: string;
+  meter_number?: string | null;
+  notes?: string | null;
+};
+
+/** Правка записи: точка и период не меняются — это ключ записи. */
+export type WaterRecordUpdateInput = {
+  volume_cubic_meters: string;
+  basis: string;
+  meter_number?: string | null;
+  notes?: string | null;
+};
+
 /** Тело записи журнала учёта отходов: масса больше нуля, дата не в будущем. */
 export type WasteMovementCreateInput = {
   passport_id: string;
@@ -591,6 +704,90 @@ export const ecologyApi = {
   ): Promise<EmissionNormDto> => {
     const { data } = await apiClient.patch<EmissionNormDto>(
       `/ecology/emission-norms/${id}`,
+      body,
+    );
+    return data;
+  },
+
+  createMonitoringPlanItem: async (
+    body: MonitoringPlanItemCreateInput,
+  ): Promise<MonitoringPlanItemDto> => {
+    const { data } = await apiClient.post<MonitoringPlanItemDto>(
+      "/ecology/monitoring-plan",
+      body,
+    );
+    return data;
+  },
+
+  updateMonitoringPlanItem: async (
+    id: string,
+    body: MonitoringPlanItemUpdateInput,
+  ): Promise<MonitoringPlanItemDto> => {
+    const { data } = await apiClient.patch<MonitoringPlanItemDto>(
+      `/ecology/monitoring-plan/${id}`,
+      body,
+    );
+    return data;
+  },
+
+  createEmissionMeasurement: async (
+    body: EmissionMeasurementCreateInput,
+  ): Promise<EmissionMeasurementDto> => {
+    const { data } = await apiClient.post<EmissionMeasurementDto>(
+      "/ecology/emission-measurements",
+      body,
+    );
+    return data;
+  },
+
+  updateEmissionMeasurement: async (
+    id: string,
+    body: EmissionMeasurementUpdateInput,
+  ): Promise<EmissionMeasurementDto> => {
+    const { data } = await apiClient.patch<EmissionMeasurementDto>(
+      `/ecology/emission-measurements/${id}`,
+      body,
+    );
+    return data;
+  },
+
+  createWaterPoint: async (
+    body: WaterPointCreateInput,
+  ): Promise<WaterPointDto> => {
+    const { data } = await apiClient.post<WaterPointDto>(
+      "/ecology/water-points",
+      body,
+    );
+    return data;
+  },
+
+  updateWaterPoint: async (
+    id: string,
+    body: WaterPointUpdateInput,
+  ): Promise<WaterPointDto> => {
+    const { data } = await apiClient.patch<WaterPointDto>(
+      `/ecology/water-points/${id}`,
+      body,
+    );
+    return data;
+  },
+
+  createWaterRecord: async (
+    body: WaterRecordCreateInput,
+  ): Promise<WaterRecordDto> => {
+    const { data } = await apiClient.post<WaterRecordDto>(
+      "/ecology/water-records",
+      body,
+    );
+    return data;
+  },
+
+  updateWaterRecord: async (
+    id: string,
+    body: WaterRecordUpdateInput,
+  ): Promise<WaterRecordDto> => {
+    const { data } = await apiClient.patch<WaterRecordDto>(
+      `/ecology/water-records/${id}`,
       body,
     );
     return data;

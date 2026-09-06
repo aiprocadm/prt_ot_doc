@@ -12,9 +12,13 @@ import { Button } from "@/components/ui/button";
 import { EcologyDeadlineFormDialog } from "@/features/ecology/EcologyDeadlineFormDialog";
 import { EcologyEmissionNormFormDialog } from "@/features/ecology/EcologyEmissionNormFormDialog";
 import { EcologyEmissionSourceFormDialog } from "@/features/ecology/EcologyEmissionSourceFormDialog";
+import { EcologyMeasurementFormDialog } from "@/features/ecology/EcologyMeasurementFormDialog";
+import { EcologyMonitoringPlanFormDialog } from "@/features/ecology/EcologyMonitoringPlanFormDialog";
 import { EcologyFacilityFormDialog } from "@/features/ecology/EcologyFacilityFormDialog";
 import { EcologyWasteMovementFormDialog } from "@/features/ecology/EcologyWasteMovementFormDialog";
 import { EcologyWastePassportFormDialog } from "@/features/ecology/EcologyWastePassportFormDialog";
+import { EcologyWaterPointFormDialog } from "@/features/ecology/EcologyWaterPointFormDialog";
+import { EcologyWaterRecordFormDialog } from "@/features/ecology/EcologyWaterRecordFormDialog";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { useLocalRegistry } from "@/hooks/useLocalRegistry";
 import { formatDate } from "@/utils/datetime";
@@ -761,6 +765,31 @@ const EcologyPage = () => {
             платформа её не назначает. Превышение показывается только там, где
             внесён разовый норматив в г/с — без норматива сравнивать не с чем.
           </p>
+          {/*
+            Срез-101: строка графика заводится на источнике, замер — тоже;
+            пока источников нет, кнопок нет: форма с пустым списком выглядела
+            бы поломкой.
+          */}
+          {data.sources.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              <EcologyMonitoringPlanFormDialog
+                sources={data.sources}
+                onSubmitted={() => void reload()}
+                trigger={<Button>Внести строку плана</Button>}
+              />
+              <EcologyMeasurementFormDialog
+                sources={data.sources}
+                planItems={data.planItems}
+                onSubmitted={() => void reload()}
+                trigger={<Button>Внести замер</Button>}
+              />
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              План замеров ведётся по источникам выбросов: сначала заведите
+              источник в секции «Выбросы».
+            </p>
+          )}
           {planRegistry.total === 0 ? (
             <EmptyState
               title="План-график замеров не заведён"
@@ -797,6 +826,22 @@ const EcologyPage = () => {
                   accessorKey: "laboratory",
                   header: "Лаборатория",
                   cell: ({ row }) => row.original.laboratory || "—",
+                },
+                {
+                  id: "actions",
+                  header: "Действия",
+                  cell: ({ row }) => (
+                    <EcologyMonitoringPlanFormDialog
+                      sources={data.sources}
+                      initialData={row.original}
+                      onSubmitted={() => void reload()}
+                      trigger={
+                        <Button variant="ghost" size="sm">
+                          Изменить
+                        </Button>
+                      }
+                    />
+                  ),
                 },
               ]}
               data={planRegistry.pagedItems}
@@ -838,6 +883,23 @@ const EcologyPage = () => {
                   header: "Протокол",
                   cell: ({ row }) => row.original.protocol_number || "—",
                 },
+                {
+                  id: "actions",
+                  header: "Действия",
+                  cell: ({ row }) => (
+                    <EcologyMeasurementFormDialog
+                      sources={data.sources}
+                      planItems={data.planItems}
+                      initialData={row.original}
+                      onSubmitted={() => void reload()}
+                      trigger={
+                        <Button variant="ghost" size="sm">
+                          Изменить
+                        </Button>
+                      }
+                    />
+                  ),
+                },
               ]}
               data={measurementRegistry.pagedItems}
               pageIndex={measurementRegistry.pageIndex}
@@ -870,6 +932,29 @@ const EcologyPage = () => {
             Забор за год: {readiness.water_intake_cubic_meters} м³ · сброс за
             год: {readiness.water_discharge_cubic_meters} м³
           </p>
+          {/* Срез-101: точка заводится на объекте НВОС, объём — на точке. */}
+          <div className="flex flex-wrap gap-2">
+            {data.facilities.length > 0 ? (
+              <EcologyWaterPointFormDialog
+                facilities={data.facilities}
+                onSubmitted={() => void reload()}
+                trigger={<Button>Завести точку</Button>}
+              />
+            ) : null}
+            {data.waterPoints.length > 0 ? (
+              <EcologyWaterRecordFormDialog
+                points={data.waterPoints}
+                onSubmitted={() => void reload()}
+                trigger={<Button>Записать объём</Button>}
+              />
+            ) : null}
+          </div>
+          {data.facilities.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Точки водопользования заводятся на объекте НВОС: сначала внесите
+              объект в секции «Объекты НВОС».
+            </p>
+          ) : null}
           {waterPointRegistry.total === 0 ? (
             <EmptyState
               title="Точки водопользования не заведены"
@@ -906,6 +991,22 @@ const EcologyPage = () => {
                       ? `${row.original.volume_this_year} — превышен лимит`
                       : row.original.volume_this_year,
                 },
+                {
+                  id: "actions",
+                  header: "Действия",
+                  cell: ({ row }) => (
+                    <EcologyWaterPointFormDialog
+                      facilities={data.facilities}
+                      initialData={row.original}
+                      onSubmitted={() => void reload()}
+                      trigger={
+                        <Button variant="ghost" size="sm">
+                          Изменить
+                        </Button>
+                      }
+                    />
+                  ),
+                },
               ]}
               data={waterPointRegistry.pagedItems}
               pageIndex={waterPointRegistry.pageIndex}
@@ -935,6 +1036,22 @@ const EcologyPage = () => {
                   accessorKey: "meter_number",
                   header: "Прибор учёта",
                   cell: ({ row }) => row.original.meter_number || "—",
+                },
+                {
+                  id: "actions",
+                  header: "Действия",
+                  cell: ({ row }) => (
+                    <EcologyWaterRecordFormDialog
+                      points={data.waterPoints}
+                      initialData={row.original}
+                      onSubmitted={() => void reload()}
+                      trigger={
+                        <Button variant="ghost" size="sm">
+                          Изменить
+                        </Button>
+                      }
+                    />
+                  ),
                 },
               ]}
               data={waterRecordRegistry.pagedItems}
