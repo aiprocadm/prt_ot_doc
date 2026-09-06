@@ -1,10 +1,19 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import select
 
-from app.models.models import RoleEnum, Tenant, TrainingCourse, TrainingPlan, User
+from app.models.master_data import EmploymentStatus
+from app.models.models import (
+    PPEIssue,
+    PPEIssueStatus,
+    RoleEnum,
+    Tenant,
+    TrainingCourse,
+    TrainingPlan,
+    User,
+)
 from app.models.notifications import (
     Notification,
     NotificationChannel,
@@ -50,6 +59,67 @@ async def test_calendar_events_returns_training_and_tasks(
     payload = response.json()
     assert any(item["source"] == "training" for item in payload)
     assert any(item["source"] == "task" for item in payload)
+
+
+async def test_календарь_сроки_уволенного_не_показывает(
+    async_client, make_auth_headers, sessionmaker, data_factory
+) -> None:
+    """«Уволенный не в счёт» (BIZ-54-57 срез-96): сроки обучения и СИЗ
+    уволенного и удалённого человека в календарь уведомлений не идут."""
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    now = datetime.now(tz=timezone.utc)
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        company = await data_factory.create_company(session=session, tenant=tenant)
+        here = await data_factory.create_person(
+            tenant=tenant, company=company, last_name="Работает", session=session
+        )
+        gone = await data_factory.create_person(
+            tenant=tenant,
+            company=company,
+            last_name="Уволен",
+            session=session,
+            employment_status=EmploymentStatus.TERMINATED,
+        )
+        erased = await data_factory.create_person(
+            tenant=tenant, company=company, last_name="Удалён", session=session, deleted_at=now
+        )
+        course = TrainingCourse(tenant_id=tenant.id, title="Core-96")
+        session.add(course)
+        await session.flush()
+        plans: dict[str, str] = {}
+        issues: dict[str, str] = {}
+        for person in (here, gone, erased):
+            plan = TrainingPlan(
+                tenant_id=tenant.id,
+                company_id=company.id,
+                course_id=course.id,
+                person_id=person.id,
+                due_date=date.today(),
+            )
+            issue = PPEIssue(
+                tenant_id=tenant.id,
+                person_id=person.id,
+                item_name="Каска",
+                quantity=1,
+                status=PPEIssueStatus.ISSUED,
+                issued_at=now,
+                expires_at=now + timedelta(days=30),
+            )
+            session.add_all([plan, issue])
+            await session.flush()
+            plans[person.id] = plan.id
+            issues[person.id] = issue.id
+        await session.commit()
+
+    response = await async_client.get("/api/v1/notifications/calendar/events", headers=headers)
+    assert response.status_code == 200
+    entity_ids = {(item["source"], item["entity_id"]) for item in response.json()}
+    assert ("training", plans[here.id]) in entity_ids
+    assert ("ppe", issues[here.id]) in entity_ids
+    for person in (gone, erased):
+        assert ("training", plans[person.id]) not in entity_ids
+        assert ("ppe", issues[person.id]) not in entity_ids
 
 
 async def test_notifications_unread_filter_excludes_read(

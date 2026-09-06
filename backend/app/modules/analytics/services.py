@@ -32,6 +32,7 @@ from app.modules.projections.models import (
 )
 from app.modules.workflow.models import WorkflowTask, WorkflowTaskStatus
 from app.services.discipline_incidents import open_incidents_where
+from app.services.person_scope import employed_record_where
 
 
 @dataclass(slots=True)
@@ -169,6 +170,9 @@ class AnalyticsAggregationService:
 
     async def detailed_counters(self, filters: DashboardFilters) -> dict[str, int]:
         today = date.today()
+        # «Уволенный не в счёт» (BIZ-54-57 срез-96): виджеты «просрочено» —
+        # сводка «что горит сейчас», как Центр внимания и Командный центр;
+        # план без человека (на организацию) остаётся.
         trainings_overdue = int(
             await self.session.scalar(
                 select(func.count())
@@ -177,6 +181,7 @@ class AnalyticsAggregationService:
                     TrainingPlan.tenant_id == self.tenant_id,
                     TrainingPlan.due_date.is_not(None),
                     TrainingPlan.due_date < today,
+                    employed_record_where(TrainingPlan, self.tenant_id),
                 )
             )
             or 0
@@ -191,6 +196,7 @@ class AnalyticsAggregationService:
                     PPEIssue.status == PPEIssueStatus.ISSUED,
                     PPEIssue.expires_at.is_not(None),
                     func.date(PPEIssue.expires_at) < today,
+                    employed_record_where(PPEIssue, self.tenant_id),
                 )
             )
             or 0

@@ -1,5 +1,67 @@
 # CHANGELOG
 
+## 2026-09-06 (feat/biz-54-57-slice-96 — «уволенный не в счёт» в аналитике, напоминаниях о замене СИЗ, календаре уведомлений и медконтингенте, разд. 57.2 / 57.4 / 49.2 / 55.1)
+
+### Зачем
+
+После среза-95 правило «уволенный не в счёт» держали Центр внимания, блокеры,
+Командный центр, БДД и ПБ, но четыре места ещё считали и рассылали по всем
+людям арендатора: виджеты «просрочено» управленческой сводки
+(`modules/analytics/services.py::detailed_counters` → `trainings_overdue`,
+`ppe_overdue` на `ManagementDashboardPage`) и та же цифра в разбивке по
+организациям (`modules/analytics/breakdown.py`); ежедневный тик «пора менять
+СИЗ» (`services/ppe_notifications.notify_replacement_due` → письмо
+`PPEReplacementDue`); календарь уведомлений (`modules/notifications/service.py::
+list_calendar_events`, старый эндпоинт `/notifications/calendar/events`);
+контингент медосмотров (`domains/medical/service.compute_contingent` — и его
+ежедневная рассылка `medical.contingent.tick`). Дашборд руководителя говорил
+«две просрочки», а Центр внимания под ним — «одна»; уволенному слали письмо
+про каску.
+
+### Что сделано
+
+- **Аналитика.** `detailed_counters`: `trainings_overdue`, `ppe_overdue` —
+  условие на запись (`employed_record_where`); план на организацию без
+  человека остаётся в счёте. `compute_breakdown(dimension="company")`:
+  обучение — то же условие; СИЗ (там join с `Person`) — `employed_person_where()`.
+  Виджеты `overdue` / `client_delivery` и разбивка теперь сходятся с блокерами.
+- **Тик замены СИЗ** (`ppe_notifications.notify_replacement_due`): истекающие и
+  просроченные СИЗ уволенного/удалённого в очередь писем не идут — правило
+  как у напоминаний общего календаря (срез-93).
+- **Календарь уведомлений** (`modules/notifications/service.py`): сроки
+  обучения и СИЗ уволенного — не события; задачи, проверки, документы — как
+  были.
+- **Медконтингент** (`domains/medical/service.compute_contingent`): люди с
+  должностью берутся по `employed_person_where()` — уволенный и удалённый в
+  контингент и в рассылку «просрочен осмотр» не попадают. `build_named_list` и
+  `_active_headcount_by_position` (только `ACTIVE`, печатная форма) не тронуты.
+- **Намеренно не тронуты:** `tasks/notification_jobs._scan_reminders_for_tenant`
+  (старый часовой сканер `ReminderRule`; запросы по СИЗ/планам без фильтра
+  арендатора и без тестов — трогать вслепую нельзя, сначала нужен harness);
+  `modules/data_quality/rules.py` (`ExpiredRecordsRule`, `ExpiredPPEIssuesRule` —
+  список чистки данных: выданная СИЗ у уволенного — сама по себе
+  несоответствие, его и надо видеть); `services/person_admission.py` (явный
+  список людей); `api/routes/medical/exams.py` (реестр осмотров);
+  `base_counters.overdue_compliance_items` (read model по человеку — семантика
+  проекций, отдельный вопрос).
+
+### Как проверено
+
+- Живые тесты (все красные на старом коде, `git stash -- backend/app/`):
+  `tests/test_analytics_aggregation.py` **+1** (трое — работающий, уволенный,
+  удалённый — с просроченным планом и истёкшим СИЗ плюс план на организацию:
+  `trainings_overdue == 2`, `ppe_overdue == 1`; та же строка в разбивке по
+  организации); `tests/test_ppe_replacement_due_tick.py` **+1** (одно письмо,
+  и оно — работающему); `tests/test_medical_contingent_factor.py` **+1**
+  (работающий в контингенте, уволенный и удалённый — нет);
+  `tests/api/test_notifications_calendar_api.py` **+1** (обучение и СИЗ
+  работающего в календаре, уволенного и удалённого — нет).
+- Регресс волны — 85 файлов (аналитика, СИЗ, медицина, уведомления, календарь,
+  рабочий стол, Командный центр, БДД, ПБ, дисциплины, чистка данных, бюджет;
+  `/tmp/regress96.log`): **609 passed / 0 failed** (85 файлов, `EXIT=0`).
+- Фронт не тронут. OpenAPI без изменений (1106 операций / 1047 схем); границы
+  контекстов чисты; `black --check`/`ruff` по затронутым файлам — чисто.
+
 ## 2026-09-06 (feat/biz-54-57-slice-95 — «уволенный не в счёт» в последних сводках «что горит сейчас»: блокеры готовности, сводка роли, Командный центр и сводка БДД; условие на запись — одно в `person_scope`, разд. 57.2 / 57.4 / 56.2)
 
 ### Зачем

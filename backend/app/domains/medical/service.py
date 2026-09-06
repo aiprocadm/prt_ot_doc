@@ -27,6 +27,7 @@ from app.models.models import (
 )
 from app.services.events import EventType
 from app.services.outbox import OutboxService
+from app.services.person_scope import employed_person_where
 
 
 async def list_active_suspensions(
@@ -379,6 +380,11 @@ async def compute_contingent(
     Required kinds = norm-driven (resolve_required_kinds) ∪ factor-driven (29н factors mapped
     via Position hazards' medical_factor_code). A person enters the contingent even without a
     manual MedicalNorm when their position's hazards map to 29н factors.
+
+    «Уволенный не в счёт» (BIZ-54-57 срез-96): контингент — кому проходить
+    осмотры; уволенному и удалённому — некому, поэтому сводка статусов,
+    направления и напоминания (всё считается отсюда) их не видят. Условие —
+    одно с карточками и календарём (``services/person_scope``).
     """
     norm_stmt = select(
         MedicalNorm.position_id,
@@ -397,7 +403,7 @@ async def compute_contingent(
         select(Person)
         .where(
             Person.tenant_id == tenant_id,
-            Person.deleted_at.is_(None),
+            *employed_person_where(),
             Person.position_id.is_not(None),
         )
         .options(selectinload(Person.position).selectinload(Position.hazards))

@@ -28,6 +28,7 @@ from app.modules.notifications.schemas import (
     NotificationTemplateIn,
     NotificationTemplateOut,
 )
+from app.services.person_scope import employed_record_where
 
 CALENDAR_SOURCES: Final[tuple[str, ...]] = ("task", "training", "ppe", "inspection")
 
@@ -392,6 +393,8 @@ class NotificationApplicationService:
                 )
             )
 
+        # «Уволенный не в счёт» (BIZ-54-57 срез-96): сроки обучения и СИЗ
+        # уволенного в календарь не идут — как в общем календаре арендатора.
         training_rows = (
             (
                 await self.session.execute(
@@ -400,6 +403,7 @@ class NotificationApplicationService:
                         TrainingPlan.tenant_id == self.tenant.id,
                         TrainingPlan.deleted_at.is_(None),
                         TrainingPlan.due_date.is_not(None),
+                        employed_record_where(TrainingPlan, self.tenant.id),
                     )
                     .limit(300)
                 )
@@ -432,6 +436,7 @@ class NotificationApplicationService:
                         PPEIssue.tenant_id == self.tenant.id,
                         PPEIssue.deleted_at.is_(None),
                         PPEIssue.expires_at.is_not(None),
+                        employed_record_where(PPEIssue, self.tenant.id),
                     )
                     .limit(300)
                 )

@@ -1,10 +1,11 @@
 """compute_contingent must include factor-driven persons with NO manual norm."""
 
-from datetime import date
+from datetime import date, datetime, timezone
 
 import pytest
 
 from app.domains.medical.service import compute_contingent
+from app.models.master_data import EmploymentStatus
 from app.models.models import MedicalFactor, Position, PositionHazardLink
 from app.models.risk import RiskHazard
 
@@ -106,3 +107,64 @@ async def test_unknown_exam_kind_label_is_skipped_not_crashing(sessionmaker, dat
         items = await compute_contingent(session, tenant_id=str(tenant.id), today=date(2026, 6, 13))
     kinds = {it["exam_kind"] for it in items if it["person_id"] == person.id}
     assert "periodic" in kinds and "bogus_kind" not in kinds
+
+
+@pytest.mark.asyncio
+async def test_уволенный_в_контингент_не_попадает(sessionmaker, data_factory):
+    """«Уволенный не в счёт» (BIZ-54-57 срез-96): контингент — кому проходить
+    осмотры; уволенный и удалённый с той же должностью и фактором в него не идут."""
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        company = await data_factory.create_company(tenant=tenant, session=session)
+        hazard = RiskHazard(
+            tenant_id=tenant.id, code="noise96", title="Шум", medical_factor_code="4.4"
+        )
+        session.add(hazard)
+        await session.flush()
+        pos = Position(tenant_id=tenant.id, company_id=company.id, name="Сварщик-96")
+        session.add(pos)
+        await session.flush()
+        session.add(
+            PositionHazardLink(tenant_id=tenant.id, position_id=pos.id, hazard_id=hazard.id)
+        )
+        await session.flush()
+        here = await data_factory.create_person(
+            tenant=tenant,
+            company=company,
+            session=session,
+            position_id=pos.id,
+            last_name="Работает",
+        )
+        gone = await data_factory.create_person(
+            tenant=tenant,
+            company=company,
+            session=session,
+            position_id=pos.id,
+            last_name="Уволен",
+            employment_status=EmploymentStatus.TERMINATED,
+        )
+        erased = await data_factory.create_person(
+            tenant=tenant,
+            company=company,
+            session=session,
+            position_id=pos.id,
+            last_name="Удалён",
+            deleted_at=datetime.now(tz=timezone.utc),
+        )
+        session.add(
+            MedicalFactor(
+                tenant_id=tenant.id,
+                code="4.4",
+                name="Шум",
+                exam_kinds=["periodic"],
+                periodicity_months=12,
+            )
+        )
+        await session.commit()
+
+        items = await compute_contingent(session, tenant_id=str(tenant.id), today=date(2026, 6, 13))
+
+    people = {it["person_id"] for it in items}
+    assert here.id in people
+    assert gone.id not in people
+    assert erased.id not in people
