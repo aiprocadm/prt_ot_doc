@@ -29,6 +29,7 @@ from app.core.disciplines import (
 )
 from app.models.briefings import BriefingEntry, BriefingJournal
 from app.models.feature import Feature, FeatureEnablement
+from app.models.master_data import EmploymentStatus
 from app.models.models import Tenant
 
 pytestmark = pytest.mark.anyio
@@ -155,6 +156,68 @@ class TestКонтрольСроков:
                     valid_until=datetime.now(timezone.utc) - timedelta(days=35),
                     status="done",
                 )
+            )
+            await session.commit()
+
+        after = (
+            await async_client.get("/api/v1/fire-safety/readiness", headers=headers)
+        ).json()
+        assert (
+            after["overdue_fire_briefings"] == before["overdue_fire_briefings"] + 1
+        ), after
+
+    async def test_истёкший_птм_уволенного_не_просрочка_в_готовности(
+        self, async_client, make_auth_headers, sessionmaker, data_factory
+    ) -> None:
+        """Срез-94: «уволенный не в счёт» и в сводке модуля ПБ — как в карточках,
+        портфеле и общем календаре. Запись без человека по-прежнему считается."""
+
+        headers = await make_auth_headers()
+        await _grant_fire(sessionmaker)
+
+        before = (
+            await async_client.get("/api/v1/fire-safety/readiness", headers=headers)
+        ).json()
+
+        async with sessionmaker() as session:
+            tenant = (
+                await session.execute(select(Tenant).where(Tenant.slug == "test"))
+            ).scalar_one()
+            gone = await data_factory.create_person(
+                tenant=tenant,
+                last_name="Уволенный",
+                employment_status=EmploymentStatus.TERMINATED,
+                session=session,
+            )
+            journal = BriefingJournal(
+                tenant_id=tenant.id,
+                code="J-FIRE-GONE",
+                title="Журнал ПБ",
+                journal_type="fire",
+            )
+            session.add(journal)
+            await session.flush()
+            expired = datetime.now(timezone.utc) - timedelta(days=35)
+            session.add_all(
+                [
+                    BriefingEntry(
+                        tenant_id=tenant.id,
+                        briefing_journal_id=journal.id,
+                        person_id=gone.id,
+                        briefing_type="fire_ptm",
+                        briefing_date=expired - timedelta(days=365),
+                        valid_until=expired,
+                        status="done",
+                    ),
+                    BriefingEntry(
+                        tenant_id=tenant.id,
+                        briefing_journal_id=journal.id,
+                        briefing_type="fire_ptm",
+                        briefing_date=expired - timedelta(days=365),
+                        valid_until=expired,
+                        status="done",
+                    ),
+                ]
             )
             await session.commit()
 
