@@ -91,3 +91,56 @@ export const cdParticipantsToPayload = (
   value: string | undefined,
 ): number | null =>
   value && value.trim() !== "" ? Number(value.trim()) : null;
+
+/**
+ * Сведения по ГО об объекте (разд. 56.1, срез-110).
+ *
+ * ГРАНИЦА: категорирование выполняет ОРГАН — платформа категорию не
+ * предлагает и не выводит. «Категория не присвоена» — полноценное значение
+ * словаря, а не пустое поле: это ответ, а не отсутствие ответа. На объект
+ * заводится одна карточка сведений (уникальность держит база).
+ */
+export const cdProfileFormSchema = z
+  .object({
+    site_id: z.string().trim().min(1, "Выберите площадку"),
+    category: z.string().trim().min(1, "Выберите категорию по ГО"),
+    decision_number: optionalText,
+    decision_date: optionalText,
+    responsible: optionalText,
+    notes: optionalText,
+  })
+  // Присвоенная категория без реквизитов решения — сведения, которые нечем
+  // подтвердить перед органом управления ГОЧС.
+  .refine(
+    (v) =>
+      v.category === "none" ||
+      Boolean(v.decision_number?.trim()) ||
+      Boolean(v.decision_date?.trim()),
+    {
+      message: "У присвоенной категории укажите номер или дату решения",
+      path: ["decision_number"],
+    },
+  );
+
+export type CdProfileFormValues = z.infer<typeof cdProfileFormSchema>;
+
+/**
+ * Документ планирования ГО (разд. 56.1, срез-110).
+ *
+ * ГРАНИЦА (та же, что у документов ПБ): платформа НЕ объявляет, какие
+ * документы объекту обязательны — состав планирования зависит от категории и
+ * решений органа. Пустой срок пересмотра означает «бессрочный», а не
+ * «просрочен».
+ */
+export const cdDocumentFormSchema = z.object({
+  kind: z.string().trim().min(1, "Выберите вид документа"),
+  title: z.string().trim().min(1, "Назовите документ"),
+  number: optionalText,
+  site_id: optionalText,
+  review_due: optionalText,
+  approved_on: optionalText,
+  responsible: optionalText,
+  notes: optionalText,
+});
+
+export type CdDocumentFormValues = z.infer<typeof cdDocumentFormSchema>;
