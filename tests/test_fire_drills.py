@@ -25,13 +25,20 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date, timedelta
+from pathlib import Path
 
 import pytest
 from sqlalchemy import select
 
 from app.models.feature import Feature, FeatureEnablement
+from app.models.fire_safety import FIRE_DRILL_KINDS, FIRE_DRILL_OUTCOMES
 from app.models.models import Tenant
+
+_FRONTEND_FIRE_API = (
+    Path(__file__).resolve().parents[1] / "frontend" / "src" / "api" / "fireSafety.ts"
+)
 
 pytestmark = pytest.mark.anyio
 
@@ -339,3 +346,36 @@ class TestИзоляцияАрендатора:
             headers=headers,
         )
         assert response.status_code == 404
+
+
+class TestСловариТренировокНаФронте:
+    """Срез-104: вид и результат тренировки выбирают в форме из копий словарей.
+
+    Свободная строка сделала бы требуемый разд. 54.1 «анализ» невозможным —
+    поэтому оба словаря закрыты, а список формы строится из
+    ``FIRE_DRILL_KIND_TITLES`` / ``FIRE_DRILL_OUTCOME_TITLES``
+    в ``api/fireSafety.ts``.
+    """
+
+    @staticmethod
+    def _front_map(name: str) -> dict[str, str]:
+        text = _FRONTEND_FIRE_API.read_text(encoding="utf-8")
+        block = re.search(
+            rf"{name}:\s*Record<[^>]+>\s*=\s*\{{(.*?)\n\}}", text, re.S
+        )
+        assert block is not None, f"не нашёлся map {name}"
+        pairs = re.findall(
+            r'([a-z_]+):\s*\n?\s*"([^"]+)"', block.group(1), re.M
+        )
+        return dict(pairs)
+
+    def test_виды_тренировок_на_фронте_совпадают_с_бэкендом(self) -> None:
+        front = self._front_map("FIRE_DRILL_KIND_TITLES")
+        assert front == FIRE_DRILL_KINDS, sorted(front.items() ^ FIRE_DRILL_KINDS.items())
+
+    def test_результаты_на_фронте_совпадают_с_бэкендом(self) -> None:
+        front = self._front_map("FIRE_DRILL_OUTCOME_TITLES")
+        assert front == FIRE_DRILL_OUTCOMES, sorted(
+            front.items() ^ FIRE_DRILL_OUTCOMES.items()
+        )
+

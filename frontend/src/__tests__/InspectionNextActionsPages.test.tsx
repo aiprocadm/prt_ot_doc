@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -11,6 +12,9 @@ const getInspectionWorkspaceSnapshotMock = vi.fn();
 const getFireTrainingSnapshotMock = vi.fn();
 const listDrillsMock = vi.fn();
 const readinessMock = vi.fn();
+const createDrillMock = vi.fn();
+const updateDrillMock = vi.fn();
+const listSitesMock = vi.fn();
 
 vi.mock("@/api/operations", () => ({
   operationsApi: {
@@ -21,12 +25,21 @@ vi.mock("@/api/operations", () => ({
   },
 }));
 
-vi.mock("@/api/fireSafety", () => ({
+vi.mock("@/api/fireSafety", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
   fireSafetyApi: {
     listDrills: (...args: unknown[]) => listDrillsMock(...args),
     readiness: (...args: unknown[]) => readinessMock(...args),
+    createDrill: (...args: unknown[]) => createDrillMock(...args),
+    updateDrill: (...args: unknown[]) => updateDrillMock(...args),
   },
 }));
+
+vi.mock("@/api/sites", () => ({
+  sitesApi: { list: (...args: unknown[]) => listSitesMock(...args) },
+}));
+
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 /** Сводка готовности без тренировок — исходное состояние арендатора. */
 const emptyReadiness = {
@@ -91,8 +104,115 @@ describe("Inspection/fire next actions", () => {
     getFireTrainingSnapshotMock.mockReset();
     listDrillsMock.mockReset();
     readinessMock.mockReset();
+    createDrillMock.mockReset();
+    updateDrillMock.mockReset();
+    listSitesMock.mockReset();
     listDrillsMock.mockResolvedValue([]);
     readinessMock.mockResolvedValue(emptyReadiness);
+    listSitesMock.mockResolvedValue({
+      items: [{ id: "site-1", name: "Площадка №1" }],
+      total: 1,
+    });
+  });
+
+  it("тренировка планируется с экрана, а не только через API (срез-104)", async () => {
+    const user = userEvent.setup();
+    getFireTrainingSnapshotMock.mockResolvedValue({
+      templates: [],
+      journals: [],
+      overdueEntries: [],
+      programs: [],
+    });
+    const added = {
+      ...populatedDrill,
+      id: "drill-new",
+      title: "Учение с пожарной охраной",
+    };
+    createDrillMock.mockResolvedValue(added);
+    listDrillsMock
+      .mockResolvedValueOnce([populatedDrill])
+      .mockResolvedValue([populatedDrill, added]);
+
+    render(
+      <MemoryRouter>
+        <FireTrainingPage />
+      </MemoryRouter>,
+    );
+    await screen.findByText("Тренировка по эвакуации, корпус А");
+
+    await user.click(
+      screen.getByRole("button", { name: "Запланировать тренировку" }),
+    );
+    await user.selectOptions(screen.getByLabelText("Вид"), "joint");
+    await user.type(
+      screen.getByLabelText("Тренировка"),
+      "Учение с пожарной охраной",
+    );
+    await user.type(screen.getByLabelText("По плану"), "2026-11-10");
+    await user.selectOptions(screen.getByLabelText("Площадка"), "site-1");
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(createDrillMock).toHaveBeenCalled());
+    expect(createDrillMock.mock.calls[0][0]).toMatchObject({
+      kind: "joint",
+      title: "Учение с пожарной охраной",
+      planned_on: "2026-11-10",
+      site_id: "site-1",
+      // Протокола ещё нет: дата проведения и результат пусты.
+      held_on: null,
+      outcome: null,
+      participants: null,
+    });
+    expect(
+      await screen.findByText("Учение с пожарной охраной"),
+    ).toBeInTheDocument();
+  });
+
+  it("протокол вносится из строки непроведённой тренировки (срез-104)", async () => {
+    const user = userEvent.setup();
+    getFireTrainingSnapshotMock.mockResolvedValue({
+      templates: [],
+      journals: [],
+      overdueEntries: [],
+      programs: [],
+    });
+    listDrillsMock.mockResolvedValue([populatedDrill]);
+    updateDrillMock.mockResolvedValue({
+      ...populatedDrill,
+      held_on: "2026-08-05",
+      outcome: "with_remarks",
+    });
+
+    render(
+      <MemoryRouter>
+        <FireTrainingPage />
+      </MemoryRouter>,
+    );
+    await screen.findByText("Тренировка по эвакуации, корпус А");
+
+    // У непроведённой тренировки кнопка называется «Протокол», а не «Изменить».
+    await user.click(screen.getByRole("button", { name: "Протокол" }));
+    await user.click(
+      screen.getByText(
+        "Протокол проведения: дата, результат, участники, анализ",
+      ),
+    );
+    await user.type(screen.getByLabelText("Проведена"), "2026-08-05");
+    await user.selectOptions(
+      screen.getByLabelText("Результат"),
+      "with_remarks",
+    );
+    await user.type(screen.getByLabelText("Участников"), "42");
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(updateDrillMock).toHaveBeenCalled());
+    expect(updateDrillMock.mock.calls[0][0]).toBe("drill-1");
+    expect(updateDrillMock.mock.calls[0][1]).toMatchObject({
+      held_on: "2026-08-05",
+      outcome: "with_remarks",
+      participants: 42,
+      planned_on: "2026-08-01",
+    });
   });
 
   it("shows blockers panel on FireInspectionsPage", async () => {

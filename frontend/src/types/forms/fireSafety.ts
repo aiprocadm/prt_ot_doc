@@ -66,3 +66,45 @@ export const fireMaintenanceFormSchema = z.object({
 export type FireMaintenanceFormValues = z.infer<
   typeof fireMaintenanceFormSchema
 >;
+
+/**
+ * Тренировка или учение по ПБ (разд. 54.1, срез-104).
+ *
+ * Тренировка рождается ЗАПЛАНИРОВАННОЙ: вид, название и дата плана
+ * обязательны. Протокол — вторая половина записи, и он обязан быть цельным:
+ * проведена → есть результат, результат → есть дата проведения. Оба правила
+ * стоят и на сервере; здесь они показывают ошибку сразу у поля, а не после
+ * запроса. Дата проведения в будущем — это план, а не протокол.
+ */
+export const fireDrillFormSchema = z
+  .object({
+    kind: z.string().trim().min(1, "Выберите вид тренировки"),
+    title: z.string().trim().min(1, "Назовите тренировку"),
+    planned_on: z.string().trim().min(1, "Внесите дату по плану"),
+    site_id: optionalText,
+    held_on: optionalText,
+    outcome: optionalText,
+    participants: z
+      .string()
+      .trim()
+      .regex(/^\d*$/, "Участники: целое число")
+      .optional(),
+    scenario: optionalText,
+    findings: optionalText,
+  })
+  .refine((v) => !v.held_on || Boolean(v.outcome), {
+    message: "У проведённой тренировки обязателен результат",
+    path: ["outcome"],
+  })
+  .refine((v) => !v.outcome || Boolean(v.held_on), {
+    message: "Результат без даты проведения — выдумка о событии",
+    path: ["held_on"],
+  });
+
+export type FireDrillFormValues = z.infer<typeof fireDrillFormSchema>;
+
+/** Пустое поле участников — «не внесено» (null), а не ноль человек. */
+export const participantsToPayload = (
+  value: string | undefined,
+): number | null =>
+  value && value.trim() !== "" ? Number(value.trim()) : null;
