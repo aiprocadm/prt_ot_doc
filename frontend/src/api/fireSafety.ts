@@ -60,6 +60,39 @@ export const FIRE_MAINTENANCE_KIND_TITLES: Record<string, string> = {
   repair: "Ремонт и устранение замечаний",
 };
 
+/**
+ * Виды тренировок и учений — копия `FIRE_DRILL_KINDS` бэкенда. Свободная
+ * строка сделала бы требуемый разд. 54.1 «анализ» невозможным: считать было
+ * бы нечего. Совпадение стережёт `tests/test_fire_drills.py` (срез-104).
+ */
+export const FIRE_DRILL_KIND_TITLES: Record<string, string> = {
+  evacuation: "Тренировка по эвакуации",
+  fire_fighting: "Тренировка по применению первичных средств пожаротушения",
+  joint: "Совместное учение с подразделениями пожарной охраны",
+};
+
+/** Результаты проведённой тренировки — копия `FIRE_DRILL_OUTCOMES` бэкенда. */
+export const FIRE_DRILL_OUTCOME_TITLES: Record<string, string> = {
+  passed: "Проведена, задачи выполнены",
+  with_remarks: "Проведена с замечаниями",
+  failed: "Задачи не выполнены",
+};
+
+/** Тело тренировки: план обязателен — тренировка рождается запланированной. */
+export type FireDrillCreateInput = {
+  kind: string;
+  title: string;
+  planned_on: string;
+  site_id?: string | null;
+  scenario?: string | null;
+  held_on?: string | null;
+  participants?: number | null;
+  outcome?: string | null;
+  findings?: string | null;
+};
+
+export type FireDrillUpdateInput = FireDrillCreateInput;
+
 /** Тело средства защиты: вид из закрытого словаря, сроки необязательны. */
 export type FireEquipmentCreateInput = {
   kind: string;
@@ -284,6 +317,25 @@ export const fireSafetyApi = {
   ): Promise<FireMaintenanceDto> => {
     const { data } = await apiClient.post<FireMaintenanceDto>(
       "/fire-safety/maintenance",
+      body,
+    );
+    return data;
+  },
+
+  createDrill: async (body: FireDrillCreateInput): Promise<FireDrillDto> => {
+    const { data } = await apiClient.post<FireDrillDto>(
+      "/fire-safety/drills",
+      body,
+    );
+    return data;
+  },
+
+  updateDrill: async (
+    id: string,
+    body: FireDrillUpdateInput,
+  ): Promise<FireDrillDto> => {
+    const { data } = await apiClient.patch<FireDrillDto>(
+      `/fire-safety/drills/${id}`,
       body,
     );
     return data;

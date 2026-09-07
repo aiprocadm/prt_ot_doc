@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 
 import { fireSafetyApi } from "@/api/fireSafety";
 import { operationsApi } from "@/api/operations";
+import { sitesApi } from "@/api/sites";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -10,6 +11,7 @@ import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
 import { RegistryTable } from "@/components/common/RegistryTable";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { FireDrillFormDialog } from "@/features/fire-safety/FireDrillFormDialog";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { useLocalRegistry } from "@/hooks/useLocalRegistry";
 import { formatDate } from "@/utils/datetime";
@@ -51,11 +53,15 @@ const FireTrainingPage = () => {
       async () => ({
         items: await fireSafetyApi.listDrills(),
         readiness: await fireSafetyApi.readiness(),
+        // Площадки — ядровой справочник: тренировку привязывают выбором,
+        // а не вводом id (срез-104).
+        sites: (await sitesApi.list()).items,
       }),
       [],
     ),
     initialData: {
       items: [],
+      sites: [],
       readiness: {
         incidents_open: 0,
         total_units: 0,
@@ -194,6 +200,21 @@ const FireTrainingPage = () => {
               специалист, платформа сама нарушением это не называет.
             </p>
           ) : null}
+          {/*
+            Срез-104: ручки тренировок (срез-4) работали только через API —
+            экран звал «заведите тренировку по эвакуации», а завести её было
+            негде. Одна главная кнопка на секцию; протокол вносится правкой
+            той же формой.
+          */}
+          {!drills.loading && !drills.error ? (
+            <div>
+              <FireDrillFormDialog
+                sites={drills.data.sites}
+                onSubmitted={() => void drills.reload()}
+                trigger={<Button>Запланировать тренировку</Button>}
+              />
+            </div>
+          ) : null}
           {!drills.loading && !drills.error && drillRegistry.total === 0 ? (
             <EmptyState
               title="Тренировки не запланированы"
@@ -230,6 +251,24 @@ const FireTrainingPage = () => {
                           row.original.outcome_label ?? "—"
                         }`
                       : "—",
+                },
+                {
+                  id: "actions",
+                  header: "Действия",
+                  // Правка и внесение протокола — одна и та же форма: пока
+                  // тренировка не проведена, протокольная часть свёрнута.
+                  cell: ({ row }) => (
+                    <FireDrillFormDialog
+                      sites={drills.data.sites}
+                      initialData={row.original}
+                      onSubmitted={() => void drills.reload()}
+                      trigger={
+                        <Button variant="ghost" size="sm">
+                          {row.original.held_on ? "Изменить" : "Протокол"}
+                        </Button>
+                      }
+                    />
+                  ),
                 },
               ]}
               data={drillRegistry.pagedItems}
