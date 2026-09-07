@@ -209,6 +209,7 @@
     "GET /api/v1/ecology/monitoring-plan",
     "GET /api/v1/ecology/readiness",
     "GET /api/v1/ecology/reporting-deadlines",
+    "GET /api/v1/ecology/waste-contracts",
     "GET /api/v1/ecology/waste-movements",
     "GET /api/v1/ecology/waste-passports",
     "GET /api/v1/ecology/water-points",
@@ -1862,6 +1863,7 @@
     "list_triggers_api_v1_rules_triggers_get",
     "list_vehicles_api_v1_road_safety_vehicles_get",
     "list_violations_api_v1_road_safety_violations_get",
+    "list_waste_contracts_api_v1_ecology_waste_contracts_get",
     "list_waste_movements_api_v1_ecology_waste_movements_get",
     "list_waste_passports_api_v1_ecology_waste_passports_get",
     "list_water_points_api_v1_ecology_water_points_get",
@@ -3178,6 +3180,8 @@
     "VoteChoice",
     "VoteCreate",
     "VoteRead",
+    "WasteContractPage",
+    "WasteContractRead",
     "WasteMovementCreate",
     "WasteMovementPage",
     "WasteMovementRead",
@@ -6005,6 +6009,7 @@
       "recharge_due": "null|string",
       "inspection_due": "null|string",
       "status": "string",
+      "status_label": "string",
       "last_maintenance_on": "null|string",
       "last_maintenance_result": "null|string"
     },
@@ -10548,6 +10553,17 @@
       "decision_id": "string",
       "person_id": "string",
       "choice": "VoteChoice"
+    },
+    "WasteContractPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "WasteContractRead": {
+      "id": "string",
+      "counterparty_name": "string",
+      "contract_number": "null|string",
+      "valid_until": "null|string",
+      "status": "string"
     },
     "WasteMovementCreate": {
       "passport_id": "string",

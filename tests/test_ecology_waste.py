@@ -37,6 +37,7 @@ from sqlalchemy import select
 
 from app.models.ecology import WASTE_HAZARD_CLASSES, WASTE_MOVEMENT_KINDS
 from app.models.feature import Feature, FeatureEnablement
+from app.models.finance import Contract, ContractStatus
 from app.models.models import Tenant
 
 pytestmark = pytest.mark.anyio
@@ -466,4 +467,85 @@ class TestСловарьКлассовНаФронте:
         assert front == WASTE_MOVEMENT_KINDS, sorted(
             front.items() ^ WASTE_MOVEMENT_KINDS.items()
         )
+
+
+class TestДоговорыОператоров:
+    """Срез-112: договоры для выбора в журнале — своя узкая ручка.
+
+    Требование разд. 55.2 «договоры с операторами» упиралось не в данные (поле
+    ``contract_id`` у движения есть со среза-2), а в ДОСТУП: ядровой реестр
+    ``/contracts`` закрыт ролями бухгалтерии и отдаёт суммы. Эколог должен
+    выбрать договор, а не читать финансовые условия.
+    """
+
+    async def test_без_выдачи_модуля_ручки_нет(
+        self, async_client, make_auth_headers
+    ) -> None:
+        headers = await make_auth_headers()
+        response = await async_client.get(f"{_API}/waste-contracts", headers=headers)
+        assert response.status_code == 404
+
+    async def test_отдаёт_контрагента_без_сумм(
+        self, async_client, make_auth_headers, sessionmaker, data_factory
+    ) -> None:
+        headers = await make_auth_headers()
+        await _grant(sessionmaker)
+        async with sessionmaker() as session:
+            tenant = await data_factory.ensure_tenant(session=session)
+            company = await data_factory.create_company(tenant=tenant, session=session)
+            session.add(
+                Contract(
+                    tenant_id=str(tenant.id),
+                    company_id=company.id,
+                    title="Вывоз отходов IV класса",
+                    counterparty_name="ООО «Оператор»",
+                    contract_number="ОТХ-12",
+                    status=ContractStatus.ACTIVE,
+                    valid_until=date.today() + timedelta(days=200),
+                    total_amount=1_250_000,
+                    currency="RUB",
+                )
+            )
+            await session.commit()
+
+        response = await async_client.get(f"{_API}/waste-contracts", headers=headers)
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["total"] == 1
+        item = body["items"][0]
+        assert item["counterparty_name"] == "ООО «Оператор»"
+        assert item["contract_number"] == "ОТХ-12"
+        assert item["status"] == "active"
+        # Финансовых условий тут нет и быть не должно: выбирают договор, а не
+        # читают сумму (ядровая ручка не зря закрыта ролями бухгалтерии).
+        assert "total_amount" not in item
+        assert "currency" not in item
+
+    async def test_чужой_арендатор_договоров_не_видит(
+        self, async_client, make_auth_headers, sessionmaker, data_factory
+    ) -> None:
+        headers = await make_auth_headers()
+        await _grant(sessionmaker)
+        async with sessionmaker() as session:
+            other = await data_factory.ensure_tenant(slug="other", session=session)
+            company = await data_factory.create_company(
+                tenant=other, name="Чужая компания", session=session
+            )
+            session.add(
+                Contract(
+                    tenant_id=str(other.id),
+                    company_id=company.id,
+                    title="Чужой договор",
+                    counterparty_name="ООО «Чужой оператор»",
+                    status=ContractStatus.ACTIVE,
+                    currency="RUB",
+                )
+            )
+            await session.commit()
+
+        response = await async_client.get(f"{_API}/waste-contracts", headers=headers)
+
+        assert response.status_code == 200, response.text
+        assert response.json()["total"] == 0
 

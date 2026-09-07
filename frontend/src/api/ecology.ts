@@ -504,6 +504,21 @@ export type WaterRecordUpdateInput = {
   notes?: string | null;
 };
 
+/**
+ * Договор с оператором — узкий срез ядрового договора для ВЫБОРА в журнале
+ * (срез-112). Сумм и валюты здесь нет: эколог выбирает договор, а не читает
+ * финансовые условия, поэтому ручка своя (`/ecology/waste-contracts`), а не
+ * ядровая `/contracts` под ролями бухгалтерии.
+ */
+export type WasteContractDto = {
+  id: string;
+  counterparty_name: string;
+  contract_number?: string | null;
+  valid_until?: string | null;
+  /** draft | active | closed | terminated — состояние ядрового договора. */
+  status: string;
+};
+
 /** Тело записи журнала учёта отходов: масса больше нуля, дата не в будущем. */
 export type WasteMovementCreateInput = {
   passport_id: string;
@@ -512,6 +527,8 @@ export type WasteMovementCreateInput = {
   quantity_tons: string;
   counterparty?: string | null;
   notes?: string | null;
+  /** Договор с оператором из ядрового реестра; пусто — движение без договора. */
+  contract_id?: string | null;
 };
 
 export type WasteMovementUpdateInput = WasteMovementCreateInput;
@@ -690,6 +707,14 @@ export const ecologyApi = {
       body,
     );
     return data;
+  },
+
+  listWasteContracts: async (): Promise<WasteContractDto[]> => {
+    const { data } = await apiClient.get<{ items?: WasteContractDto[] }>(
+      "/ecology/waste-contracts",
+      { params: { limit: 200, offset: 0 } },
+    );
+    return Array.isArray(data?.items) ? data.items : [];
   },
 
   createWasteMovement: async (

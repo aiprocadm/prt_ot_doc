@@ -600,3 +600,25 @@ class EcologyReportingDeadlineRead(BaseSchema):
 class EcologyReportingDeadlinePage(BaseSchema):
     items: list[EcologyReportingDeadlineRead]
     total: int
+
+
+class WasteContractRead(BaseSchema):
+    """Договор с оператором по обращению с отходами — для ВЫБОРА в журнале.
+
+    Узкий срез ядрового ``Contract`` (срез-112): только то, чем договор
+    называют в журнале учёта отходов. Суммы, валюты и реквизитов компании
+    здесь НЕТ намеренно: эколог выбирает договор, а не читает финансовые
+    условия, и ядровая ручка ``/contracts`` не зря закрыта ролями бухгалтерии.
+    """
+
+    id: str
+    counterparty_name: str
+    contract_number: str | None = None
+    valid_until: date | None = None
+    status: str
+
+
+class WasteContractPage(BaseSchema):
+    items: list[WasteContractRead]
+    total: int
+

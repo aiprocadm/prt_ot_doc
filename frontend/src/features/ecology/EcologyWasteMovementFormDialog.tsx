@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import {
   WASTE_MOVEMENT_KIND_TITLES,
   ecologyApi,
+  type WasteContractDto,
   type WasteMovementDto,
   type WastePassportDto,
 } from "@/api/ecology";
@@ -35,6 +36,7 @@ const emptyForm: EcologyWasteMovementFormValues = {
   happened_on: "",
   quantity_tons: "",
   counterparty: "",
+  contract_id: "",
   notes: "",
 };
 
@@ -44,6 +46,7 @@ const API_FIELD_MAP: Record<string, keyof EcologyWasteMovementFormValues> = {
   happened_on: "happened_on",
   quantity_tons: "quantity_tons",
   counterparty: "counterparty",
+  contract_id: "contract_id",
   notes: "notes",
 };
 
@@ -53,6 +56,7 @@ const orNull = (value: string | undefined): string | null =>
 interface EcologyWasteMovementFormDialogProps {
   trigger: ReactNode;
   passports: WastePassportDto[];
+  contracts: WasteContractDto[];
   initialData?: WasteMovementDto;
   onSubmitted?: (movement: WasteMovementDto) => void;
 }
@@ -63,13 +67,18 @@ interface EcologyWasteMovementFormDialogProps {
  * Пять полей на первом уровне: паспорт, вид движения, дата, масса и
  * контрагент; заметки — под «Дополнительно» (ТЗ разд. 59.3).
  *
- * ГРАНИЦА: договор с оператором выбрать пока нельзя — ядровой справочник
- * договоров на экран экологии не выведен, а вводить его id руками хуже, чем
- * не иметь поля вовсе. Контрагента вносят строкой, как и раньше через API.
+ * ДОГОВОР С ОПЕРАТОРОМ (срез-112): выбирается из ядрового реестра — узкой
+ * ручкой без сумм, потому что эколог выбирает договор, а не читает финансовые
+ * условия. Поле необязательное: образование и накопление идут без договора, а
+ * передача оператору — по договору, но он не всегда заведён в системе.
+ *
+ * ГРАНИЦА: платформа не решает, какой договор «подходит» этому отходу, и не
+ * сужает список по виду отхода — связи «оператор ↔ ФККО» в данных нет.
  */
 export const EcologyWasteMovementFormDialog = ({
   trigger,
   passports,
+  contracts,
   initialData,
   onSubmitted,
 }: EcologyWasteMovementFormDialogProps) => {
@@ -90,6 +99,7 @@ export const EcologyWasteMovementFormDialog = ({
         happened_on: initialData.happened_on,
         quantity_tons: initialData.quantity_tons,
         counterparty: initialData.counterparty ?? "",
+        contract_id: initialData.contract_id ?? "",
         notes: initialData.notes ?? "",
       });
     } else {
@@ -104,6 +114,7 @@ export const EcologyWasteMovementFormDialog = ({
       happened_on: values.happened_on,
       quantity_tons: massToPayload(values.quantity_tons),
       counterparty: orNull(values.counterparty),
+      contract_id: orNull(values.contract_id),
       notes: orNull(values.notes),
     };
     try {
@@ -141,8 +152,8 @@ export const EcologyWasteMovementFormDialog = ({
           </DialogTitle>
           <DialogDescription>
             Журнал фиксирует свершившееся: дата в будущем не принимается, а
-            масса всегда больше нуля. Договор с оператором вносится в ядровом
-            реестре договоров — здесь достаточно назвать контрагента.
+            масса всегда больше нуля. Договор выбирается из реестра договоров —
+            без сумм и условий: здесь важно, по какому документу передан отход.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -224,7 +235,29 @@ export const EcologyWasteMovementFormDialog = ({
             <summary className="cursor-pointer text-sm font-medium">
               Дополнительно
             </summary>
-            <div className="mt-3 space-y-2">
+            <div className="mt-3 space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="eco-movement-contract">
+                  Договор с оператором
+                </Label>
+                <select
+                  id="eco-movement-contract"
+                  className="h-10 w-full rounded-md border px-3"
+                  title="Пусто — движение без договора (образование, накопление)"
+                  {...form.register("contract_id")}
+                >
+                  <option value="">— Без договора —</option>
+                  {contracts.map((contract) => (
+                    <option key={contract.id} value={contract.id}>
+                      {contract.counterparty_name}
+                      {contract.contract_number
+                        ? ` · ${contract.contract_number}`
+                        : ""}
+                    </option>
+                  ))}
+                </select>
+                {fieldError("contract_id")}
+              </div>
               <Label htmlFor="eco-movement-notes">Заметки</Label>
               <Textarea
                 id="eco-movement-notes"
