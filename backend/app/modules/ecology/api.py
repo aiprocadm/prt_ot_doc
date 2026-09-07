@@ -95,6 +95,8 @@ from app.schemas.ecology import (
     NvosFeeRatePage,
     NvosFeeRateRead,
     NvosFeeRateUpdate,
+    WasteContractPage,
+    WasteContractRead,
     WasteMovementCreate,
     WasteMovementPage,
     WasteMovementRead,
@@ -742,6 +744,66 @@ async def list_waste_movements(
         .all()
     )
     return WasteMovementPage(items=[_movement_read(r) for r in rows], total=total)
+
+
+@router.get("/waste-contracts", response_model=WasteContractPage)
+async def list_waste_contracts(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    limit: int = Query(100, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> WasteContractPage:
+    """Договоры арендатора — для выбора в записи журнала учёта отходов.
+
+    ПОЧЕМУ СВОЯ РУЧКА, А НЕ ЯДРОВАЯ ``/contracts`` (срез-112). Требование
+    разд. 55.2 «договоры с операторами» упиралось не в данные — поле
+    ``contract_id`` у движения есть со среза-2, — а в ДОСТУП: ядровой реестр
+    договоров закрыт ролями бухгалтерии (admin/owner/accountant) и отдаёт
+    суммы и валюту. Пустить туда эколога значило бы открыть ему финансовые
+    условия ради выпадающего списка; выдать ему роль бухгалтера — тем более.
+    Поэтому здесь отдаются ТОЛЬКО контрагент, номер, срок и состояние — ровно
+    то, чем договор называют в журнале, — и ручка живёт под гейтом модуля
+    экологии с ролями контура.
+
+    ГРАНИЦА: платформа не решает, какой договор «правильный» для этого отхода,
+    и не фильтрует список по виду отхода — связи «оператор ↔ ФККО» в данных
+    нет. Закрытые и расторгнутые договоры остаются в списке: движение могло
+    произойти, пока договор действовал.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    stmt = select(Contract).where(
+        Contract.tenant_id == tenant.id,
+        Contract.deleted_at.is_(None),
+    )
+    total = int(
+        await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    )
+    rows = (
+        (
+            await session.execute(
+                stmt.order_by(Contract.counterparty_name, Contract.contract_number)
+                .offset(offset)
+                .limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return WasteContractPage(
+        items=[
+            WasteContractRead(
+                id=row.id,
+                counterparty_name=row.counterparty_name,
+                contract_number=row.contract_number,
+                valid_until=row.valid_until,
+                status=row.status.value if hasattr(row.status, "value") else str(row.status),
+            )
+            for row in rows
+        ],
+        total=total,
+    )
 
 
 @router.post(

@@ -28,6 +28,10 @@ export const ecologyWasteMovementFormSchema = z.object({
   happened_on: z.string().trim().min(1, "Внесите дату движения"),
   quantity_tons: tons,
   counterparty: optionalText,
+  // Срез-112: договор с оператором выбирается из ядрового реестра. Поле
+  // необязательное: образование и накопление отходов идут без договора, а
+  // передача оператору — по договору, но он не всегда заведён в системе.
+  contract_id: optionalText,
   notes: optionalText,
 });
 

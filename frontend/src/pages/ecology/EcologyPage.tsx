@@ -61,6 +61,9 @@ const EcologyPage = () => {
         feeRates: await ecologyApi.listFeeRates(),
         feeLines: await ecologyApi.listFeeLines(),
         reportingDeadlines: await ecologyApi.listReportingDeadlines(),
+        // Срез-112: договоры для выбора в журнале — узкой ручкой контура, без
+        // сумм: эколог выбирает документ, а не читает финансовые условия.
+        wasteContracts: await ecologyApi.listWasteContracts(),
         readiness: await ecologyApi.readiness(),
         // Площадки — ядровой справочник: объект НВОС можно к ней привязать,
         // и форма выбирает из заведённых, а не просит вводить id руками.
@@ -81,6 +84,7 @@ const EcologyPage = () => {
       feeRates: [],
       feeLines: [],
       reportingDeadlines: [],
+      wasteContracts: [],
       readiness: {
         incidents_open: 0,
         reporting_overdue: 0,
@@ -520,6 +524,7 @@ const EcologyPage = () => {
             <div>
               <EcologyWasteMovementFormDialog
                 passports={data.passports}
+                contracts={data.wasteContracts}
                 onSubmitted={() => void reload()}
                 trigger={<Button>Записать движение</Button>}
               />
@@ -559,10 +564,21 @@ const EcologyPage = () => {
                   cell: ({ row }) => row.original.counterparty || "—",
                 },
                 {
+                  // Срез-112: договор называется контрагентом, а не «по
+                  // договору»: список договоров уже загружен для формы, и
+                  // прятать имя оператора за общим словом незачем.
                   accessorKey: "contract_id",
                   header: "Договор",
-                  cell: ({ row }) =>
-                    row.original.contract_id ? "по договору" : "—",
+                  cell: ({ row }) => {
+                    if (!row.original.contract_id) return "—";
+                    const contract = data.wasteContracts.find(
+                      (item) => item.id === row.original.contract_id,
+                    );
+                    if (!contract) return "по договору";
+                    return contract.contract_number
+                      ? `${contract.counterparty_name} · ${contract.contract_number}`
+                      : contract.counterparty_name;
+                  },
                 },
                 {
                   id: "actions",
@@ -570,6 +586,7 @@ const EcologyPage = () => {
                   cell: ({ row }) => (
                     <EcologyWasteMovementFormDialog
                       passports={data.passports}
+                      contracts={data.wasteContracts}
                       initialData={row.original}
                       onSubmitted={() => void reload()}
                       trigger={

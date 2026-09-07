@@ -30,6 +30,16 @@ vi.mock("sonner", () => ({
   },
 }));
 
+const contracts = [
+  {
+    id: "ct-1",
+    counterparty_name: "ООО «Оператор»",
+    contract_number: "ОТХ-12",
+    valid_until: "2027-01-01",
+    status: "active",
+  },
+] as never;
+
 const passports = [
   { id: "wp-1", name: "Отходы масел", fkko_code: "4 06 110 01 31 3" },
   { id: "wp-2", name: "Обтирочный материал", fkko_code: "9 19 204 01 60 4" },
@@ -51,6 +61,7 @@ const openCreate = async (user: ReturnType<typeof userEvent.setup>) => {
   render(
     <EcologyWasteMovementFormDialog
       passports={passports}
+      contracts={contracts}
       trigger={<button>Записать движение</button>}
     />,
   );
@@ -85,6 +96,8 @@ describe("EcologyWasteMovementFormDialog — журнал учёта отход�
       happened_on: "2026-08-20",
       quantity_tons: "1.250",
       counterparty: "ООО «Оператор»",
+      // Договор не выбран — движение без договора (образование, накопление).
+      contract_id: null,
       notes: null,
     });
     expect(toastSuccess).toHaveBeenCalledWith("Движение записано");
@@ -148,6 +161,7 @@ describe("EcologyWasteMovementFormDialog — журнал учёта отход�
     render(
       <EcologyWasteMovementFormDialog
         passports={passports}
+        contracts={contracts}
         initialData={existing}
         trigger={<button>Изменить</button>}
       />,
@@ -171,17 +185,34 @@ describe("EcologyWasteMovementFormDialog — журнал учёта отход�
     expect(toastSuccess).toHaveBeenCalledWith("Запись обновлена");
   });
 
-  it("на первом уровне пять полей, заметки свёрнуты; договор в форму не вынесен", async () => {
+  it("договор с оператором выбирается из реестра (срез-112)", async () => {
+    const user = userEvent.setup();
+    await openCreate(user);
+
+    await user.selectOptions(screen.getByLabelText("Паспорт отхода"), "wp-1");
+    await user.selectOptions(screen.getByLabelText("Движение"), "transferred");
+    await user.type(screen.getByLabelText("Дата"), "2026-08-20");
+    await user.type(screen.getByLabelText("Масса, т"), "1");
+    await user.click(screen.getByText("Дополнительно"));
+    // В списке договор назван контрагентом и номером — сумм в нём нет.
+    await user.selectOptions(
+      screen.getByLabelText("Договор с оператором"),
+      "ct-1",
+    );
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(createMock).toHaveBeenCalled());
+    expect(createMock.mock.calls[0][0].contract_id).toBe("ct-1");
+  });
+
+  it("на первом уровне пять полей; договор и заметки свёрнуты", async () => {
     const user = userEvent.setup();
     await openCreate(user);
     await screen.findByLabelText("Паспорт отхода");
 
     expect(uxBudgetViolations(document.body)).toEqual([]);
     expect(screen.getByText("Дополнительно")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Договор")).toBeNull();
-    expect(
-      screen.getByText(/Договор с оператором вносится в ядровом/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/без сумм и условий/i)).toBeInTheDocument();
   });
 });
 

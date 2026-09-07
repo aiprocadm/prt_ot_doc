@@ -18,6 +18,7 @@ const listWaterRecordsMock = vi.fn();
 const listFeeRatesMock = vi.fn();
 const listFeeLinesMock = vi.fn();
 const listReportingDeadlinesMock = vi.fn();
+const listWasteContractsMock = vi.fn();
 const createReportingDeadlineMock = vi.fn();
 const createFacilityMock = vi.fn();
 const createWasteMovementMock = vi.fn();
@@ -46,6 +47,7 @@ vi.mock("@/api/ecology", async (importOriginal) => ({
     listFeeLines: (...args: unknown[]) => listFeeLinesMock(...args),
     listReportingDeadlines: (...args: unknown[]) =>
       listReportingDeadlinesMock(...args),
+    listWasteContracts: (...args: unknown[]) => listWasteContractsMock(...args),
     createReportingDeadline: (...args: unknown[]) =>
       createReportingDeadlineMock(...args),
     createFacility: (...args: unknown[]) => createFacilityMock(...args),
@@ -478,6 +480,16 @@ describe("EcologyPage", () => {
     listFeeRatesMock.mockReset();
     listFeeLinesMock.mockReset();
     listReportingDeadlinesMock.mockReset();
+    listWasteContractsMock.mockReset();
+    listWasteContractsMock.mockResolvedValue([
+      {
+        id: "ct-1",
+        counterparty_name: "ООО «Оператор»",
+        contract_number: "ОТХ-12",
+        valid_until: "2027-01-01",
+        status: "active",
+      },
+    ]);
     createReportingDeadlineMock.mockReset();
     createFacilityMock.mockReset();
     createWasteMovementMock.mockReset();
@@ -697,6 +709,30 @@ describe("EcologyPage", () => {
     expect(
       screen.getByText(/платформа его не рассчитывает/i),
     ).toBeInTheDocument();
+  });
+
+  it("договор в журнале назван контрагентом, а не «по договору» (срез-112)", async () => {
+    const user = userEvent.setup();
+    listMovementsMock.mockResolvedValue([
+      { ...populatedMovements[0], contract_id: "ct-1" },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <EcologyPage />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByText("Производственная площадка №1"),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Журнал учёта отходов" }),
+    );
+
+    expect(
+      await screen.findByText("ООО «Оператор» · ОТХ-12"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("по договору")).toBeNull();
   });
 
   it("движение отходов записывается с экрана (срез-100)", async () => {
