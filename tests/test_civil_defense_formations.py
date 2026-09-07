@@ -31,17 +31,34 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date, timedelta
+from pathlib import Path
 
 import pytest
 from sqlalchemy import select
 
+from app.models.civil_defense import CD_FORMATION_KINDS
 from app.models.feature import Feature, FeatureEnablement
 from app.models.models import Company, Person, Tenant
 
 pytestmark = pytest.mark.anyio
 
 _API = "/api/v1/civil-defense"
+
+
+_FRONTEND_CD_API = (
+    Path(__file__).resolve().parents[1] / "frontend" / "src" / "api" / "civilDefense.ts"
+)
+
+
+def _front_map(name: str) -> dict[str, str]:
+    """Читает map подписей из ``frontend/src/api/civilDefense.ts``."""
+
+    text = _FRONTEND_CD_API.read_text(encoding="utf-8")
+    block = re.search(rf"{name}:\s*Record<[^>]+>\s*=\s*\{{(.*?)\n\}}", text, re.S)
+    assert block is not None, f"не нашёлся map {name}"
+    return dict(re.findall(r'^\s*([A-Za-z_0-9]+):\s*"([^"]+)"', block.group(1), re.M))
 
 
 async def _grant(sessionmaker, code: str = "civil_defense", on: bool = True) -> None:
@@ -412,3 +429,18 @@ class TestСводкаИГраница:
             headers=headers,
         )
         assert response.status_code == 404, response.text
+
+
+class TestСловарьВидовФормированийНаФронте:
+    """Срез-109: вид формирования выбирают в форме из копии словаря.
+
+    НАСФ и НФГО — разные формирования с разными задачами; подписи должны
+    совпадать с ядром, иначе человек заведёт не то, что имел в виду.
+    """
+
+    def test_виды_формирований_на_фронте_совпадают_с_бэкендом(self) -> None:
+        front = _front_map("CD_FORMATION_KIND_TITLES")
+        assert front == CD_FORMATION_KINDS, sorted(
+            front.items() ^ CD_FORMATION_KINDS.items()
+        )
+
