@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -12,9 +12,18 @@ const listProfilesMock = vi.fn();
 const listDocumentsMock = vi.fn();
 const listProgramsMock = vi.fn();
 const readinessMock = vi.fn();
+const createFormationMock = vi.fn();
+const createDrillMock = vi.fn();
+const updateDrillMock = vi.fn();
+const fetchAllPersonsMock = vi.fn();
 
-vi.mock("@/api/civilDefense", () => ({
+vi.mock("@/api/civilDefense", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
   civilDefenseApi: {
+    createFormation: (...args: unknown[]) => createFormationMock(...args),
+    updateFormation: vi.fn(),
+    createDrill: (...args: unknown[]) => createDrillMock(...args),
+    updateDrill: (...args: unknown[]) => updateDrillMock(...args),
     listFormations: (...args: unknown[]) => listFormationsMock(...args),
     listDrills: (...args: unknown[]) => listDrillsMock(...args),
     listProfiles: (...args: unknown[]) => listProfilesMock(...args),
@@ -23,6 +32,12 @@ vi.mock("@/api/civilDefense", () => ({
     readiness: (...args: unknown[]) => readinessMock(...args),
   },
 }));
+
+vi.mock("@/api/personsApi", () => ({
+  fetchAllPersons: (...args: unknown[]) => fetchAllPersonsMock(...args),
+}));
+
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 /** Доп. №1 разд. 56.1 срез-1: формирования с командиром и без. */
 const populatedFormations = [
@@ -192,12 +207,93 @@ describe("CivilDefensePage", () => {
     listDocumentsMock.mockReset();
     listProgramsMock.mockReset();
     readinessMock.mockReset();
+    createFormationMock.mockReset();
+    createDrillMock.mockReset();
+    updateDrillMock.mockReset();
+    fetchAllPersonsMock.mockReset();
+    fetchAllPersonsMock.mockResolvedValue([
+      { id: "person-1", full_name: "Иванов Иван Иванович" },
+    ]);
     listFormationsMock.mockResolvedValue(populatedFormations);
     listDrillsMock.mockResolvedValue(populatedDrills);
     listProfilesMock.mockResolvedValue(populatedProfiles);
     listDocumentsMock.mockResolvedValue(populatedDocuments);
     listProgramsMock.mockResolvedValue(populatedPrograms);
     readinessMock.mockResolvedValue(populatedReadiness);
+  });
+
+  it("формирование заводится с экрана, а не только через API (срез-109)", async () => {
+    const user = userEvent.setup();
+    const added = {
+      ...populatedFormations[0],
+      id: "cd-new",
+      name: "Звено связи",
+    };
+    createFormationMock.mockResolvedValue(added);
+    listFormationsMock
+      .mockResolvedValueOnce(populatedFormations)
+      .mockResolvedValue([...populatedFormations, added]);
+
+    render(
+      <MemoryRouter>
+        <CivilDefensePage />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByRole("button", { name: "Завести формирование" }),
+    ).toBeInTheDocument();
+    expect(uxBudgetDelta(document.body, "CivilDefensePage").unexpected).toEqual(
+      [],
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Завести формирование" }),
+    );
+    await user.type(screen.getByLabelText("Формирование"), "Звено связи");
+    await user.selectOptions(screen.getByLabelText("Вид"), "nfgo");
+    await user.selectOptions(screen.getByLabelText("Командир"), "person-1");
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(createFormationMock).toHaveBeenCalled());
+    expect(createFormationMock.mock.calls[0][0]).toMatchObject({
+      name: "Звено связи",
+      kind: "nfgo",
+      commander_person_id: "person-1",
+    });
+    expect(await screen.findByText("Звено связи")).toBeInTheDocument();
+  });
+
+  it("учение планируется и получает протокол с экрана (срез-109)", async () => {
+    const user = userEvent.setup();
+    createDrillMock.mockResolvedValue({ id: "drill-new" });
+    updateDrillMock.mockResolvedValue({ id: populatedDrills[0].id });
+
+    render(
+      <MemoryRouter>
+        <CivilDefensePage />
+      </MemoryRouter>,
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Учения и тренировки" }),
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Запланировать учение" }),
+    );
+    await user.selectOptions(screen.getByLabelText("Вид"), "complex");
+    await user.type(screen.getByLabelText("Учение"), "Комплексное учение");
+    await user.type(screen.getByLabelText("По плану"), "2026-11-05");
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(createDrillMock).toHaveBeenCalled());
+    expect(createDrillMock.mock.calls[0][0]).toMatchObject({
+      kind: "complex",
+      title: "Комплексное учение",
+      planned_on: "2026-11-05",
+      // Протокола ещё нет: учение общеобъектовое, участники не внесены.
+      formation_id: null,
+      participants: null,
+    });
   });
 
   it("рендерит реестр формирований с видами словами", async () => {
@@ -274,8 +370,15 @@ describe("CivilDefensePage", () => {
     // Вид и состояние — словами из закрытых словарей.
     expect(screen.getByText("Командно-штабное учение")).toBeInTheDocument();
     expect(screen.getByText("Просрочено")).toBeInTheDocument();
-    // Пустые клетки запрещены: причина названа словами.
-    expect(screen.getByText("не проводилось")).toBeInTheDocument();
+    // Срез-109: дата проведения ушла в колонку состояния (место под колонку
+    // действий). У непроведённого учения в этой ячейке только состояние —
+    // «протокола нет» видно без отдельной клетки.
+    const statusCell = screen.getByText("Просрочено").closest("td");
+    expect(statusCell?.textContent?.trim()).toBe("Просрочено");
+    // Кнопка строки зовёт внести протокол, а не просто «изменить».
+    expect(
+      screen.getByRole("button", { name: "Протокол" }),
+    ).toBeInTheDocument();
     // Учение без формирования — это весь персонал, а не прочерк.
     expect(screen.getByText("весь персонал")).toBeInTheDocument();
     // Граница названа на экране.

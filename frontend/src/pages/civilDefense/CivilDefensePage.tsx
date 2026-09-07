@@ -1,5 +1,5 @@
 import { type ColumnDef } from "@tanstack/react-table";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import {
   civilDefenseApi,
@@ -9,6 +9,7 @@ import {
   type ProfileDto,
   type TrainingProgramDto,
 } from "@/api/civilDefense";
+import { fetchAllPersons } from "@/api/personsApi";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -16,6 +17,8 @@ import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
 import { disciplineIncidentsStat } from "@/components/common/disciplineIncidentsStat";
 import { RegistryTable } from "@/components/common/RegistryTable";
 import { Button } from "@/components/ui/button";
+import { CdDrillFormDialog } from "@/features/civil-defense/CdDrillFormDialog";
+import { CdFormationFormDialog } from "@/features/civil-defense/CdFormationFormDialog";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { useLocalRegistry } from "@/hooks/useLocalRegistry";
 import { formatDate } from "@/utils/datetime";
@@ -67,17 +70,20 @@ const DRILL_COLUMNS: ColumnDef<DrillDto, unknown>[] = [
     cell: ({ row }) => formatDate(row.original.planned_on),
   },
   {
-    accessorKey: "held_on",
-    header: "Проведено",
-    cell: ({ row }) =>
-      row.original.held_on
-        ? formatDate(row.original.held_on)
-        : "не проводилось",
-  },
-  {
+    // Срез-109: дата проведения и состояние — одна колонка: колонка действий
+    // стала бы восьмой и вывела бы таблицу за UX-бюджет.
     accessorKey: "status_label",
     header: "Состояние",
-    cell: ({ row }) => row.original.status_label,
+    cell: ({ row }) => (
+      <span>
+        {row.original.status_label}
+        {row.original.held_on ? (
+          <span className="ml-1 text-muted-foreground">
+            {formatDate(row.original.held_on)}
+          </span>
+        ) : null}
+      </span>
+    ),
   },
   {
     accessorKey: "formation_name",
@@ -178,6 +184,9 @@ const CivilDefensePage = () => {
     loader: useCallback(
       async () => ({
         formations: await civilDefenseApi.listFormations(),
+        // Люди — ядровой справочник: командира формирования выбирают, а не
+        // вводят id (срез-109).
+        persons: await fetchAllPersons(),
         drills: await civilDefenseApi.listDrills(),
         profiles: await civilDefenseApi.listProfiles(),
         documents: await civilDefenseApi.listDocuments(),
@@ -188,6 +197,7 @@ const CivilDefensePage = () => {
     ),
     initialData: {
       formations: [] as FormationDto[],
+      persons: [] as Awaited<ReturnType<typeof fetchAllPersons>>,
       drills: [] as DrillDto[],
       profiles: [] as ProfileDto[],
       documents: [] as CdDocumentDto[],
@@ -268,6 +278,56 @@ const CivilDefensePage = () => {
 
   const { readiness } = data;
 
+  // Срез-109: колонка действий добавляется здесь — формам нужны справочники и
+  // перезагрузка, которых у констант колонок нет (приём среза-107).
+  const formationColumns = useMemo(
+    () => [
+      ...FORMATION_COLUMNS,
+      {
+        id: "actions",
+        header: "Действия",
+        cell: ({ row }: { row: { original: FormationDto } }) => (
+          <CdFormationFormDialog
+            persons={data.persons}
+            initialData={row.original}
+            onSubmitted={() => void reload()}
+            trigger={
+              <Button variant="ghost" size="sm">
+                Изменить
+              </Button>
+            }
+          />
+        ),
+      },
+    ],
+    [data.persons, reload],
+  );
+
+  const drillColumns = useMemo(
+    () => [
+      ...DRILL_COLUMNS,
+      {
+        id: "actions",
+        header: "Действия",
+        // Пока учение не проведено, кнопка зовёт внести протокол (приём
+        // среза-104): подпись говорит, что делать дальше.
+        cell: ({ row }: { row: { original: DrillDto } }) => (
+          <CdDrillFormDialog
+            formations={data.formations}
+            initialData={row.original}
+            onSubmitted={() => void reload()}
+            trigger={
+              <Button variant="ghost" size="sm">
+                {row.original.held_on ? "Изменить" : "Протокол"}
+              </Button>
+            }
+          />
+        ),
+      },
+    ],
+    [data.formations, reload],
+  );
+
   return (
     <div className="space-y-4">
       <RegistryPageHeader
@@ -339,6 +399,20 @@ const CivilDefensePage = () => {
           ведёт реестр внесённого и не выносит вердиктов.
         </p>
       ) : null}
+      {/*
+        Срез-109: ручки формирований (срез-1 контура) работали только через
+        API — реестр звал «внесите нештатные формирования», а внести их было
+        негде.
+      */}
+      {section === "formations" && !loading && !error ? (
+        <div>
+          <CdFormationFormDialog
+            persons={data.persons}
+            onSubmitted={() => void reload()}
+            trigger={<Button>Завести формирование</Button>}
+          />
+        </div>
+      ) : null}
       {section === "formations" &&
       !loading &&
       !error &&
@@ -350,7 +424,7 @@ const CivilDefensePage = () => {
       ) : null}
       {section === "formations" && !loading && !error && registry.total > 0 ? (
         <RegistryTable
-          columns={FORMATION_COLUMNS}
+          columns={formationColumns}
           data={registry.pagedItems}
           pageIndex={registry.pageIndex}
           pageSize={registry.pageSize}
@@ -375,6 +449,14 @@ const CivilDefensePage = () => {
             план-график и журнал проведённых, но сроки не назначает.
             «Просрочено» — это план, срок которого прошёл, а протокола нет.
           </p>
+          {/* Срез-109: учение планируется здесь же, протокол — правкой. */}
+          <div>
+            <CdDrillFormDialog
+              formations={data.formations}
+              onSubmitted={() => void reload()}
+              trigger={<Button>Запланировать учение</Button>}
+            />
+          </div>
           {drillRegistry.total === 0 ? (
             <EmptyState
               title="План-график учений не заведён"
@@ -382,7 +464,7 @@ const CivilDefensePage = () => {
             />
           ) : (
             <RegistryTable
-              columns={DRILL_COLUMNS}
+              columns={drillColumns}
               data={drillRegistry.pagedItems}
               pageIndex={drillRegistry.pageIndex}
               pageSize={drillRegistry.pageSize}

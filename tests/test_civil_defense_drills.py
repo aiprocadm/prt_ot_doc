@@ -44,17 +44,34 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date, timedelta
+from pathlib import Path
 
 import pytest
 from sqlalchemy import select
 
+from app.models.civil_defense import CD_DRILL_KINDS, CD_DRILL_OUTCOMES
 from app.models.feature import Feature, FeatureEnablement
 from app.models.models import Tenant
 
 pytestmark = pytest.mark.anyio
 
 _API = "/api/v1/civil-defense"
+
+
+_FRONTEND_CD_API = (
+    Path(__file__).resolve().parents[1] / "frontend" / "src" / "api" / "civilDefense.ts"
+)
+
+
+def _front_map(name: str) -> dict[str, str]:
+    """Читает map подписей из ``frontend/src/api/civilDefense.ts``."""
+
+    text = _FRONTEND_CD_API.read_text(encoding="utf-8")
+    block = re.search(rf"{name}:\s*Record<[^>]+>\s*=\s*\{{(.*?)\n\}}", text, re.S)
+    assert block is not None, f"не нашёлся map {name}"
+    return dict(re.findall(r'^\s*([A-Za-z_0-9]+):\s*"([^"]+)"', block.group(1), re.M))
 
 
 async def _grant(sessionmaker, code: str = "civil_defense", on: bool = True) -> None:
@@ -391,3 +408,22 @@ class TestЖурналСводкаИГраница:
             headers=headers,
         )
         assert response.status_code == 404, response.text
+
+
+class TestСловариУченийНаФронте:
+    """Срез-109: вид и результат учения выбирают в форме из копий словарей.
+
+    Результат — сравнимая оценка, а не пересказ (пересказ живёт в анализе):
+    расхождение подписей сделало бы сводку по учениям несопоставимой.
+    """
+
+    def test_виды_учений_на_фронте_совпадают_с_бэкендом(self) -> None:
+        front = _front_map("CD_DRILL_KIND_TITLES")
+        assert front == CD_DRILL_KINDS, sorted(front.items() ^ CD_DRILL_KINDS.items())
+
+    def test_результаты_учений_на_фронте_совпадают_с_бэкендом(self) -> None:
+        front = _front_map("CD_DRILL_OUTCOME_TITLES")
+        assert front == CD_DRILL_OUTCOMES, sorted(
+            front.items() ^ CD_DRILL_OUTCOMES.items()
+        )
+

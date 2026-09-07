@@ -7,6 +7,74 @@ import { apiClient } from "@/api/client";
  * и сколько их нужно — это категория организации по ГО и решения органа
  * управления ГОЧС. Полей «требуется» и «недоукомплектовано» в ответах нет.
  */
+/** Виды формирований — копия `CD_FORMATION_KINDS` бэкенда (срез-109). */
+export const CD_FORMATION_KIND_TITLES: Record<string, string> = {
+  nasf: "НАСФ (аварийно-спасательное формирование)",
+  nfgo: "НФГО (формирование по обеспечению ГО)",
+};
+
+/** Виды учений и тренировок — копия `CD_DRILL_KINDS` бэкенда. */
+export const CD_DRILL_KIND_TITLES: Record<string, string> = {
+  command_staff: "Командно-штабное учение",
+  tactical_special: "Тактико-специальное учение",
+  complex: "Комплексное учение",
+  facility_training: "Объектовая тренировка",
+};
+
+/** Результаты проведённого учения — копия `CD_DRILL_OUTCOMES` бэкенда. */
+export const CD_DRILL_OUTCOME_TITLES: Record<string, string> = {
+  passed: "Проведено, задачи выполнены",
+  with_remarks: "Проведено с замечаниями",
+  failed: "Задачи не выполнены",
+};
+
+/** Тело формирования: вид из закрытого словаря, командир — человек из ядра. */
+export type FormationCreateInput = {
+  name: string;
+  kind: string;
+  purpose?: string | null;
+  commander_person_id?: string | null;
+  equipment_notes?: string | null;
+  notes?: string | null;
+};
+
+export type FormationUpdateInput = FormationCreateInput;
+
+/** Тело строки состава: человек из ядра, роль — свободная строка. */
+export type FormationMemberCreateInput = {
+  person_id: string;
+  role_in_formation?: string | null;
+  assigned_on?: string | null;
+  notes?: string | null;
+};
+
+/** Правка строки состава: `released_on: null` возвращает человека в состав. */
+export type FormationMemberUpdateInput = {
+  role_in_formation?: string | null;
+  assigned_on?: string | null;
+  released_on?: string | null;
+  notes?: string | null;
+};
+
+/** Тело учения: план обязателен — учение рождается запланированным. */
+export type DrillCreateInput = {
+  kind: string;
+  title: string;
+  planned_on: string;
+  formation_id?: string | null;
+  site_id?: string | null;
+  scenario?: string | null;
+  participants?: number | null;
+  notes?: string | null;
+};
+
+/** Правка учения: сюда же вносится протокол — дата, результат и анализ. */
+export type DrillUpdateInput = DrillCreateInput & {
+  held_on?: string | null;
+  outcome?: string | null;
+  findings?: string | null;
+};
+
 export type FormationDto = {
   id: string;
   name: string;
@@ -106,6 +174,69 @@ export type DrillDto = {
 };
 
 export const civilDefenseApi = {
+  createFormation: async (
+    body: FormationCreateInput,
+  ): Promise<FormationDto> => {
+    const { data } = await apiClient.post<FormationDto>(
+      "/civil-defense/formations",
+      body,
+    );
+    return data;
+  },
+
+  updateFormation: async (
+    id: string,
+    body: FormationUpdateInput,
+  ): Promise<FormationDto> => {
+    const { data } = await apiClient.patch<FormationDto>(
+      `/civil-defense/formations/${id}`,
+      body,
+    );
+    return data;
+  },
+
+  addFormationMember: async (
+    formationId: string,
+    body: FormationMemberCreateInput,
+  ): Promise<unknown> => {
+    const { data } = await apiClient.post<unknown>(
+      `/civil-defense/formations/${formationId}/members`,
+      body,
+    );
+    return data;
+  },
+
+  updateFormationMember: async (
+    formationId: string,
+    memberId: string,
+    body: FormationMemberUpdateInput,
+  ): Promise<unknown> => {
+    const { data } = await apiClient.patch<unknown>(
+      `/civil-defense/formations/${formationId}/members/${memberId}`,
+      body,
+    );
+    return data;
+  },
+
+  createDrill: async (body: DrillCreateInput): Promise<DrillDto> => {
+    const { data } = await apiClient.post<DrillDto>(
+      "/civil-defense/drills",
+      body,
+    );
+    return data;
+  },
+
+  updateDrill: async (
+    id: string,
+    body: DrillUpdateInput,
+  ): Promise<DrillDto> => {
+    const { data } = await apiClient.patch<DrillDto>(
+      `/civil-defense/drills/${id}`,
+      body,
+    );
+    return data;
+  },
+
   listFormations: async (): Promise<FormationDto[]> => {
     const { data } = await apiClient.get<{ items?: FormationDto[] }>(
       "/civil-defense/formations",
