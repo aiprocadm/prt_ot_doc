@@ -4,6 +4,7 @@ import {
   industrialSafetyApi,
   OPO_WORK_RESULT_TITLES,
 } from "@/api/industrialSafety";
+import { sitesApi } from "@/api/sites";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -11,6 +12,9 @@ import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
 import { disciplineIncidentsStat } from "@/components/common/disciplineIncidentsStat";
 import { RegistryTable } from "@/components/common/RegistryTable";
 import { Button } from "@/components/ui/button";
+import { OpoDeviceFormDialog } from "@/features/industrial-safety/OpoDeviceFormDialog";
+import { OpoDeviceWorkFormDialog } from "@/features/industrial-safety/OpoDeviceWorkFormDialog";
+import { OpoFacilityFormDialog } from "@/features/industrial-safety/OpoFacilityFormDialog";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { useLocalRegistry } from "@/hooks/useLocalRegistry";
 import { formatDate } from "@/utils/datetime";
@@ -38,6 +42,9 @@ const IndustrialSafetyPage = () => {
     loader: useCallback(
       async () => ({
         facilities: await industrialSafetyApi.listFacilities(),
+        // Площадки — ядровой справочник: объект привязывают выбором,
+        // а не вводом id (срез-105).
+        sites: (await sitesApi.list()).items,
         devices: await industrialSafetyApi.listDevices(),
         attestations: await industrialSafetyApi.listAttestations(),
         pcMeasures: await industrialSafetyApi.listPcMeasures(),
@@ -47,6 +54,7 @@ const IndustrialSafetyPage = () => {
     ),
     initialData: {
       facilities: [],
+      sites: [],
       devices: [],
       attestations: [],
       pcMeasures: [],
@@ -337,6 +345,34 @@ const IndustrialSafetyPage = () => {
               требование зависит от типа устройства и норм ФНП.
             </p>
           ) : null}
+          {/*
+            Срез-105: устройства (срез-13) и работы по ним заводились только
+            через API. Устройство заводится на объекте, поэтому кнопка есть
+            только когда объект есть; работа — когда есть что обслуживать.
+          */}
+          {!loading && !error ? (
+            <div className="flex flex-wrap gap-2">
+              {data.facilities.length > 0 ? (
+                <OpoDeviceFormDialog
+                  facilities={data.facilities}
+                  onSubmitted={() => void reload()}
+                  trigger={<Button>Завести устройство</Button>}
+                />
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Устройства учитываются на объекте: сначала заведите объект в
+                  секции «Объекты (ОПО)».
+                </p>
+              )}
+              {data.devices.length > 0 ? (
+                <OpoDeviceWorkFormDialog
+                  devices={data.devices}
+                  onSubmitted={() => void reload()}
+                  trigger={<Button>Записать работу</Button>}
+                />
+              ) : null}
+            </div>
+          ) : null}
           {!loading && !error && deviceRegistry.total === 0 ? (
             <EmptyState
               title="Технические устройства не заведены"
@@ -368,17 +404,22 @@ const IndustrialSafetyPage = () => {
                       : "не указан",
                 },
                 {
-                  accessorKey: "epb_valid_until",
-                  header: "ЭПБ до",
-                  cell: ({ row }) =>
-                    row.original.epb_valid_until
-                      ? formatDate(row.original.epb_valid_until)
-                      : "—",
-                },
-                {
+                  // Срез-105: срок заключения и состояние ЭПБ — одна колонка:
+                  // восьмая вывела бы таблицу за UX-бюджет (7), а действия
+                  // строке нужнее. «Заключения нет» остаётся отдельным
+                  // состоянием, а не пустой датой.
                   accessorKey: "epb_status_label",
                   header: "Экспертиза",
-                  cell: ({ row }) => row.original.epb_status_label,
+                  cell: ({ row }) => (
+                    <span>
+                      {row.original.epb_status_label}
+                      {row.original.epb_valid_until ? (
+                        <span className="ml-1 text-muted-foreground">
+                          до {formatDate(row.original.epb_valid_until)}
+                        </span>
+                      ) : null}
+                    </span>
+                  ),
                 },
                 {
                   // Разд. 54.2 «история работ»: последняя ПОДТВЕРЖДЁННАЯ
@@ -395,6 +436,34 @@ const IndustrialSafetyPage = () => {
                         }`
                       : "нет записей",
                 },
+                {
+                  id: "actions",
+                  header: "Действия",
+                  cell: ({ row }) => (
+                    <div className="flex gap-1">
+                      <OpoDeviceFormDialog
+                        facilities={data.facilities}
+                        initialData={row.original}
+                        onSubmitted={() => void reload()}
+                        trigger={
+                          <Button variant="ghost" size="sm">
+                            Изменить
+                          </Button>
+                        }
+                      />
+                      <OpoDeviceWorkFormDialog
+                        devices={data.devices}
+                        presetDeviceId={row.original.id}
+                        onSubmitted={() => void reload()}
+                        trigger={
+                          <Button variant="ghost" size="sm">
+                            Работа
+                          </Button>
+                        }
+                      />
+                    </div>
+                  ),
+                },
               ]}
               data={deviceRegistry.pagedItems}
               pageIndex={deviceRegistry.pageIndex}
@@ -408,6 +477,19 @@ const IndustrialSafetyPage = () => {
             />
           ) : null}
         </>
+      ) : null}
+      {/*
+        Срез-105: ручки объектов (срез-12) работали только через API — реестр
+        звал «внесите объекты из свидетельства», а внести их было негде.
+      */}
+      {section === "facilities" && !loading && !error ? (
+        <div>
+          <OpoFacilityFormDialog
+            sites={data.sites}
+            onSubmitted={() => void reload()}
+            trigger={<Button>Завести объект</Button>}
+          />
+        </div>
       ) : null}
       {section === "facilities" &&
       !loading &&
@@ -450,6 +532,22 @@ const IndustrialSafetyPage = () => {
               accessorKey: "responsible",
               header: "Ответственный",
               cell: ({ row }) => row.original.responsible || "—",
+            },
+            {
+              id: "actions",
+              header: "Действия",
+              cell: ({ row }) => (
+                <OpoFacilityFormDialog
+                  sites={data.sites}
+                  initialData={row.original}
+                  onSubmitted={() => void reload()}
+                  trigger={
+                    <Button variant="ghost" size="sm">
+                      Изменить
+                    </Button>
+                  }
+                />
+              ),
             },
           ]}
           data={registry.pagedItems}

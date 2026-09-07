@@ -21,6 +21,82 @@ export const OPO_HAZARD_CLASS_TITLES: Record<string, string> = {
   IV: "IV класс — низкая опасность",
 };
 
+/** Состояние ОПО в госреестре — копия `OPO_STATUSES` бэкенда (срез-105). */
+export const OPO_STATUS_TITLES: Record<string, string> = {
+  registered: "Зарегистрирован",
+  excluded: "Исключён из реестра",
+};
+
+/** Виды технических устройств — копия `OPO_DEVICE_KINDS` бэкенда. */
+export const OPO_DEVICE_KIND_TITLES: Record<string, string> = {
+  pressure_vessel: "Сосуд, работающий под давлением",
+  boiler: "Котёл",
+  pipeline: "Трубопровод пара и горячей воды",
+  lifting: "Подъёмное сооружение",
+  gas_equipment: "Газовое оборудование",
+  other: "Иное техническое устройство",
+};
+
+/** Состояния устройства — копия `OPO_DEVICE_STATUSES` бэкенда. */
+export const OPO_DEVICE_STATUS_TITLES: Record<string, string> = {
+  in_operation: "В эксплуатации",
+  suspended: "Эксплуатация приостановлена",
+  decommissioned: "Выведено из эксплуатации",
+};
+
+/** Виды работ по устройству — копия `OPO_WORK_KINDS` бэкенда. */
+export const OPO_WORK_KIND_TITLES: Record<string, string> = {
+  diagnostics: "Техническое диагностирование",
+  technical_survey: "Техническое освидетельствование",
+  epb: "Экспертиза промышленной безопасности",
+  maintenance: "Техническое обслуживание",
+  repair: "Ремонт",
+};
+
+/** Тело ОПО: номер в госреестре обязателен — без него объекта не существует. */
+export type HazardousFacilityCreateInput = {
+  name: string;
+  register_number: string;
+  hazard_class: string;
+  site_id?: string | null;
+  registered_on?: string | null;
+  excluded_on?: string | null;
+  status?: string;
+  responsible?: string | null;
+  notes?: string | null;
+};
+
+export type HazardousFacilityUpdateInput = HazardousFacilityCreateInput;
+
+/** Тело технического устройства: устройство «ничьё» невозможно предъявить. */
+export type TechnicalDeviceCreateInput = {
+  facility_id: string;
+  kind: string;
+  name: string;
+  serial_number?: string | null;
+  commissioned_on?: string | null;
+  lifetime_until?: string | null;
+  epb_conclusion_number?: string | null;
+  epb_registered_on?: string | null;
+  epb_valid_until?: string | null;
+  status?: string;
+  notes?: string | null;
+};
+
+export type TechnicalDeviceUpdateInput = TechnicalDeviceCreateInput;
+
+/** Тело работы по устройству: у экспертизы обязателен номер заключения. */
+export type DeviceWorkCreateInput = {
+  device_id: string;
+  kind: string;
+  performed_on: string;
+  result: string;
+  performer?: string | null;
+  conclusion_number?: string | null;
+  next_due?: string | null;
+  notes?: string | null;
+};
+
 export type HazardousFacilityDto = {
   id: string;
   name: string;
@@ -159,6 +235,58 @@ export type TechnicalDeviceDto = {
 };
 
 export const industrialSafetyApi = {
+  createFacility: async (
+    body: HazardousFacilityCreateInput,
+  ): Promise<HazardousFacilityDto> => {
+    const { data } = await apiClient.post<HazardousFacilityDto>(
+      "/industrial-safety/facilities",
+      body,
+    );
+    return data;
+  },
+
+  updateFacility: async (
+    id: string,
+    body: HazardousFacilityUpdateInput,
+  ): Promise<HazardousFacilityDto> => {
+    const { data } = await apiClient.patch<HazardousFacilityDto>(
+      `/industrial-safety/facilities/${id}`,
+      body,
+    );
+    return data;
+  },
+
+  createDevice: async (
+    body: TechnicalDeviceCreateInput,
+  ): Promise<TechnicalDeviceDto> => {
+    const { data } = await apiClient.post<TechnicalDeviceDto>(
+      "/industrial-safety/devices",
+      body,
+    );
+    return data;
+  },
+
+  updateDevice: async (
+    id: string,
+    body: TechnicalDeviceUpdateInput,
+  ): Promise<TechnicalDeviceDto> => {
+    const { data } = await apiClient.patch<TechnicalDeviceDto>(
+      `/industrial-safety/devices/${id}`,
+      body,
+    );
+    return data;
+  },
+
+  recordDeviceWork: async (
+    body: DeviceWorkCreateInput,
+  ): Promise<DeviceWorkDto> => {
+    const { data } = await apiClient.post<DeviceWorkDto>(
+      "/industrial-safety/device-works",
+      body,
+    );
+    return data;
+  },
+
   listFacilities: async (): Promise<HazardousFacilityDto[]> => {
     const { data } = await apiClient.get<{ items?: HazardousFacilityDto[] }>(
       "/industrial-safety/facilities",
