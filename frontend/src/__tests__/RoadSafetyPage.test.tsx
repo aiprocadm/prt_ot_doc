@@ -14,6 +14,9 @@ const listViolationsMock = vi.fn();
 const readinessMock = vi.fn();
 const createVehicleMock = vi.fn();
 const createDriverMock = vi.fn();
+const createWaybillMock = vi.fn();
+const createAccidentMock = vi.fn();
+const createViolationMock = vi.fn();
 const listSitesMock = vi.fn();
 const fetchAllPersonsMock = vi.fn();
 
@@ -21,6 +24,12 @@ vi.mock("@/api/roadSafety", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   roadSafetyApi: {
     createVehicle: (...args: unknown[]) => createVehicleMock(...args),
+    createWaybill: (...args: unknown[]) => createWaybillMock(...args),
+    createAccident: (...args: unknown[]) => createAccidentMock(...args),
+    createViolation: (...args: unknown[]) => createViolationMock(...args),
+    updateWaybill: vi.fn(),
+    updateAccident: vi.fn(),
+    updateViolation: vi.fn(),
     createDriver: (...args: unknown[]) => createDriverMock(...args),
     updateVehicle: vi.fn(),
     updateDriver: vi.fn(),
@@ -364,6 +373,9 @@ describe("RoadSafetyPage", () => {
     listVehiclesMock.mockReset();
     createVehicleMock.mockReset();
     createDriverMock.mockReset();
+    createWaybillMock.mockReset();
+    createAccidentMock.mockReset();
+    createViolationMock.mockReset();
     listSitesMock.mockReset();
     fetchAllPersonsMock.mockReset();
     listSitesMock.mockResolvedValue({
@@ -407,6 +419,106 @@ describe("RoadSafetyPage", () => {
     expect(
       screen.getByText(/не решает, нужен ли тахограф/i),
     ).toBeInTheDocument();
+  });
+
+  it("путевой лист выписывается с экрана (срез-108)", async () => {
+    const user = userEvent.setup();
+    const added = { ...populatedWaybills[0], id: "wb-new", number: "000999" };
+    createWaybillMock.mockResolvedValue(added);
+    listWaybillsMock
+      .mockResolvedValueOnce(populatedWaybills)
+      .mockResolvedValue([...populatedWaybills, added]);
+
+    render(
+      <MemoryRouter>
+        <RoadSafetyPage />
+      </MemoryRouter>,
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Путевые листы" }),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Выписать лист" }));
+    await user.type(screen.getByLabelText("Номер листа"), "000999");
+    await user.type(screen.getByLabelText("Выдан"), "2026-09-01");
+    await user.selectOptions(
+      screen.getByLabelText("Машина"),
+      populatedVehicles[0].id,
+    );
+    await user.selectOptions(
+      screen.getByLabelText("Водитель"),
+      populatedDrivers[0].id,
+    );
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(createWaybillMock).toHaveBeenCalled());
+    expect(createWaybillMock.mock.calls[0][0]).toMatchObject({
+      number: "000999",
+      vehicle_id: populatedVehicles[0].id,
+      driver_id: populatedDrivers[0].id,
+      issued_on: "2026-09-01",
+      status: "issued",
+      // Свежий лист выписан до осмотра: это законное «сведений нет».
+      pre_trip_medical: "not_recorded",
+      pre_trip_technical: "not_recorded",
+    });
+  });
+
+  it("ДТП и нарушение вносятся с экрана (срез-108)", async () => {
+    const user = userEvent.setup();
+    createAccidentMock.mockResolvedValue({ id: "acc-new" });
+    createViolationMock.mockResolvedValue({ id: "vio-new" });
+
+    render(
+      <MemoryRouter>
+        <RoadSafetyPage />
+      </MemoryRouter>,
+    );
+    await user.click(await screen.findByRole("button", { name: "ДТП" }));
+
+    await user.click(
+      screen.getByRole("button", { name: "Зарегистрировать ДТП" }),
+    );
+    await user.type(screen.getByLabelText("Дата и время"), "2026-08-01T09:30");
+    await user.type(screen.getByLabelText("Место"), "ул. Заводская, 5");
+    await user.selectOptions(
+      screen.getByLabelText("Машина"),
+      populatedVehicles[0].id,
+    );
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(createAccidentMock).toHaveBeenCalled());
+    expect(createAccidentMock.mock.calls[0][0]).toMatchObject({
+      occurred_at: "2026-08-01T09:30:00",
+      place: "ул. Заводская, 5",
+      vehicle_id: populatedVehicles[0].id,
+      kind: "collision",
+      // Вину устанавливают ГИБДД и суд: по умолчанию «не установлена».
+      fault: "not_established",
+      driver_id: null,
+      injured_count: 0,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Нарушения" }));
+    await user.click(screen.getByRole("button", { name: "Внести нарушение" }));
+    await user.selectOptions(
+      screen.getByLabelText("Машина"),
+      populatedVehicles[0].id,
+    );
+    await user.type(screen.getByLabelText("Дата и время"), "2026-08-02T12:00");
+    await user.type(screen.getByLabelText("Статья КоАП"), "12.9 ч.2");
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(createViolationMock).toHaveBeenCalled());
+    expect(createViolationMock.mock.calls[0][0]).toMatchObject({
+      vehicle_id: populatedVehicles[0].id,
+      occurred_at: "2026-08-02T12:00:00",
+      source: "camera",
+      article: "12.9 ч.2",
+      // Водитель не установлен, штраф не наложен — это факты, а не пустые поля.
+      driver_id: null,
+      fine_amount: null,
+    });
   });
 
   it("ТС заводится с экрана, а не только через API (срез-107)", async () => {

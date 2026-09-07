@@ -20,8 +20,11 @@ import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
 import { disciplineIncidentsStat } from "@/components/common/disciplineIncidentsStat";
 import { RegistryTable } from "@/components/common/RegistryTable";
 import { Button } from "@/components/ui/button";
+import { AccidentFormDialog } from "@/features/road-safety/AccidentFormDialog";
 import { DriverFormDialog } from "@/features/road-safety/DriverFormDialog";
 import { VehicleFormDialog } from "@/features/road-safety/VehicleFormDialog";
+import { ViolationFormDialog } from "@/features/road-safety/ViolationFormDialog";
+import { WaybillFormDialog } from "@/features/road-safety/WaybillFormDialog";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { useLocalRegistry } from "@/hooks/useLocalRegistry";
 import { formatDate } from "@/utils/datetime";
@@ -147,18 +150,19 @@ const WAYBILL_COLUMNS: ColumnDef<WaybillDto, unknown>[] = [
   },
   { accessorKey: "driver_name", header: "Водитель" },
   {
+    // Срез-108: предрейсовые медосмотр и техконтроль — одна колонка. Колонка
+    // действий стала бы восьмой, а это выход за UX-бюджет; послерейсовый
+    // осмотр по-прежнему в подсказке.
     accessorKey: "pre_trip_medical_label",
-    header: "Медосмотр",
+    header: "Контроль перед выездом",
     cell: ({ row }) => (
-      <span title={`Послерейсовый: ${row.original.post_trip_medical_label}`}>
-        {row.original.pre_trip_medical_label}
+      <span
+        title={`Послерейсовый медосмотр: ${row.original.post_trip_medical_label}`}
+      >
+        {row.original.pre_trip_medical_label} ·{" "}
+        {row.original.pre_trip_technical_label}
       </span>
     ),
-  },
-  {
-    accessorKey: "pre_trip_technical_label",
-    header: "Техконтроль",
-    cell: ({ row }) => row.original.pre_trip_technical_label,
   },
   {
     accessorKey: "release_status_label",
@@ -238,10 +242,18 @@ const ACCIDENT_COLUMNS: ColumnDef<RoadAccidentDto, unknown>[] = [
     cell: ({ row }) => formatDate(row.original.occurred_at),
   },
   {
+    // Срез-108: место и вид ДТП — одна колонка: колонка действий стала бы
+    // восьмой и вывела бы таблицу за UX-бюджет.
     accessorKey: "place",
-    header: "Где",
-    // Свободная строка, а не площадка: ДТП происходит на дороге.
-    cell: ({ row }) => row.original.place,
+    header: "Где и что",
+    cell: ({ row }) => (
+      <span>
+        {row.original.place}
+        <span className="ml-1 text-muted-foreground">
+          · {row.original.kind_label}
+        </span>
+      </span>
+    ),
   },
   {
     accessorKey: "vehicle_plate",
@@ -254,15 +266,6 @@ const ACCIDENT_COLUMNS: ColumnDef<RoadAccidentDto, unknown>[] = [
     // Пусто — водителя за рулём НЕ БЫЛО (въехали в стоящую машину), а не
     // «неизвестно кто».
     cell: ({ row }) => row.original.driver_name ?? "За рулём никого не было",
-  },
-  {
-    accessorKey: "kind_label",
-    header: "Вид",
-    cell: ({ row }) => (
-      <span title={`Вина: ${row.original.fault_label}`}>
-        {row.original.kind_label}
-      </span>
-    ),
   },
   {
     accessorKey: "consequences_label",
@@ -582,6 +585,78 @@ const RoadSafetyPage = () => {
     [data.sites, reload],
   );
 
+  const waybillColumns = useMemo(
+    () => [
+      ...WAYBILL_COLUMNS,
+      {
+        id: "actions",
+        header: "Действия",
+        cell: ({ row }: { row: { original: WaybillDto } }) => (
+          <WaybillFormDialog
+            vehicles={data.vehicles}
+            drivers={data.drivers}
+            initialData={row.original}
+            onSubmitted={() => void reload()}
+            trigger={
+              <Button variant="ghost" size="sm">
+                Изменить
+              </Button>
+            }
+          />
+        ),
+      },
+    ],
+    [data.vehicles, data.drivers, reload],
+  );
+
+  const accidentColumns = useMemo(
+    () => [
+      ...ACCIDENT_COLUMNS,
+      {
+        id: "actions",
+        header: "Действия",
+        cell: ({ row }: { row: { original: RoadAccidentDto } }) => (
+          <AccidentFormDialog
+            vehicles={data.vehicles}
+            drivers={data.drivers}
+            initialData={row.original}
+            onSubmitted={() => void reload()}
+            trigger={
+              <Button variant="ghost" size="sm">
+                Изменить
+              </Button>
+            }
+          />
+        ),
+      },
+    ],
+    [data.vehicles, data.drivers, reload],
+  );
+
+  const violationColumns = useMemo(
+    () => [
+      ...VIOLATION_COLUMNS,
+      {
+        id: "actions",
+        header: "Действия",
+        cell: ({ row }: { row: { original: TrafficViolationDto } }) => (
+          <ViolationFormDialog
+            vehicles={data.vehicles}
+            drivers={data.drivers}
+            initialData={row.original}
+            onSubmitted={() => void reload()}
+            trigger={
+              <Button variant="ghost" size="sm">
+                Изменить
+              </Button>
+            }
+          />
+        ),
+      },
+    ],
+    [data.vehicles, data.drivers, reload],
+  );
+
   const driverColumns = useMemo(
     () => [
       ...DRIVER_COLUMNS,
@@ -654,6 +729,17 @@ const RoadSafetyPage = () => {
               не становится.
             </p>
           ) : null}
+          {/* Срез-108: нарушение вносится по машине из реестра. */}
+          {!loading && !error && data.vehicles.length > 0 ? (
+            <div>
+              <ViolationFormDialog
+                vehicles={data.vehicles}
+                drivers={data.drivers}
+                onSubmitted={() => void reload()}
+                trigger={<Button>Внести нарушение</Button>}
+              />
+            </div>
+          ) : null}
           {!loading && !error && violations.total === 0 ? (
             <EmptyState
               title="Нарушения не зарегистрированы"
@@ -662,7 +748,7 @@ const RoadSafetyPage = () => {
           ) : null}
           {!loading && !error && violations.total > 0 ? (
             <RegistryTable
-              columns={VIOLATION_COLUMNS}
+              columns={violationColumns}
               data={violations.pagedItems}
               pageIndex={violations.pageIndex}
               pageSize={violations.pageSize}
@@ -696,6 +782,17 @@ const RoadSafetyPage = () => {
               числа пострадавших и погибших и словом не хранится.
             </p>
           ) : null}
+          {/* Срез-108: ДТП регистрируется по машине из реестра. */}
+          {!loading && !error && data.vehicles.length > 0 ? (
+            <div>
+              <AccidentFormDialog
+                vehicles={data.vehicles}
+                drivers={data.drivers}
+                onSubmitted={() => void reload()}
+                trigger={<Button>Зарегистрировать ДТП</Button>}
+              />
+            </div>
+          ) : null}
           {!loading && !error && accidents.total === 0 ? (
             <EmptyState
               title="ДТП не зарегистрированы"
@@ -704,7 +801,7 @@ const RoadSafetyPage = () => {
           ) : null}
           {!loading && !error && accidents.total > 0 ? (
             <RegistryTable
-              columns={ACCIDENT_COLUMNS}
+              columns={accidentColumns}
               data={accidents.pagedItems}
               pageIndex={accidents.pageIndex}
               pageSize={accidents.pageSize}
@@ -740,6 +837,23 @@ const RoadSafetyPage = () => {
               превышении.
             </p>
           ) : null}
+          {/*
+            Срез-108: лист выписывается на машину И водителя — обе ссылки
+            обязательны, поэтому кнопка появляется, когда есть и то и другое.
+          */}
+          {!loading &&
+          !error &&
+          data.vehicles.length > 0 &&
+          data.drivers.length > 0 ? (
+            <div>
+              <WaybillFormDialog
+                vehicles={data.vehicles}
+                drivers={data.drivers}
+                onSubmitted={() => void reload()}
+                trigger={<Button>Выписать лист</Button>}
+              />
+            </div>
+          ) : null}
           {!loading && !error && waybills.total === 0 ? (
             <EmptyState
               title="Путевые листы не выписаны"
@@ -748,7 +862,7 @@ const RoadSafetyPage = () => {
           ) : null}
           {!loading && !error && waybills.total > 0 ? (
             <RegistryTable
-              columns={WAYBILL_COLUMNS}
+              columns={waybillColumns}
               data={waybills.pagedItems}
               pageIndex={waybills.pageIndex}
               pageSize={waybills.pageSize}

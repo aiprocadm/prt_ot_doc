@@ -85,6 +85,107 @@ export type DriverCreateInput = {
 /** Правка карточки: человека не меняют — это другая карточка. */
 export type DriverUpdateInput = Omit<DriverCreateInput, "person_id">;
 
+/** Отметки контроля в путевом листе — копия `WAYBILL_MARK_STATUSES` (срез-108). */
+export const WAYBILL_MARK_TITLES: Record<string, string> = {
+  not_recorded: "Сведения не внесены",
+  passed: "Пройден",
+  failed: "Не пройден",
+};
+
+/** Состояния путевого листа — копия `WAYBILL_STATUSES` бэкенда. */
+export const WAYBILL_STATUS_TITLES: Record<string, string> = {
+  issued: "Выдан",
+  closed: "Закрыт",
+  cancelled: "Аннулирован",
+};
+
+/** Виды ДТП — копия `ACCIDENT_KINDS` бэкенда. */
+export const ACCIDENT_KIND_TITLES: Record<string, string> = {
+  collision: "Столкновение",
+  rollover: "Опрокидывание",
+  pedestrian: "Наезд на пешехода",
+  obstacle: "Наезд на препятствие",
+  parked_vehicle: "Наезд на стоящее ТС",
+  passenger_fall: "Падение пассажира",
+  other: "Иное",
+};
+
+/** Вина в ДТП — копия `ACCIDENT_FAULT` бэкенда: устанавливают ГИБДД и суд. */
+export const ACCIDENT_FAULT_TITLES: Record<string, string> = {
+  not_established: "Не установлена",
+  our_driver: "Наш водитель",
+  other_party: "Другой участник",
+  shared: "Обоюдная",
+};
+
+/** Способы выявления нарушения — копия `VIOLATION_SOURCES` бэкенда. */
+export const VIOLATION_SOURCE_TITLES: Record<string, string> = {
+  camera: "Автоматическая фиксация (камера)",
+  officer: "Остановлен инспектором",
+  internal: "Собственный контроль",
+};
+
+/** Тело путевого листа: машина и водитель — ссылки на реестры. */
+export type WaybillCreateInput = {
+  number: string;
+  vehicle_id: string;
+  driver_id: string;
+  issued_on: string;
+  departure_at?: string | null;
+  return_at?: string | null;
+  pre_trip_medical?: string;
+  post_trip_medical?: string;
+  pre_trip_technical?: string;
+  status?: string;
+  notes?: string | null;
+};
+
+/** Правка листа: машину и водителя сменить нельзя — это другой рейс. */
+export type WaybillUpdateInput = Omit<
+  WaybillCreateInput,
+  "vehicle_id" | "driver_id"
+>;
+
+/** Тело ДТП: водителя может не быть — в стоящую машину въезжают и без него. */
+export type RoadAccidentCreateInput = {
+  occurred_at: string;
+  place: string;
+  vehicle_id: string;
+  driver_id?: string | null;
+  kind: string;
+  injured_count?: number;
+  fatalities_count?: number;
+  fault?: string;
+  gibdd_reference?: string | null;
+  description?: string | null;
+};
+
+/** Правка ДТП: машину сменить нельзя — это другое ДТП. */
+export type RoadAccidentUpdateInput = Omit<
+  RoadAccidentCreateInput,
+  "vehicle_id"
+>;
+
+/** Тело нарушения: водитель необязателен — камера фиксирует госномер. */
+export type TrafficViolationCreateInput = {
+  vehicle_id: string;
+  driver_id?: string | null;
+  occurred_at: string;
+  source?: string;
+  article?: string | null;
+  resolution_number?: string | null;
+  place?: string | null;
+  fine_amount?: string | null;
+  fine_paid_on?: string | null;
+  description?: string | null;
+};
+
+/** Правка нарушения: машину сменить нельзя — это другое нарушение. */
+export type TrafficViolationUpdateInput = Omit<
+  TrafficViolationCreateInput,
+  "vehicle_id"
+>;
+
 export type VehicleDto = {
   id: string;
   plate_number: string;
@@ -340,6 +441,67 @@ export type RoadSafetyReadinessDto = {
 };
 
 export const roadSafetyApi = {
+  createWaybill: async (body: WaybillCreateInput): Promise<WaybillDto> => {
+    const { data } = await apiClient.post<WaybillDto>(
+      "/road-safety/waybills",
+      body,
+    );
+    return data;
+  },
+
+  updateWaybill: async (
+    id: string,
+    body: WaybillUpdateInput,
+  ): Promise<WaybillDto> => {
+    const { data } = await apiClient.patch<WaybillDto>(
+      `/road-safety/waybills/${id}`,
+      body,
+    );
+    return data;
+  },
+
+  createAccident: async (
+    body: RoadAccidentCreateInput,
+  ): Promise<RoadAccidentDto> => {
+    const { data } = await apiClient.post<RoadAccidentDto>(
+      "/road-safety/accidents",
+      body,
+    );
+    return data;
+  },
+
+  updateAccident: async (
+    id: string,
+    body: RoadAccidentUpdateInput,
+  ): Promise<RoadAccidentDto> => {
+    const { data } = await apiClient.patch<RoadAccidentDto>(
+      `/road-safety/accidents/${id}`,
+      body,
+    );
+    return data;
+  },
+
+  createViolation: async (
+    body: TrafficViolationCreateInput,
+  ): Promise<TrafficViolationDto> => {
+    const { data } = await apiClient.post<TrafficViolationDto>(
+      "/road-safety/violations",
+      body,
+    );
+    return data;
+  },
+
+  updateViolation: async (
+    id: string,
+    body: TrafficViolationUpdateInput,
+  ): Promise<TrafficViolationDto> => {
+    const { data } = await apiClient.patch<TrafficViolationDto>(
+      `/road-safety/violations/${id}`,
+      body,
+    );
+    return data;
+  },
+
   createVehicle: async (body: VehicleCreateInput): Promise<VehicleDto> => {
     const { data } = await apiClient.post<VehicleDto>(
       "/road-safety/vehicles",
