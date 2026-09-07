@@ -352,6 +352,36 @@ describe("FireSafetyPage", () => {
   // Доп. №1 разд. 54.1 «регламентные работы». До этого среза у средства был
   // только СЛЕДУЮЩИЙ срок: отметить выполненное ТО можно было единственным
   // способом — затереть срок, и от работы не оставалось следа.
+  it("списанное средство видно в реестре и не путается с эксплуатируемым (срез-111)", async () => {
+    const user = userEvent.setup();
+    getFireSafetySnapshotMock.mockResolvedValue(populatedFireSafetySnapshot);
+    listEquipmentMock.mockResolvedValue([
+      populatedEquipment[0],
+      {
+        ...populatedEquipment[1],
+        id: "unit-decommissioned",
+        label: "ОП-5 №99",
+        status: "decommissioned",
+        status_label: "Списано",
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <FireSafetyPage />
+      </MemoryRouter>,
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Средства и системы" }),
+    );
+
+    expect(await screen.findByText("ОП-5 №99")).toBeInTheDocument();
+    // Состояние показано только у неэксплуатируемых: у остальных колонка не
+    // шумит словом «В эксплуатации».
+    expect(screen.getByText(/· Списано/)).toBeInTheDocument();
+    expect(screen.queryByText(/· В эксплуатации/)).toBeNull();
+  });
+
   it("показывает последнее подтверждённое ТО и называет его отсутствие", async () => {
     getFireSafetySnapshotMock.mockResolvedValue(populatedFireSafetySnapshot);
     const user = userEvent.setup();

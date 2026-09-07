@@ -107,6 +107,8 @@ describe("FireEquipmentFormDialog — средство защиты (срез-10
       location: "Цех №2",
       recharge_due: null,
       inspection_due: "2026-11-01",
+      // Срез-111: состояние из закрытого словаря; по умолчанию «в эксплуатации».
+      status: "active",
     });
     expect(toastSuccess).toHaveBeenCalledWith("Средство заведено");
   });
@@ -148,13 +150,42 @@ describe("FireEquipmentFormDialog — средство защиты (срез-10
     });
   });
 
-  it("состояние средства формой не меняется: закрытого словаря нет", async () => {
+  it("средство списывается с экрана: состояние из закрытого словаря (срез-111)", async () => {
+    const user = userEvent.setup();
+    render(
+      <FireEquipmentFormDialog
+        sites={sites}
+        initialData={existingUnit}
+        trigger={<button>Изменить</button>}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Изменить" }));
+
+    // Состояние подставлено из записи, а список — ровно три значения словаря.
+    expect(screen.getByLabelText("Состояние")).toHaveValue("active");
+    const statuses = Array.from(
+      screen.getByLabelText("Состояние").querySelectorAll("option"),
+    ).map((option) => option.getAttribute("value"));
+    expect(statuses).toEqual(["active", "suspended", "decommissioned"]);
+
+    await user.selectOptions(
+      screen.getByLabelText("Состояние"),
+      "decommissioned",
+    );
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(updateEquipmentMock).toHaveBeenCalled());
+    expect(updateEquipmentMock.mock.calls[0][1]).toMatchObject({
+      status: "decommissioned",
+    });
+  });
+
+  it("на первом уровне поля в бюджете; граница сроков названа", async () => {
     const user = userEvent.setup();
     await openCreate(user);
     await screen.findByLabelText("Вид средства");
 
     expect(uxBudgetViolations(document.body)).toEqual([]);
-    expect(screen.queryByLabelText(/Состояние/i)).toBeNull();
     expect(
       screen.getByText(/Пустой срок означает «не\s+применимо»/i),
     ).toBeInTheDocument();

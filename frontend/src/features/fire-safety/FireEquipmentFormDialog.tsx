@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 
 import {
+  FIRE_EQUIPMENT_STATUS_TITLES,
   FIRE_EQUIPMENT_TITLES,
   fireSafetyApi,
   type FireEquipmentDto,
@@ -34,6 +35,7 @@ const emptyForm: FireEquipmentFormValues = {
   location: "",
   recharge_due: "",
   inspection_due: "",
+  status: "active",
 };
 
 const API_FIELD_MAP: Record<string, keyof FireEquipmentFormValues> = {
@@ -43,6 +45,7 @@ const API_FIELD_MAP: Record<string, keyof FireEquipmentFormValues> = {
   location: "location",
   recharge_due: "recharge_due",
   inspection_due: "inspection_due",
+  status: "status",
 };
 
 const orNull = (value: string | undefined): string | null =>
@@ -65,9 +68,12 @@ interface FireEquipmentFormDialogProps {
  *
  * ГРАНИЦА: платформа не решает, какой срок средству нужен (у огнетушителя это
  * перезарядка, у крана — поверка, у лестницы — испытание), и не назначает его
- * сама. Пустой срок означает «не применимо», а не «просрочено». Состояние
- * средства формой не меняется: закрытого словаря состояний на сервере нет, а
- * свободная строка превратила бы реестр в «как записали».
+ * сама. Пустой срок означает «не применимо», а не «просрочено».
+ *
+ * СОСТОЯНИЕ (срез-111): закрытый словарь появился на сервере, и списать
+ * средство теперь можно с экрана. Списание — состояние, а не удаление:
+ * средство уходит из готовности к проверке МЧС, но остаётся в истории, а
+ * просрочки считаются только по эксплуатируемым.
  */
 export const FireEquipmentFormDialog = ({
   trigger,
@@ -93,6 +99,7 @@ export const FireEquipmentFormDialog = ({
         location: initialData.location ?? "",
         recharge_due: initialData.recharge_due ?? "",
         inspection_due: initialData.inspection_due ?? "",
+        status: initialData.status,
       });
     } else {
       form.reset(emptyForm);
@@ -107,6 +114,7 @@ export const FireEquipmentFormDialog = ({
       location: orNull(values.location),
       recharge_due: orNull(values.recharge_due),
       inspection_due: orNull(values.inspection_due),
+      status: values.status,
     };
     try {
       const result = initialData
@@ -209,6 +217,26 @@ export const FireEquipmentFormDialog = ({
               />
               {fieldError("location")}
             </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="fire-unit-status">Состояние</Label>
+            {/* Срез-111: списание — состояние, а не удаление. Списанное
+                средство уходит из готовности к проверке, но остаётся в
+                истории; просрочки считаются только по эксплуатируемым. */}
+            <select
+              id="fire-unit-status"
+              className="h-10 w-full rounded-md border px-3"
+              {...form.register("status")}
+            >
+              {Object.entries(FIRE_EQUIPMENT_STATUS_TITLES).map(
+                ([code, title]) => (
+                  <option key={code} value={code}>
+                    {title}
+                  </option>
+                ),
+              )}
+            </select>
+            {fieldError("status")}
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">

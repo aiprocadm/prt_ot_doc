@@ -6,7 +6,7 @@ const optionalText = z
   .transform((s) => (s === undefined ? s : s.trim()));
 
 /**
- * Средство защиты или система ПБ (разд. 54.1, срез-103).
+ * Средство защиты или система ПБ (разд. 54.1, срез-103; состояние — срез-111).
  *
  * ГРАНИЦА: платформа не решает, какой срок нужен этому средству — перезарядка
  * огнетушителя, поверка крана и испытание лестницы живут по разным правилам, а
@@ -20,6 +20,10 @@ export const fireEquipmentFormSchema = z.object({
   location: optionalText,
   recharge_due: optionalText,
   inspection_due: optionalText,
+  // Срез-111: состояние стало закрытым словарём на сервере, и списать
+  // средство теперь можно с экрана. Просрочки считаются только по
+  // эксплуатируемым — списанный огнетушитель это история, а не нарушение.
+  status: z.string().trim().min(1, "Выберите состояние"),
 });
 
 export type FireEquipmentFormValues = z.infer<typeof fireEquipmentFormSchema>;

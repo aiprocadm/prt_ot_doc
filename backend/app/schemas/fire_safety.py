@@ -38,6 +38,8 @@ class FireEquipmentRead(BaseSchema):
     recharge_due: date | None = None
     inspection_due: date | None = None
     status: str
+    #: состояние словами — перевод делает сервер (срез-111, прецедент ТС и ОПО)
+    status_label: str = ""
     #: разд. 54.1 «регламентные работы»: последняя ПОДТВЕРЖДЁННАЯ работа —
     #: срок без неё это обещание, а не доказательство. Считается при чтении.
     last_maintenance_on: date | None = None

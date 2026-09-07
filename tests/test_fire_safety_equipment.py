@@ -20,7 +20,7 @@ import pytest
 from sqlalchemy import select
 
 from app.models.feature import Feature, FeatureEnablement
-from app.models.fire_safety import FIRE_EQUIPMENT_KINDS
+from app.models.fire_safety import FIRE_EQUIPMENT_KINDS, FIRE_EQUIPMENT_STATUSES
 from app.models.models import Tenant
 
 _FRONTEND_FIRE_API = (
@@ -196,5 +196,102 @@ class TestСловарьВидовСредствНаФронте:
         front = set(re.findall(r'^\s*([a-z_]+):', block.group(1), re.M))
         assert front == set(FIRE_EQUIPMENT_KINDS), sorted(
             front ^ set(FIRE_EQUIPMENT_KINDS)
+        )
+
+
+class TestСостояниеСредства:
+    """Срез-111: состояние средства — ЗАКРЫТЫЙ словарь, а не свободная строка.
+
+    До среза сюда писали что угодно, а просрочки везде считаются ТОЛЬКО по
+    средствам «в эксплуатации»: опечатка («списан» вместо `decommissioned`)
+    молча убирала средство из готовности к проверке МЧС — и это выглядело как
+    улучшение, потому что цифра просрочек падала.
+    """
+
+    async def test_неизвестное_состояние_отвергается_словами(
+        self, async_client, make_auth_headers, sessionmaker
+    ) -> None:
+        headers = await make_auth_headers()
+        await _grant(sessionmaker)
+
+        response = await async_client.post(
+            f"{_API}/equipment",
+            json={"kind": "extinguisher", "label": "ОП-5 №9", "status": "списан"},
+            headers=headers,
+        )
+
+        assert response.status_code == 422, response.text
+        assert "Неизвестное состояние средства" in response.text
+        assert "decommissioned" in response.text
+
+    async def test_состояние_отдаётся_словами(
+        self, async_client, make_auth_headers, sessionmaker
+    ) -> None:
+        headers = await make_auth_headers()
+        await _grant(sessionmaker)
+
+        created = await async_client.post(
+            f"{_API}/equipment",
+            json={"kind": "extinguisher", "label": "ОП-5 №10"},
+            headers=headers,
+        )
+        assert created.status_code == 201, created.text
+        assert created.json()["status"] == "active"
+        assert created.json()["status_label"] == FIRE_EQUIPMENT_STATUSES["active"]
+
+    async def test_списанное_средство_уходит_из_готовности(
+        self, async_client, make_auth_headers, sessionmaker
+    ) -> None:
+        """Списанный огнетушитель с просроченной перезарядкой — история.
+
+        Обвинять в нарушении по средству, которого больше нет в работе, значит
+        держать в сводке шум: тот же довод, что у списанных ТС и выведенных из
+        эксплуатации устройств ОПО.
+        """
+
+        headers = await make_auth_headers()
+        await _grant(sessionmaker)
+        today = date.today()
+
+        created = await async_client.post(
+            f"{_API}/equipment",
+            json={
+                "kind": "extinguisher",
+                "label": "ОП-5 №11",
+                "recharge_due": str(today - timedelta(days=5)),
+            },
+            headers=headers,
+        )
+        assert created.status_code == 201, created.text
+        unit_id = created.json()["id"]
+
+        before = (await async_client.get(f"{_API}/readiness", headers=headers)).json()
+        assert before["overdue_recharge"] >= 1
+
+        patched = await async_client.patch(
+            f"{_API}/equipment/{unit_id}",
+            json={"status": "decommissioned"},
+            headers=headers,
+        )
+        assert patched.status_code == 200, patched.text
+        assert patched.json()["status_label"] == "Списано"
+
+        after = (await async_client.get(f"{_API}/readiness", headers=headers)).json()
+        assert after["overdue_recharge"] == before["overdue_recharge"] - 1
+        # Запись осталась: списание — состояние, а не удаление.
+        listed = (await async_client.get(f"{_API}/equipment", headers=headers)).json()
+        assert any(item["id"] == unit_id for item in listed["items"])
+
+    def test_состояния_на_фронте_совпадают_с_бэкендом(self) -> None:
+        text = _FRONTEND_FIRE_API.read_text(encoding="utf-8")
+        block = re.search(
+            r"FIRE_EQUIPMENT_STATUS_TITLES:\s*Record<[^>]+>\s*=\s*\{(.*?)\n\}",
+            text,
+            re.S,
+        )
+        assert block is not None, "не нашёлся map FIRE_EQUIPMENT_STATUS_TITLES"
+        front = dict(re.findall(r'^\s*([a-z_]+):\s*"([^"]+)"', block.group(1), re.M))
+        assert front == FIRE_EQUIPMENT_STATUSES, sorted(
+            front.items() ^ FIRE_EQUIPMENT_STATUSES.items()
         )
 
