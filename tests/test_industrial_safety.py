@@ -28,15 +28,37 @@
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 import pytest
 from sqlalchemy import select
 
 from app.models.feature import Feature, FeatureEnablement
+from app.models.industrial_safety import OPO_HAZARD_CLASSES, OPO_STATUSES
 from app.models.models import Tenant
 
 pytestmark = pytest.mark.anyio
 
 _API = "/api/v1/industrial-safety"
+
+
+_FRONTEND_OPO_API = (
+    Path(__file__).resolve().parents[1]
+    / "frontend"
+    / "src"
+    / "api"
+    / "industrialSafety.ts"
+)
+
+
+def _front_map(name: str) -> dict[str, str]:
+    """Читает map подписей из ``frontend/src/api/industrialSafety.ts``."""
+
+    text = _FRONTEND_OPO_API.read_text(encoding="utf-8")
+    block = re.search(rf"{name}:\s*Record<[^>]+>\s*=\s*\{{(.*?)\n\}}", text, re.S)
+    assert block is not None, f"не нашёлся map {name}"
+    return dict(re.findall(r'^\s*([A-Za-z_]+):\s*"([^"]+)"', block.group(1), re.M))
 
 
 async def _grant(sessionmaker, code: str = "industrial_safety", on: bool = True) -> None:
@@ -330,3 +352,23 @@ class TestИзоляцияАрендатора:
             headers=headers,
         )
         assert response.status_code == 404
+
+
+class TestСловариОпоНаФронте:
+    """Срез-105: класс и состояние ОПО выбирают в форме из копий словарей.
+
+    Список формы строится из ``OPO_HAZARD_CLASS_TITLES`` / ``OPO_STATUS_TITLES``
+    в ``api/industrialSafety.ts``: значение, добавленное только на бэкенде,
+    нельзя было бы ни выбрать, ни прочитать словами.
+    """
+
+    def test_классы_опасности_на_фронте_совпадают_с_бэкендом(self) -> None:
+        front = _front_map("OPO_HAZARD_CLASS_TITLES")
+        assert front == OPO_HAZARD_CLASSES, sorted(
+            front.items() ^ OPO_HAZARD_CLASSES.items()
+        )
+
+    def test_состояния_объекта_на_фронте_совпадают_с_бэкендом(self) -> None:
+        front = _front_map("OPO_STATUS_TITLES")
+        assert front == OPO_STATUSES, sorted(front.items() ^ OPO_STATUSES.items())
+

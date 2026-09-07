@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -11,6 +11,10 @@ const listDevicesMock = vi.fn();
 const listAttestationsMock = vi.fn();
 const listPcMeasuresMock = vi.fn();
 const readinessMock = vi.fn();
+const createFacilityMock = vi.fn();
+const createDeviceMock = vi.fn();
+const recordDeviceWorkMock = vi.fn();
+const listSitesMock = vi.fn();
 
 vi.mock("@/api/industrialSafety", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -20,8 +24,17 @@ vi.mock("@/api/industrialSafety", async (importOriginal) => ({
     listAttestations: (...args: unknown[]) => listAttestationsMock(...args),
     listPcMeasures: (...args: unknown[]) => listPcMeasuresMock(...args),
     readiness: (...args: unknown[]) => readinessMock(...args),
+    createFacility: (...args: unknown[]) => createFacilityMock(...args),
+    createDevice: (...args: unknown[]) => createDeviceMock(...args),
+    recordDeviceWork: (...args: unknown[]) => recordDeviceWorkMock(...args),
   },
 }));
+
+vi.mock("@/api/sites", () => ({
+  sitesApi: { list: (...args: unknown[]) => listSitesMock(...args) },
+}));
+
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 /** Устройства: одно отработало срок службы, у другого просрочено заключение. */
 const populatedDevices = [
@@ -185,6 +198,14 @@ describe("IndustrialSafetyPage", () => {
     listAttestationsMock.mockReset();
     listPcMeasuresMock.mockReset();
     readinessMock.mockReset();
+    createFacilityMock.mockReset();
+    createDeviceMock.mockReset();
+    recordDeviceWorkMock.mockReset();
+    listSitesMock.mockReset();
+    listSitesMock.mockResolvedValue({
+      items: [{ id: "site-1", name: "Площадка №1" }],
+      total: 1,
+    });
     listFacilitiesMock.mockResolvedValue(populatedFacilities);
     listDevicesMock.mockResolvedValue(populatedDevices);
     listAttestationsMock.mockResolvedValue(populatedAttestations);
@@ -249,6 +270,107 @@ describe("IndustrialSafetyPage", () => {
   // Доп. №1 разд. 54.2 срез-2: технические устройства и ЭПБ. Ядровые
   // Asset/Equipment — две и три колонки без ручек и без сроков, учитывать по
   // ним экспертизу нечем.
+  it("объект ОПО заводится с экрана, а не только через API (срез-105)", async () => {
+    const user = userEvent.setup();
+    const added = {
+      ...populatedFacilities[0],
+      id: "opo-new",
+      name: "Склад ГСМ",
+      register_number: "А01-99999-0009",
+    };
+    createFacilityMock.mockResolvedValue(added);
+    listFacilitiesMock
+      .mockResolvedValueOnce(populatedFacilities)
+      .mockResolvedValue([...populatedFacilities, added]);
+
+    render(
+      <MemoryRouter>
+        <IndustrialSafetyPage />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByRole("button", { name: "Завести объект" }),
+    ).toBeInTheDocument();
+    expect(
+      uxBudgetDelta(document.body, "IndustrialSafetyPage").unexpected,
+    ).toEqual([]);
+
+    await user.click(screen.getByRole("button", { name: "Завести объект" }));
+    await user.type(screen.getByLabelText("Объект"), "Склад ГСМ");
+    await user.type(screen.getByLabelText("Номер в реестре"), "А01-99999-0009");
+    await user.selectOptions(screen.getByLabelText("Класс опасности"), "III");
+    await user.selectOptions(screen.getByLabelText("Площадка"), "site-1");
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(createFacilityMock).toHaveBeenCalled());
+    expect(createFacilityMock.mock.calls[0][0]).toMatchObject({
+      name: "Склад ГСМ",
+      register_number: "А01-99999-0009",
+      hazard_class: "III",
+      site_id: "site-1",
+      status: "registered",
+    });
+    expect(await screen.findByText("Склад ГСМ")).toBeInTheDocument();
+  });
+
+  it("устройство и работа по нему заводятся с экрана (срез-105)", async () => {
+    const user = userEvent.setup();
+    const added = {
+      ...populatedDevices[0],
+      id: "dev-new",
+      name: "Котёл КВ-2",
+    };
+    createDeviceMock.mockResolvedValue(added);
+    recordDeviceWorkMock.mockResolvedValue({ id: "work-new" });
+    listDevicesMock
+      .mockResolvedValueOnce(populatedDevices)
+      .mockResolvedValue([...populatedDevices, added]);
+
+    render(
+      <MemoryRouter>
+        <IndustrialSafetyPage />
+      </MemoryRouter>,
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Технические устройства" }),
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Завести устройство" }),
+    );
+    await user.selectOptions(screen.getByLabelText("Объект (ОПО)"), "opo-1");
+    await user.selectOptions(screen.getByLabelText("Вид устройства"), "boiler");
+    await user.type(screen.getByLabelText("Устройство"), "Котёл КВ-2");
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(createDeviceMock).toHaveBeenCalled());
+    expect(createDeviceMock.mock.calls[0][0]).toMatchObject({
+      facility_id: "opo-1",
+      kind: "boiler",
+      name: "Котёл КВ-2",
+      status: "in_operation",
+      // Заключения ЭПБ нет — это отдельное состояние, а не пустая просрочка.
+      epb_conclusion_number: null,
+      epb_valid_until: null,
+    });
+
+    // Работа записывается прямо из строки: устройство подставлено.
+    await user.click(screen.getAllByRole("button", { name: "Работа" })[0]);
+    expect(screen.getByLabelText("Устройство")).toHaveValue(
+      populatedDevices[0].id,
+    );
+    await user.type(screen.getByLabelText("Дата работы"), "2026-09-01");
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(recordDeviceWorkMock).toHaveBeenCalled());
+    expect(recordDeviceWorkMock.mock.calls[0][0]).toMatchObject({
+      device_id: populatedDevices[0].id,
+      kind: "diagnostics",
+      performed_on: "2026-09-01",
+      result: "passed",
+    });
+  });
+
   it("устройства открываются второй секцией с состоянием экспертизы", async () => {
     const user = userEvent.setup();
 
