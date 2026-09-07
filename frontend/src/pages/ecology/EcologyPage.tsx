@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { EcologyDeadlineFormDialog } from "@/features/ecology/EcologyDeadlineFormDialog";
 import { EcologyEmissionNormFormDialog } from "@/features/ecology/EcologyEmissionNormFormDialog";
 import { EcologyEmissionSourceFormDialog } from "@/features/ecology/EcologyEmissionSourceFormDialog";
+import { EcologyFeeLineFormDialog } from "@/features/ecology/EcologyFeeLineFormDialog";
+import { EcologyFeeRateFormDialog } from "@/features/ecology/EcologyFeeRateFormDialog";
 import { EcologyMeasurementFormDialog } from "@/features/ecology/EcologyMeasurementFormDialog";
 import { EcologyMonitoringPlanFormDialog } from "@/features/ecology/EcologyMonitoringPlanFormDialog";
 import { EcologyFacilityFormDialog } from "@/features/ecology/EcologyFacilityFormDialog";
@@ -1084,6 +1086,22 @@ const EcologyPage = () => {
             Плата за {new Date().getFullYear()} год по посчитанным строкам:{" "}
             {readiness.fee_total_rubles} ₽
           </p>
+          {/*
+            Срез-102: ставки и строки расчёта заводились только через API.
+            Ставка нужна раньше строки — иначе сумма не считается вовсе, — но
+            строку всё равно можно внести заранее: она честно покажет «ставка
+            не внесена» вместо ложного нуля.
+          */}
+          <div className="flex flex-wrap gap-2">
+            <EcologyFeeLineFormDialog
+              onSubmitted={() => void reload()}
+              trigger={<Button>Внести строку расчёта</Button>}
+            />
+            <EcologyFeeRateFormDialog
+              onSubmitted={() => void reload()}
+              trigger={<Button>Внести ставку</Button>}
+            />
+          </div>
           {feeLineRegistry.total === 0 ? (
             <EmptyState
               title="Расчёт платы не заведён"
@@ -1113,6 +1131,21 @@ const EcologyPage = () => {
                     row.original.amount_rubles ??
                     row.original.rate_status_label,
                 },
+                {
+                  id: "actions",
+                  header: "Действия",
+                  cell: ({ row }) => (
+                    <EcologyFeeLineFormDialog
+                      initialData={row.original}
+                      onSubmitted={() => void reload()}
+                      trigger={
+                        <Button variant="ghost" size="sm">
+                          Изменить
+                        </Button>
+                      }
+                    />
+                  ),
+                },
               ]}
               data={feeLineRegistry.pagedItems}
               pageIndex={feeLineRegistry.pageIndex}
@@ -1141,6 +1174,21 @@ const EcologyPage = () => {
                   header: "Чем установлена",
                   cell: ({ row }) =>
                     row.original.source_document || "не указано",
+                },
+                {
+                  id: "actions",
+                  header: "Действия",
+                  cell: ({ row }) => (
+                    <EcologyFeeRateFormDialog
+                      initialData={row.original}
+                      onSubmitted={() => void reload()}
+                      trigger={
+                        <Button variant="ghost" size="sm">
+                          Изменить
+                        </Button>
+                      }
+                    />
+                  ),
                 },
               ]}
               data={feeRateRegistry.pagedItems}

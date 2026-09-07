@@ -34,15 +34,22 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date
+from pathlib import Path
 
 import pytest
 from sqlalchemy import select
 
+from app.models.ecology import FEE_IMPACT_KINDS
 from app.models.feature import Feature, FeatureEnablement
 from app.models.models import Tenant
 
 pytestmark = pytest.mark.anyio
+
+_FRONTEND_ECOLOGY_API = (
+    Path(__file__).resolve().parents[1] / "frontend" / "src" / "api" / "ecology.ts"
+)
 
 _API = "/api/v1/ecology"
 _YEAR = date.today().year
@@ -382,3 +389,28 @@ class TestСводкаИГраница:
             headers=headers,
         )
         assert response.status_code == 404, response.text
+
+
+class TestСловарьВидовВоздействияНаФронте:
+    """Срез-102: вид воздействия выбирают в формах ставки и строки расчёта.
+
+    Оба списка строятся из ``FEE_IMPACT_KIND_TITLES`` в ``api/ecology.ts``:
+    вид, добавленный только на бэкенде, нельзя было бы ни выбрать, ни
+    прочитать словами — и строка расчёта по нему никогда не нашла бы ставку.
+    """
+
+    def test_виды_воздействия_на_фронте_совпадают_с_бэкендом(self) -> None:
+        text = _FRONTEND_ECOLOGY_API.read_text(encoding="utf-8")
+        block = re.search(
+            r"FEE_IMPACT_KIND_TITLES:\s*Record<string,\s*string>\s*=\s*\{(.*?)\}",
+            text,
+            re.S,
+        )
+        assert block is not None, "не нашёлся map FEE_IMPACT_KIND_TITLES"
+        front = dict(
+            re.findall(r'^\s*([A-Za-z_]+):\s*"([^"]+)"', block.group(1), re.M)
+        )
+        assert front == FEE_IMPACT_KINDS, sorted(
+            front.items() ^ FEE_IMPACT_KINDS.items()
+        )
+

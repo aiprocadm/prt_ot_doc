@@ -103,6 +103,52 @@ export type EcologyReadinessDto = {
   reporting_overdue: number;
 };
 
+/**
+ * Виды воздействия для платы за НВОС — копия `FEE_IMPACT_KINDS` бэкенда.
+ * Формы ставки и строки расчёта строят выбор из этого map; совпадение
+ * стережёт `tests/test_ecology_fee.py` (срез-102).
+ */
+export const FEE_IMPACT_KIND_TITLES: Record<string, string> = {
+  emission: "Выбросы в атмосферу",
+  discharge: "Сбросы в водные объекты",
+  waste: "Размещение отходов",
+};
+
+/** Тело ставки платы: год, вид воздействия и предмет — ключ ставки. */
+export type FeeRateCreateInput = {
+  year: number;
+  impact_kind: string;
+  subject: string;
+  rate_per_ton: string;
+  source_document?: string | null;
+  notes?: string | null;
+};
+
+/** Правка ставки: год, вид и предмет не меняются — это уже другая ставка. */
+export type FeeRateUpdateInput = {
+  rate_per_ton: string;
+  source_document?: string | null;
+  notes?: string | null;
+};
+
+/** Тело строки расчёта платы: квартал — он же авансовый платёж. */
+export type FeeLineCreateInput = {
+  year: number;
+  quarter: number;
+  impact_kind: string;
+  subject: string;
+  mass_tons: string;
+  coefficient: string;
+  notes?: string | null;
+};
+
+/** Правка строки: год, квартал, вид и предмет не меняются — это ключ строки. */
+export type FeeLineUpdateInput = {
+  mass_tons: string;
+  coefficient: string;
+  notes?: string | null;
+};
+
 export type FeeRateDto = {
   id: string;
   year: number;
@@ -788,6 +834,44 @@ export const ecologyApi = {
   ): Promise<WaterRecordDto> => {
     const { data } = await apiClient.patch<WaterRecordDto>(
       `/ecology/water-records/${id}`,
+      body,
+    );
+    return data;
+  },
+
+  createFeeRate: async (body: FeeRateCreateInput): Promise<FeeRateDto> => {
+    const { data } = await apiClient.post<FeeRateDto>(
+      "/ecology/fee-rates",
+      body,
+    );
+    return data;
+  },
+
+  updateFeeRate: async (
+    id: string,
+    body: FeeRateUpdateInput,
+  ): Promise<FeeRateDto> => {
+    const { data } = await apiClient.patch<FeeRateDto>(
+      `/ecology/fee-rates/${id}`,
+      body,
+    );
+    return data;
+  },
+
+  createFeeLine: async (body: FeeLineCreateInput): Promise<FeeLineDto> => {
+    const { data } = await apiClient.post<FeeLineDto>(
+      "/ecology/fee-lines",
+      body,
+    );
+    return data;
+  },
+
+  updateFeeLine: async (
+    id: string,
+    body: FeeLineUpdateInput,
+  ): Promise<FeeLineDto> => {
+    const { data } = await apiClient.patch<FeeLineDto>(
+      `/ecology/fee-lines/${id}`,
       body,
     );
     return data;
