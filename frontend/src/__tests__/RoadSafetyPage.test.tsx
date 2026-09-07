@@ -12,9 +12,18 @@ const listWaybillsMock = vi.fn();
 const listAccidentsMock = vi.fn();
 const listViolationsMock = vi.fn();
 const readinessMock = vi.fn();
+const createVehicleMock = vi.fn();
+const createDriverMock = vi.fn();
+const listSitesMock = vi.fn();
+const fetchAllPersonsMock = vi.fn();
 
-vi.mock("@/api/roadSafety", () => ({
+vi.mock("@/api/roadSafety", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
   roadSafetyApi: {
+    createVehicle: (...args: unknown[]) => createVehicleMock(...args),
+    createDriver: (...args: unknown[]) => createDriverMock(...args),
+    updateVehicle: vi.fn(),
+    updateDriver: vi.fn(),
     listVehicles: (...args: unknown[]) => listVehiclesMock(...args),
     listDrivers: (...args: unknown[]) => listDriversMock(...args),
     listWaybills: (...args: unknown[]) => listWaybillsMock(...args),
@@ -23,6 +32,16 @@ vi.mock("@/api/roadSafety", () => ({
     readiness: (...args: unknown[]) => readinessMock(...args),
   },
 }));
+
+vi.mock("@/api/sites", () => ({
+  sitesApi: { list: (...args: unknown[]) => listSitesMock(...args) },
+}));
+
+vi.mock("@/api/personsApi", () => ({
+  fetchAllPersons: (...args: unknown[]) => fetchAllPersonsMock(...args),
+}));
+
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 /**
  * Водительский состав: допущенный с внесённым стажем и отстранённый без
@@ -343,6 +362,17 @@ const populatedReadiness = {
 describe("RoadSafetyPage", () => {
   beforeEach(() => {
     listVehiclesMock.mockReset();
+    createVehicleMock.mockReset();
+    createDriverMock.mockReset();
+    listSitesMock.mockReset();
+    fetchAllPersonsMock.mockReset();
+    listSitesMock.mockResolvedValue({
+      items: [{ id: "site-1", name: "Площадка №1" }],
+      total: 1,
+    });
+    fetchAllPersonsMock.mockResolvedValue([
+      { id: "p-1", full_name: "Шофёров Пётр Иванович" },
+    ]);
     listDriversMock.mockReset();
     listWaybillsMock.mockReset();
     listAccidentsMock.mockReset();
@@ -377,6 +407,95 @@ describe("RoadSafetyPage", () => {
     expect(
       screen.getByText(/не решает, нужен ли тахограф/i),
     ).toBeInTheDocument();
+  });
+
+  it("ТС заводится с экрана, а не только через API (срез-107)", async () => {
+    const user = userEvent.setup();
+    const added = {
+      ...populatedVehicles[0],
+      id: "v-new",
+      plate_number: "Х777ХХ777",
+      brand_model: "КамАЗ-65115",
+    };
+    createVehicleMock.mockResolvedValue(added);
+    listVehiclesMock
+      .mockResolvedValueOnce(populatedVehicles)
+      .mockResolvedValue([...populatedVehicles, added]);
+
+    render(
+      <MemoryRouter>
+        <RoadSafetyPage />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByRole("button", { name: "Завести ТС" }),
+    ).toBeInTheDocument();
+    expect(uxBudgetDelta(document.body, "RoadSafetyPage").unexpected).toEqual(
+      [],
+    );
+
+    await user.click(screen.getByRole("button", { name: "Завести ТС" }));
+    await user.type(screen.getByLabelText("Госномер"), "Х777ХХ777");
+    await user.type(screen.getByLabelText("Марка и модель"), "КамАЗ-65115");
+    await user.selectOptions(screen.getByLabelText("Вид ТС"), "truck");
+    await user.type(
+      screen.getByLabelText("Диагностическая карта до"),
+      "2027-04-01",
+    );
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(createVehicleMock).toHaveBeenCalled());
+    expect(createVehicleMock.mock.calls[0][0]).toMatchObject({
+      plate_number: "Х777ХХ777",
+      brand_model: "КамАЗ-65115",
+      kind: "truck",
+      status: "in_service",
+      inspection_due: "2027-04-01",
+      // Полис не внесён — это «сведений нет», а не «бессрочно».
+      insurance_due: null,
+      tachograph_installed: false,
+    });
+    expect(await screen.findByText("Х777ХХ777")).toBeInTheDocument();
+  });
+
+  it("карточка водителя заводится с экрана (срез-107)", async () => {
+    const user = userEvent.setup();
+    const added = {
+      ...populatedDrivers[0],
+      id: "d-new",
+      person_name: "Шофёров Пётр Иванович",
+      license_number: "9900 654321",
+    };
+    createDriverMock.mockResolvedValue(added);
+    listDriversMock
+      .mockResolvedValueOnce(populatedDrivers)
+      .mockResolvedValue([...populatedDrivers, added]);
+
+    render(
+      <MemoryRouter>
+        <RoadSafetyPage />
+      </MemoryRouter>,
+    );
+    await user.click(await screen.findByRole("button", { name: "Водители" }));
+
+    await user.click(screen.getByRole("button", { name: "Завести водителя" }));
+    await user.selectOptions(screen.getByLabelText("Работник"), "p-1");
+    await user.type(
+      screen.getByLabelText("Номер удостоверения"),
+      "9900 654321",
+    );
+    await user.click(screen.getByRole("checkbox", { name: "C" }));
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(createDriverMock).toHaveBeenCalled());
+    expect(createDriverMock.mock.calls[0][0]).toMatchObject({
+      person_id: "p-1",
+      license_number: "9900 654321",
+      categories: ["C"],
+      status: "admitted",
+      // Стаж задаётся датой; пусто — «сведения не внесены», а не «0 лет».
+      experience_since: null,
+    });
   });
 
   it("секция водителей показывает состав, стаж и границу", async () => {

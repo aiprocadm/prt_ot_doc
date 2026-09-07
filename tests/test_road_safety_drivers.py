@@ -45,7 +45,9 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 from sqlalchemy import select
@@ -53,10 +55,25 @@ from sqlalchemy import select
 from app.models.feature import Feature, FeatureEnablement
 from app.models.master_data import Company, EmploymentStatus, Person
 from app.models.models import Tenant
+from app.models.road_safety import DRIVER_LICENSE_CATEGORIES, DRIVER_STATUSES
 
 pytestmark = pytest.mark.anyio
 
 _API = "/api/v1/road-safety"
+
+
+_FRONTEND_ROAD_API = (
+    Path(__file__).resolve().parents[1] / "frontend" / "src" / "api" / "roadSafety.ts"
+)
+
+
+def _front_map(name: str) -> dict[str, str]:
+    """Читает map подписей из ``frontend/src/api/roadSafety.ts``."""
+
+    text = _FRONTEND_ROAD_API.read_text(encoding="utf-8")
+    block = re.search(rf"{name}:\s*Record<[^>]+>\s*=\s*\{{(.*?)\n\}}", text, re.S)
+    assert block is not None, f"не нашёлся map {name}"
+    return dict(re.findall(r'^\s*([A-Za-z_0-9]+):\s*"([^"]+)"', block.group(1), re.M))
 
 
 async def _grant(sessionmaker, code: str = "road_safety", on: bool = True) -> None:
@@ -633,3 +650,23 @@ class TestПричинаДисциплиныБДД:
 
         assert Discipline.ROAD_SAFETY not in MEASURED_DISCIPLINES
         assert Discipline.ROAD_SAFETY in UNMEASURED_DISCIPLINES
+
+
+class TestСловариВодителейНаФронте:
+    """Срез-107: категории и допуск выбирают в форме из копий словарей.
+
+    Категории в форме — отметки, и их список строится из
+    ``DRIVER_LICENSE_CATEGORY_TITLES``: категория, добавленная только на
+    бэкенде, стала бы недоступна для выбора вовсе.
+    """
+
+    def test_категории_на_фронте_совпадают_с_бэкендом(self) -> None:
+        front = _front_map("DRIVER_LICENSE_CATEGORY_TITLES")
+        assert front == DRIVER_LICENSE_CATEGORIES, sorted(
+            front.items() ^ DRIVER_LICENSE_CATEGORIES.items()
+        )
+
+    def test_состояния_допуска_на_фронте_совпадают_с_бэкендом(self) -> None:
+        front = _front_map("DRIVER_STATUS_TITLES")
+        assert front == DRIVER_STATUSES, sorted(front.items() ^ DRIVER_STATUSES.items())
+

@@ -7,6 +7,84 @@ import { apiClient } from "@/api/client";
  * это следует из вида перевозок, массы и категории ТС по закону. Полей
  * «требуется тахограф» и «соответствует ли ТС» в ответах нет.
  */
+/** Виды ТС — копия `VEHICLE_KINDS` бэкенда (срез-107). */
+export const VEHICLE_KIND_TITLES: Record<string, string> = {
+  passenger_car: "Легковой автомобиль",
+  truck: "Грузовой автомобиль",
+  bus: "Автобус",
+  special: "Спецтехника",
+  trailer: "Прицеп / полуприцеп",
+};
+
+/** Состояния ТС в парке — копия `VEHICLE_STATUSES` бэкенда. */
+export const VEHICLE_STATUS_TITLES: Record<string, string> = {
+  in_service: "В эксплуатации",
+  suspended: "Не эксплуатируется",
+  decommissioned: "Списано",
+};
+
+/** Категории водительского удостоверения — копия `DRIVER_LICENSE_CATEGORIES`. */
+export const DRIVER_LICENSE_CATEGORY_TITLES: Record<string, string> = {
+  M: "M — мопеды и лёгкие квадрициклы",
+  A: "A — мотоциклы",
+  A1: "A1 — лёгкие мотоциклы",
+  B: "B — легковые автомобили",
+  B1: "B1 — трициклы и квадрициклы",
+  BE: "BE — легковой автомобиль с прицепом",
+  C: "C — грузовые автомобили",
+  C1: "C1 — средние грузовые автомобили",
+  CE: "CE — грузовой автомобиль с прицепом",
+  C1E: "C1E — средний грузовой автомобиль с прицепом",
+  D: "D — автобусы",
+  D1: "D1 — небольшие автобусы",
+  DE: "DE — автобус с прицепом",
+  D1E: "D1E — небольшой автобус с прицепом",
+  Tm: "Tm — трамваи",
+  Tb: "Tb — троллейбусы",
+};
+
+/** Состояния допуска водителя — копия `DRIVER_STATUSES` бэкенда. */
+export const DRIVER_STATUS_TITLES: Record<string, string> = {
+  admitted: "Допущен к управлению",
+  suspended: "Отстранён",
+  dismissed: "Не работает водителем",
+};
+
+/** Тело ТС: госномер уникален у арендатора, вид и состояние — из словарей. */
+export type VehicleCreateInput = {
+  plate_number: string;
+  brand_model: string;
+  kind: string;
+  status?: string;
+  vin?: string | null;
+  year_made?: number | null;
+  site_id?: string | null;
+  inspection_due?: string | null;
+  insurance_due?: string | null;
+  license_number?: string | null;
+  license_due?: string | null;
+  tachograph_installed?: boolean;
+  tachograph_due?: string | null;
+  notes?: string | null;
+};
+
+export type VehicleUpdateInput = VehicleCreateInput;
+
+/** Тело карточки водителя: человек из ядра, хотя бы одна категория. */
+export type DriverCreateInput = {
+  person_id: string;
+  license_number: string;
+  categories: string[];
+  license_issued_at?: string | null;
+  license_due?: string | null;
+  experience_since?: string | null;
+  status?: string;
+  notes?: string | null;
+};
+
+/** Правка карточки: человека не меняют — это другая карточка. */
+export type DriverUpdateInput = Omit<DriverCreateInput, "person_id">;
+
 export type VehicleDto = {
   id: string;
   plate_number: string;
@@ -262,6 +340,44 @@ export type RoadSafetyReadinessDto = {
 };
 
 export const roadSafetyApi = {
+  createVehicle: async (body: VehicleCreateInput): Promise<VehicleDto> => {
+    const { data } = await apiClient.post<VehicleDto>(
+      "/road-safety/vehicles",
+      body,
+    );
+    return data;
+  },
+
+  updateVehicle: async (
+    id: string,
+    body: VehicleUpdateInput,
+  ): Promise<VehicleDto> => {
+    const { data } = await apiClient.patch<VehicleDto>(
+      `/road-safety/vehicles/${id}`,
+      body,
+    );
+    return data;
+  },
+
+  createDriver: async (body: DriverCreateInput): Promise<DriverDto> => {
+    const { data } = await apiClient.post<DriverDto>(
+      "/road-safety/drivers",
+      body,
+    );
+    return data;
+  },
+
+  updateDriver: async (
+    id: string,
+    body: DriverUpdateInput,
+  ): Promise<DriverDto> => {
+    const { data } = await apiClient.patch<DriverDto>(
+      `/road-safety/drivers/${id}`,
+      body,
+    );
+    return data;
+  },
+
   listVehicles: async (): Promise<VehicleDto[]> => {
     const { data } = await apiClient.get<{ items?: VehicleDto[] }>(
       "/road-safety/vehicles",
