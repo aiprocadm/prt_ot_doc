@@ -24,6 +24,7 @@ const createWasteMovementMock = vi.fn();
 const createEmissionSourceMock = vi.fn();
 const createMonitoringPlanItemMock = vi.fn();
 const createWaterRecordMock = vi.fn();
+const createFeeLineMock = vi.fn();
 const createWastePassportMock = vi.fn();
 const readinessMock = vi.fn();
 const listSitesMock = vi.fn();
@@ -55,6 +56,7 @@ vi.mock("@/api/ecology", async (importOriginal) => ({
     createMonitoringPlanItem: (...args: unknown[]) =>
       createMonitoringPlanItemMock(...args),
     createWaterRecord: (...args: unknown[]) => createWaterRecordMock(...args),
+    createFeeLine: (...args: unknown[]) => createFeeLineMock(...args),
     createWastePassport: (...args: unknown[]) =>
       createWastePassportMock(...args),
     readiness: (...args: unknown[]) => readinessMock(...args),
@@ -482,6 +484,7 @@ describe("EcologyPage", () => {
     createEmissionSourceMock.mockReset();
     createMonitoringPlanItemMock.mockReset();
     createWaterRecordMock.mockReset();
+    createFeeLineMock.mockReset();
     createWastePassportMock.mockReset();
     readinessMock.mockReset();
     listSitesMock.mockReset();
@@ -1032,6 +1035,52 @@ describe("EcologyPage", () => {
     expect(
       screen.getByText(/сумма не считается вовсе — это не ноль/i),
     ).toBeInTheDocument();
+  });
+
+  it("строка расчёта платы вносится с экрана (срез-102)", async () => {
+    const user = userEvent.setup();
+    const added = {
+      ...populatedFeeLines[0],
+      id: "line-new",
+      subject: "Отходы IV класса",
+    };
+    createFeeLineMock.mockResolvedValue(added);
+    listFeeLinesMock
+      .mockResolvedValueOnce(populatedFeeLines)
+      .mockResolvedValue([...populatedFeeLines, added]);
+
+    render(
+      <MemoryRouter>
+        <EcologyPage />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByText("Производственная площадка №1"),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Плата за НВОС" }));
+
+    // Две кнопки секции: строка расчёта и ставка; бюджет экрана цел.
+    expect(
+      screen.getByRole("button", { name: "Внести ставку" }),
+    ).toBeInTheDocument();
+    expect(uxBudgetDelta(document.body, "EcologyPage").unexpected).toEqual([]);
+
+    await user.click(
+      screen.getByRole("button", { name: "Внести строку расчёта" }),
+    );
+    await user.selectOptions(screen.getByLabelText("Вид воздействия"), "waste");
+    await user.type(screen.getByLabelText("Предмет платы"), "Отходы IV класса");
+    await user.type(screen.getByLabelText("Масса, т"), "3,25");
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(createFeeLineMock).toHaveBeenCalled());
+    expect(createFeeLineMock.mock.calls[0][0]).toMatchObject({
+      impact_kind: "waste",
+      subject: "Отходы IV класса",
+      mass_tons: "3.25",
+      coefficient: "1",
+    });
+    expect(await screen.findByText("Отходы IV класса")).toBeInTheDocument();
   });
 
   it("сроки отчётности открываются восьмой секцией (срез-71)", async () => {
