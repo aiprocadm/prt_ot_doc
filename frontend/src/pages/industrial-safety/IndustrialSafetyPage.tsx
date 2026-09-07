@@ -5,6 +5,7 @@ import {
   OPO_WORK_RESULT_TITLES,
 } from "@/api/industrialSafety";
 import { sitesApi } from "@/api/sites";
+import { fetchAllPersons } from "@/api/personsApi";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -12,9 +13,12 @@ import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
 import { disciplineIncidentsStat } from "@/components/common/disciplineIncidentsStat";
 import { RegistryTable } from "@/components/common/RegistryTable";
 import { Button } from "@/components/ui/button";
+import { OpoAttestationFormDialog } from "@/features/industrial-safety/OpoAttestationFormDialog";
 import { OpoDeviceFormDialog } from "@/features/industrial-safety/OpoDeviceFormDialog";
 import { OpoDeviceWorkFormDialog } from "@/features/industrial-safety/OpoDeviceWorkFormDialog";
 import { OpoFacilityFormDialog } from "@/features/industrial-safety/OpoFacilityFormDialog";
+import { PcMeasureFormDialog } from "@/features/industrial-safety/PcMeasureFormDialog";
+import { PcPlanFormDialog } from "@/features/industrial-safety/PcPlanFormDialog";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { useLocalRegistry } from "@/hooks/useLocalRegistry";
 import { formatDate } from "@/utils/datetime";
@@ -48,12 +52,18 @@ const IndustrialSafetyPage = () => {
         devices: await industrialSafetyApi.listDevices(),
         attestations: await industrialSafetyApi.listAttestations(),
         pcMeasures: await industrialSafetyApi.listPcMeasures(),
+        // Планы нужны формам мероприятий, люди — форме аттестации: и то и
+        // другое выбирается списком, а не вводом id (срез-106).
+        pcPlans: await industrialSafetyApi.listPcPlans(),
+        persons: await fetchAllPersons(),
         readiness: await industrialSafetyApi.readiness(),
       }),
       [],
     ),
     initialData: {
       facilities: [],
+      pcPlans: [],
+      persons: [],
       sites: [],
       devices: [],
       attestations: [],
@@ -223,6 +233,26 @@ const IndustrialSafetyPage = () => {
               применимость определяет специалист.
             </p>
           ) : null}
+          {/*
+            Срез-106: планы ПК и мероприятия (срез-15) заводились только через
+            API. Мероприятие живёт в плане, поэтому его кнопка появляется
+            только когда план есть.
+          */}
+          {!loading && !error ? (
+            <div className="flex flex-wrap gap-2">
+              <PcPlanFormDialog
+                onSubmitted={() => void reload()}
+                trigger={<Button>Завести план ПК</Button>}
+              />
+              {data.pcPlans.length > 0 ? (
+                <PcMeasureFormDialog
+                  plans={data.pcPlans}
+                  onSubmitted={() => void reload()}
+                  trigger={<Button>Запланировать мероприятие</Button>}
+                />
+              ) : null}
+            </div>
+          ) : null}
           {!loading && !error && measureRegistry.total === 0 ? (
             <EmptyState
               title="Мероприятия производственного контроля не заведены"
@@ -261,6 +291,22 @@ const IndustrialSafetyPage = () => {
                       ? formatDate(row.original.completed_on)
                       : "—",
                 },
+                {
+                  id: "actions",
+                  header: "Действия",
+                  cell: ({ row }) => (
+                    <PcMeasureFormDialog
+                      plans={data.pcPlans}
+                      initialData={row.original}
+                      onSubmitted={() => void reload()}
+                      trigger={
+                        <Button variant="ghost" size="sm">
+                          Изменить
+                        </Button>
+                      }
+                    />
+                  ),
+                },
               ]}
               data={measureRegistry.pagedItems}
               pageIndex={measureRegistry.pageIndex}
@@ -277,6 +323,20 @@ const IndustrialSafetyPage = () => {
       ) : null}
       {section === "attestations" ? (
         <>
+          {/*
+            Срез-106: аттестации — ядровая сущность (`/attestations`), и до
+            этого среза их заводили только через API. Область в форме сужена
+            до промбезопасности: по ней контур отбирает свои записи.
+          */}
+          {!loading && !error ? (
+            <div>
+              <OpoAttestationFormDialog
+                persons={data.persons}
+                onSubmitted={() => void reload()}
+                trigger={<Button>Внести аттестацию</Button>}
+              />
+            </div>
+          ) : null}
           {!loading && !error && attestationRegistry.total === 0 ? (
             <EmptyState
               title="Аттестации по промышленной безопасности не заведены"
@@ -313,6 +373,22 @@ const IndustrialSafetyPage = () => {
                   accessorKey: "validity_status_label",
                   header: "Состояние",
                   cell: ({ row }) => row.original.validity_status_label,
+                },
+                {
+                  id: "actions",
+                  header: "Действия",
+                  cell: ({ row }) => (
+                    <OpoAttestationFormDialog
+                      persons={data.persons}
+                      initialData={row.original}
+                      onSubmitted={() => void reload()}
+                      trigger={
+                        <Button variant="ghost" size="sm">
+                          Изменить
+                        </Button>
+                      }
+                    />
+                  ),
                 },
               ]}
               data={attestationRegistry.pagedItems}
