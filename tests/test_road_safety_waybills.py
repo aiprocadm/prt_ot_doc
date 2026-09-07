@@ -50,7 +50,9 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 from sqlalchemy import select
@@ -58,10 +60,25 @@ from sqlalchemy import select
 from app.models.feature import Feature, FeatureEnablement
 from app.models.master_data import Company, Person
 from app.models.models import Tenant
+from app.models.road_safety import WAYBILL_MARK_STATUSES, WAYBILL_STATUSES
 
 pytestmark = pytest.mark.anyio
 
 _API = "/api/v1/road-safety"
+
+
+_FRONTEND_ROAD_API = (
+    Path(__file__).resolve().parents[1] / "frontend" / "src" / "api" / "roadSafety.ts"
+)
+
+
+def _front_map(name: str) -> dict[str, str]:
+    """Читает map подписей из ``frontend/src/api/roadSafety.ts``."""
+
+    text = _FRONTEND_ROAD_API.read_text(encoding="utf-8")
+    block = re.search(rf"{name}:\s*Record<[^>]+>\s*=\s*\{{(.*?)\n\}}", text, re.S)
+    assert block is not None, f"не нашёлся map {name}"
+    return dict(re.findall(r'^\s*([A-Za-z_0-9]+):\s*"([^"]+)"', block.group(1), re.M))
 
 
 async def _grant(sessionmaker, code: str = "road_safety", on: bool = True) -> None:
@@ -833,3 +850,25 @@ class TestСводка:
             key in body
             for key in ("release_legal", "compliant", "violations", "rest_violations")
         )
+
+
+class TestСловариЛистаНаФронте:
+    """Срез-108: отметки контроля и состояние листа выбирают в форме.
+
+    Отметок ТРИ, а не флажок: «сведения не внесены» и «не пройден» — разные
+    факты, и вердикт о выпуске считается по ним. Расхождение подписей означало
+    бы, что человек ставит не ту отметку, что думает.
+    """
+
+    def test_отметки_на_фронте_совпадают_с_бэкендом(self) -> None:
+        front = _front_map("WAYBILL_MARK_TITLES")
+        assert front == WAYBILL_MARK_STATUSES, sorted(
+            front.items() ^ WAYBILL_MARK_STATUSES.items()
+        )
+
+    def test_состояния_листа_на_фронте_совпадают_с_бэкендом(self) -> None:
+        front = _front_map("WAYBILL_STATUS_TITLES")
+        assert front == WAYBILL_STATUSES, sorted(
+            front.items() ^ WAYBILL_STATUSES.items()
+        )
+
