@@ -87,3 +87,87 @@ export const opoDeviceWorkFormSchema = z
   });
 
 export type OpoDeviceWorkFormValues = z.infer<typeof opoDeviceWorkFormSchema>;
+
+/**
+ * Аттестация по промышленной безопасности (разд. 54.2, срез-106).
+ *
+ * Область обязательна: именно по ней контур отбирает СВОИ записи среди всех
+ * аттестаций арендатора (проверка знаний ПДД у водителя — тоже аттестация, но
+ * другой дисциплины). Без области запись существует, но на экран ОПО не
+ * попадёт — поэтому форма её требует, хотя сервер разрешает пустую.
+ */
+export const opoAttestationFormSchema = z
+  .object({
+    person_id: z.string().trim().min(1, "Выберите работника"),
+    area_code: z.string().trim().min(1, "Выберите область аттестации"),
+    name: z.string().trim().min(1, "Назовите аттестацию"),
+    status: z.string().trim().min(1, "Выберите состояние"),
+    issued_at: optionalText,
+    expires_at: optionalText,
+    notes: optionalText,
+  })
+  // Срок действия раньше даты выдачи — опечатка, из-за которой аттестация
+  // сразу «просрочена» и человек снят с работ без причины.
+  .refine((v) => !v.issued_at || !v.expires_at || v.expires_at >= v.issued_at, {
+    message: "Срок действия не может быть раньше даты выдачи",
+    path: ["expires_at"],
+  });
+
+export type OpoAttestationFormValues = z.infer<typeof opoAttestationFormSchema>;
+
+/**
+ * План производственного контроля (разд. 54.2, срез-106).
+ *
+ * ГРАНИЦА: платформа сообщает ФАКТ отсутствия плана, но НЕ объявляет это
+ * нарушением — обязанность зависит от того, эксплуатирует ли организация ОПО.
+ * План — годовой документ для надзора, поэтому год и название обязательны.
+ */
+export const pcPlanFormSchema = z
+  .object({
+    year: z
+      .string()
+      .trim()
+      .regex(/^\d{4}$/, "Год: четыре цифры")
+      .refine((v) => Number(v) >= 2000 && Number(v) <= 2100, {
+        message: "Год от 2000 до 2100",
+      }),
+    title: z.string().trim().min(1, "Назовите план"),
+    status: z.string().trim().min(1, "Выберите состояние"),
+    responsible: optionalText,
+    approved_on: optionalText,
+    notes: optionalText,
+  })
+  // Утверждённый план без даты утверждения нечем предъявить надзору.
+  .refine((v) => v.status !== "approved" || Boolean(v.approved_on), {
+    message: "У утверждённого плана нужна дата утверждения",
+    path: ["approved_on"],
+  });
+
+export type PcPlanFormValues = z.infer<typeof pcPlanFormSchema>;
+
+/**
+ * Мероприятие плана ПК (разд. 54.2, срез-106).
+ *
+ * «Просрочено» руками не ставится: срок наступает сам, это вычисляемое
+ * состояние (словарь формы — только записываемые состояния). У выполненного
+ * обязательна дата выполнения: именно она предъявляется надзору как
+ * доказательство исполнения плана (правило сервера — форма показывает его до
+ * запроса).
+ */
+export const pcMeasureFormSchema = z
+  .object({
+    plan_id: z.string().trim().min(1, "Выберите план"),
+    section: z.string().trim().min(1, "Выберите раздел плана"),
+    title: z.string().trim().min(1, "Назовите мероприятие"),
+    due_on: z.string().trim().min(1, "Внесите срок"),
+    status: z.string().trim().min(1, "Выберите состояние"),
+    responsible: optionalText,
+    completed_on: optionalText,
+    result: optionalText,
+  })
+  .refine((v) => v.status !== "done" || Boolean(v.completed_on), {
+    message: "У выполненного мероприятия обязательна дата выполнения",
+    path: ["completed_on"],
+  });
+
+export type PcMeasureFormValues = z.infer<typeof pcMeasureFormSchema>;

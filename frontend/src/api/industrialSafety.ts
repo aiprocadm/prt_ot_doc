@@ -145,6 +145,60 @@ export type IndustrialReadinessDto = {
   incidents_open: number;
 };
 
+/** Состояния плана ПК — копия `PC_PLAN_STATUSES` бэкенда (срез-106). */
+export const PC_PLAN_STATUS_TITLES: Record<string, string> = {
+  draft: "Проект",
+  approved: "Утверждён",
+  archived: "Архивный",
+};
+
+/** Разделы плана ПК — копия `PC_MEASURE_SECTIONS` бэкенда. */
+export const PC_MEASURE_SECTION_TITLES: Record<string, string> = {
+  inspections: "Обследования и проверки состояния ОПО",
+  epb: "Экспертиза и диагностирование технических устройств",
+  training: "Обучение и аттестация персонала",
+  emergency: "Готовность к действиям при авариях",
+  violations: "Устранение выявленных нарушений",
+  reporting: "Отчётность в надзорные органы",
+};
+
+/**
+ * Состояния мероприятия, которые МОЖНО выставить руками — копия
+ * `PC_MEASURE_WRITABLE_STATUSES` бэкенда. «Просрочено» сюда не входит: срок
+ * наступает сам, это вычисляемое состояние, а не решение человека.
+ */
+export const PC_MEASURE_WRITABLE_STATUS_TITLES: Record<string, string> = {
+  planned: "Запланировано",
+  done: "Выполнено",
+  cancelled: "Отменено",
+};
+
+/** Тело плана ПК: план производственного контроля — годовой документ. */
+export type PcPlanCreateInput = {
+  year: number;
+  title: string;
+  responsible?: string | null;
+  approved_on?: string | null;
+  status?: string;
+  notes?: string | null;
+};
+
+export type PcPlanUpdateInput = PcPlanCreateInput;
+
+/** Тело мероприятия ПК: раздел из закрытого словаря, срок обязателен. */
+export type PcMeasureCreateInput = {
+  plan_id: string;
+  section: string;
+  title: string;
+  due_on: string;
+  responsible?: string | null;
+  status?: string;
+  completed_on?: string | null;
+  result?: string | null;
+};
+
+export type PcMeasureUpdateInput = PcMeasureCreateInput;
+
 export type PcPlanDto = {
   id: string;
   year: number;
@@ -235,6 +289,46 @@ export type TechnicalDeviceDto = {
 };
 
 export const industrialSafetyApi = {
+  createPcPlan: async (body: PcPlanCreateInput): Promise<PcPlanDto> => {
+    const { data } = await apiClient.post<PcPlanDto>(
+      "/industrial-safety/pc-plans",
+      body,
+    );
+    return data;
+  },
+
+  updatePcPlan: async (
+    id: string,
+    body: PcPlanUpdateInput,
+  ): Promise<PcPlanDto> => {
+    const { data } = await apiClient.patch<PcPlanDto>(
+      `/industrial-safety/pc-plans/${id}`,
+      body,
+    );
+    return data;
+  },
+
+  createPcMeasure: async (
+    body: PcMeasureCreateInput,
+  ): Promise<PcMeasureDto> => {
+    const { data } = await apiClient.post<PcMeasureDto>(
+      "/industrial-safety/pc-measures",
+      body,
+    );
+    return data;
+  },
+
+  updatePcMeasure: async (
+    id: string,
+    body: PcMeasureUpdateInput,
+  ): Promise<PcMeasureDto> => {
+    const { data } = await apiClient.patch<PcMeasureDto>(
+      `/industrial-safety/pc-measures/${id}`,
+      body,
+    );
+    return data;
+  },
+
   createFacility: async (
     body: HazardousFacilityCreateInput,
   ): Promise<HazardousFacilityDto> => {

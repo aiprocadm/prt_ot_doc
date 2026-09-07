@@ -30,18 +30,35 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date, timedelta
+from pathlib import Path
 
 import pytest
 from sqlalchemy import select
 
+from app.core.disciplines import ATTESTATION_AREA_TITLES, Discipline, areas_of_discipline
 from app.models.feature import Feature, FeatureEnablement
+from app.models.inspections import AttestationStatus
 from app.models.master_data import Company, Person
 from app.models.models import Tenant
 
 pytestmark = pytest.mark.anyio
 
 _API = "/api/v1/industrial-safety"
+_FRONTEND_ATTESTATIONS_API = (
+    Path(__file__).resolve().parents[1] / "frontend" / "src" / "api" / "attestations.ts"
+)
+
+
+def _front_map(name: str) -> dict[str, str]:
+    """Читает map подписей из ``frontend/src/api/attestations.ts``."""
+
+    text = _FRONTEND_ATTESTATIONS_API.read_text(encoding="utf-8")
+    block = re.search(rf"{name}:\s*Record<[^>]+>\s*=\s*\{{(.*?)\n\}}", text, re.S)
+    assert block is not None, f"не нашёлся map {name}"
+    pairs = re.findall(r'"?([A-Za-zА-Яа-я.0-9_]+)"?:\s*\n?\s*"([^"]+)"', block.group(1))
+    return dict(pairs)
 _CORE = "/api/v1/attestations"
 
 
@@ -382,3 +399,27 @@ class TestСправочникОбластей:
         промбез = set(areas_of_discipline(Discipline.INDUSTRIAL_SAFETY))
         assert {"А.1", "Б.1", "Б.9", "Б.12"} <= промбез
         assert all(code.startswith(("А.", "Б.")) for code in промбез)
+
+
+class TestСловариАттестацииНаФронте:
+    """Срез-106: аттестацию по промбезопасности вносят с экрана контура.
+
+    Форма сужает область до областей ПРОМБЕЗОПАСНОСТИ: контур отбирает свои
+    записи по дисциплине области (срез-6 контура БДД), и «ПДД» в списке формы
+    ОПО означало бы запись, которая на этот экран никогда не попадёт.
+    """
+
+    def test_области_на_фронте_это_ровно_области_промбезопасности(self) -> None:
+        front = _front_map("OPO_ATTESTATION_AREA_TITLES")
+        expected = {
+            code: ATTESTATION_AREA_TITLES[code]
+            for code in areas_of_discipline(Discipline.INDUSTRIAL_SAFETY)
+        }
+        assert front == expected, sorted(front.items() ^ expected.items())
+
+    def test_состояния_аттестации_на_фронте_совпадают_с_бэкендом(self) -> None:
+        front = _front_map("ATTESTATION_STATUS_TITLES")
+        assert set(front) == {member.value for member in AttestationStatus}, sorted(
+            set(front) ^ {member.value for member in AttestationStatus}
+        )
+

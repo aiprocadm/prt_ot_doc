@@ -26,17 +26,41 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date, timedelta
+from pathlib import Path
 
 import pytest
 from sqlalchemy import select
 
 from app.models.feature import Feature, FeatureEnablement
+from app.models.industrial_safety import (
+    PC_MEASURE_SECTIONS,
+    PC_MEASURE_STATUS_TITLES,
+    PC_MEASURE_WRITABLE_STATUSES,
+    PC_PLAN_STATUSES,
+)
 from app.models.models import Tenant
 
 pytestmark = pytest.mark.anyio
 
 _API = "/api/v1/industrial-safety"
+_FRONTEND_OPO_API = (
+    Path(__file__).resolve().parents[1]
+    / "frontend"
+    / "src"
+    / "api"
+    / "industrialSafety.ts"
+)
+
+
+def _front_map(name: str) -> dict[str, str]:
+    """Читает map подписей из ``frontend/src/api/industrialSafety.ts``."""
+
+    text = _FRONTEND_OPO_API.read_text(encoding="utf-8")
+    block = re.search(rf"{name}:\s*Record<[^>]+>\s*=\s*\{{(.*?)\n\}}", text, re.S)
+    assert block is not None, f"не нашёлся map {name}"
+    return dict(re.findall(r'^\s*([A-Za-z_]+):\s*"([^"]+)"', block.group(1), re.M))
 
 
 async def _grant(sessionmaker, code: str = "industrial_safety", on: bool = True) -> None:
@@ -355,3 +379,32 @@ class TestИзоляцияАрендатора:
             headers=headers,
         )
         assert response.status_code == 404
+
+
+class TestСловариПкНаФронте:
+    """Срез-106: план и мероприятия ПК заводят с экрана.
+
+    Главное здесь — список состояний мероприятия: в форме только те, что
+    МОЖНО выставить руками. «Просрочено» вычисляется по сроку, и появись оно в
+    списке — человек «ставил» бы просрочку сам, а сервер отвечал бы 422.
+    """
+
+    def test_состояния_плана_на_фронте_совпадают_с_бэкендом(self) -> None:
+        front = _front_map("PC_PLAN_STATUS_TITLES")
+        assert front == PC_PLAN_STATUSES, sorted(front.items() ^ PC_PLAN_STATUSES.items())
+
+    def test_разделы_плана_на_фронте_совпадают_с_бэкендом(self) -> None:
+        front = _front_map("PC_MEASURE_SECTION_TITLES")
+        assert front == PC_MEASURE_SECTIONS, sorted(
+            front.items() ^ PC_MEASURE_SECTIONS.items()
+        )
+
+    def test_в_форме_только_записываемые_состояния_мероприятия(self) -> None:
+        front = _front_map("PC_MEASURE_WRITABLE_STATUS_TITLES")
+        assert set(front) == set(PC_MEASURE_WRITABLE_STATUSES), sorted(
+            set(front) ^ set(PC_MEASURE_WRITABLE_STATUSES)
+        )
+        assert "overdue" not in front
+        for code, title in front.items():
+            assert title == PC_MEASURE_STATUS_TITLES[code], code
+

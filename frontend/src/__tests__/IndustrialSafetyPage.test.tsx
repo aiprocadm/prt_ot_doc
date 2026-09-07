@@ -15,6 +15,11 @@ const createFacilityMock = vi.fn();
 const createDeviceMock = vi.fn();
 const recordDeviceWorkMock = vi.fn();
 const listSitesMock = vi.fn();
+const listPcPlansMock = vi.fn();
+const createPcPlanMock = vi.fn();
+const createPcMeasureMock = vi.fn();
+const createAttestationMock = vi.fn();
+const fetchAllPersonsMock = vi.fn();
 
 vi.mock("@/api/industrialSafety", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -23,6 +28,9 @@ vi.mock("@/api/industrialSafety", async (importOriginal) => ({
     listDevices: (...args: unknown[]) => listDevicesMock(...args),
     listAttestations: (...args: unknown[]) => listAttestationsMock(...args),
     listPcMeasures: (...args: unknown[]) => listPcMeasuresMock(...args),
+    listPcPlans: (...args: unknown[]) => listPcPlansMock(...args),
+    createPcPlan: (...args: unknown[]) => createPcPlanMock(...args),
+    createPcMeasure: (...args: unknown[]) => createPcMeasureMock(...args),
     readiness: (...args: unknown[]) => readinessMock(...args),
     createFacility: (...args: unknown[]) => createFacilityMock(...args),
     createDevice: (...args: unknown[]) => createDeviceMock(...args),
@@ -32,6 +40,18 @@ vi.mock("@/api/industrialSafety", async (importOriginal) => ({
 
 vi.mock("@/api/sites", () => ({
   sitesApi: { list: (...args: unknown[]) => listSitesMock(...args) },
+}));
+
+vi.mock("@/api/personsApi", () => ({
+  fetchAllPersons: (...args: unknown[]) => fetchAllPersonsMock(...args),
+}));
+
+vi.mock("@/api/attestations", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  attestationsApi: {
+    create: (...args: unknown[]) => createAttestationMock(...args),
+    update: vi.fn(),
+  },
 }));
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -206,6 +226,28 @@ describe("IndustrialSafetyPage", () => {
       items: [{ id: "site-1", name: "Площадка №1" }],
       total: 1,
     });
+    listPcPlansMock.mockReset();
+    createPcPlanMock.mockReset();
+    createPcMeasureMock.mockReset();
+    createAttestationMock.mockReset();
+    fetchAllPersonsMock.mockReset();
+    listPcPlansMock.mockResolvedValue([
+      {
+        id: "plan-1",
+        year: 2026,
+        title: "План ПК на 2026 год",
+        responsible: "Петров",
+        approved_on: "2026-01-10",
+        status: "approved",
+        status_label: "Утверждён",
+        notes: null,
+        measures_total: 1,
+        measures_overdue: 0,
+      },
+    ]);
+    fetchAllPersonsMock.mockResolvedValue([
+      { id: "person-1", full_name: "Иванов Иван Иванович" },
+    ]);
     listFacilitiesMock.mockResolvedValue(populatedFacilities);
     listDevicesMock.mockResolvedValue(populatedDevices);
     listAttestationsMock.mockResolvedValue(populatedAttestations);
@@ -510,6 +552,101 @@ describe("IndustrialSafetyPage", () => {
     // именно состояние, поэтому смотрим на второе мероприятие целиком.
     expect(screen.getByText("Отчёт в Ростехнадзор")).toBeInTheDocument();
     expect(screen.getAllByText("Выполнено").length).toBeGreaterThan(1);
+  });
+
+  it("план ПК и мероприятие заводятся с экрана (срез-106)", async () => {
+    const user = userEvent.setup();
+    createPcPlanMock.mockResolvedValue({ id: "plan-new" });
+    createPcMeasureMock.mockResolvedValue({ id: "measure-new" });
+
+    render(
+      <MemoryRouter>
+        <IndustrialSafetyPage />
+      </MemoryRouter>,
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Производственный контроль" }),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Завести план ПК" }));
+    await user.type(
+      screen.getByLabelText("План"),
+      "План производственного контроля на 2027 год",
+    );
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(createPcPlanMock).toHaveBeenCalled());
+    expect(createPcPlanMock.mock.calls[0][0]).toMatchObject({
+      title: "План производственного контроля на 2027 год",
+      status: "draft",
+      approved_on: null,
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: "Запланировать мероприятие" }),
+    );
+    await user.selectOptions(screen.getByLabelText("План ПК"), "plan-1");
+    await user.selectOptions(screen.getByLabelText("Раздел плана"), "epb");
+    await user.type(
+      screen.getByLabelText("Мероприятие"),
+      "Диагностирование сосудов",
+    );
+    await user.type(screen.getByLabelText("Срок"), "2027-03-01");
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(createPcMeasureMock).toHaveBeenCalled());
+    expect(createPcMeasureMock.mock.calls[0][0]).toMatchObject({
+      plan_id: "plan-1",
+      section: "epb",
+      title: "Диагностирование сосудов",
+      due_on: "2027-03-01",
+      status: "planned",
+      completed_on: null,
+    });
+  });
+
+  it("аттестация вносится с экрана, область — только промбезопасности (срез-106)", async () => {
+    const user = userEvent.setup();
+    createAttestationMock.mockResolvedValue({ id: "att-new" });
+
+    render(
+      <MemoryRouter>
+        <IndustrialSafetyPage />
+      </MemoryRouter>,
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Аттестация персонала" }),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Внести аттестацию" }));
+    // В списке областей нет «ПДД»: это область другой дисциплины, и запись по
+    // ней в реестр ОПО не попала бы.
+    const areaOptions = Array.from(
+      screen.getByLabelText("Область аттестации").querySelectorAll("option"),
+    ).map((option) => option.getAttribute("value"));
+    expect(areaOptions).toContain("Б.9");
+    expect(areaOptions).not.toContain("ПДД");
+
+    await user.selectOptions(screen.getByLabelText("Работник"), "person-1");
+    await user.selectOptions(
+      screen.getByLabelText("Область аттестации"),
+      "Б.9",
+    );
+    await user.type(
+      screen.getByLabelText("Аттестация"),
+      "Аттестация по промбезопасности Б.9",
+    );
+    await user.type(screen.getByLabelText("Действует до"), "2029-06-01");
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(createAttestationMock).toHaveBeenCalled());
+    expect(createAttestationMock.mock.calls[0][0]).toMatchObject({
+      person_id: "person-1",
+      area_code: "Б.9",
+      name: "Аттестация по промбезопасности Б.9",
+      status: "active",
+      expires_at: "2029-06-01",
+    });
   });
 
   it("экран не объявляет отсутствие плана ПК нарушением", async () => {
