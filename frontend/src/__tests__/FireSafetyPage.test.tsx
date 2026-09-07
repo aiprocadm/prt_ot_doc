@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -18,6 +18,10 @@ vi.mock("@/api/operations", () => ({
 const listEquipmentMock = vi.fn();
 const listDocumentsMock = vi.fn();
 const readinessMock = vi.fn();
+const createEquipmentMock = vi.fn();
+const createDocumentMock = vi.fn();
+const recordMaintenanceMock = vi.fn();
+const listSitesMock = vi.fn();
 
 vi.mock("@/api/fireSafety", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -25,8 +29,17 @@ vi.mock("@/api/fireSafety", async (importOriginal) => ({
     listEquipment: (...args: unknown[]) => listEquipmentMock(...args),
     listDocuments: (...args: unknown[]) => listDocumentsMock(...args),
     readiness: (...args: unknown[]) => readinessMock(...args),
+    createEquipment: (...args: unknown[]) => createEquipmentMock(...args),
+    createDocument: (...args: unknown[]) => createDocumentMock(...args),
+    recordMaintenance: (...args: unknown[]) => recordMaintenanceMock(...args),
   },
 }));
+
+vi.mock("@/api/sites", () => ({
+  sitesApi: { list: (...args: unknown[]) => listSitesMock(...args) },
+}));
+
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 /** Документы ПБ: один с просроченным пересмотром, один бессрочный. */
 const populatedDocuments = [
@@ -138,9 +151,140 @@ describe("FireSafetyPage", () => {
     listEquipmentMock.mockReset();
     readinessMock.mockReset();
     listDocumentsMock.mockReset();
+    createEquipmentMock.mockReset();
+    createDocumentMock.mockReset();
+    recordMaintenanceMock.mockReset();
+    listSitesMock.mockReset();
     listEquipmentMock.mockResolvedValue(populatedEquipment);
     listDocumentsMock.mockResolvedValue(populatedDocuments);
     readinessMock.mockResolvedValue(populatedReadiness);
+    listSitesMock.mockResolvedValue({
+      items: [{ id: "site-1", name: "Площадка №1" }],
+      total: 1,
+    });
+  });
+
+  it("средство заводится с экрана, а не только через API (срез-103)", async () => {
+    const user = userEvent.setup();
+    getFireSafetySnapshotMock.mockResolvedValue(populatedFireSafetySnapshot);
+    const added = {
+      ...populatedEquipment[0],
+      id: "unit-new",
+      label: "ОП-5 №77",
+    };
+    createEquipmentMock.mockResolvedValue(added);
+    listEquipmentMock
+      .mockResolvedValueOnce(populatedEquipment)
+      .mockResolvedValue([...populatedEquipment, added]);
+
+    render(
+      <MemoryRouter>
+        <FireSafetyPage />
+      </MemoryRouter>,
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Средства и системы" }),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Завести средство" }));
+    await user.type(
+      screen.getByLabelText("Наименование или номер"),
+      "ОП-5 №77",
+    );
+    await user.selectOptions(screen.getByLabelText("Площадка"), "site-1");
+    await user.type(screen.getByLabelText("Перезарядка до"), "2027-05-01");
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(createEquipmentMock).toHaveBeenCalled());
+    expect(createEquipmentMock.mock.calls[0][0]).toMatchObject({
+      kind: "extinguisher",
+      label: "ОП-5 №77",
+      site_id: "site-1",
+      recharge_due: "2027-05-01",
+      // Срок поверки пуст — это «не применимо», а не «просрочено».
+      inspection_due: null,
+    });
+    expect(await screen.findByText("ОП-5 №77")).toBeInTheDocument();
+  });
+
+  it("работа по средству записывается прямо из строки реестра (срез-103)", async () => {
+    const user = userEvent.setup();
+    getFireSafetySnapshotMock.mockResolvedValue(populatedFireSafetySnapshot);
+    recordMaintenanceMock.mockResolvedValue({ id: "maint-new" });
+
+    render(
+      <MemoryRouter>
+        <FireSafetyPage />
+      </MemoryRouter>,
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Средства и системы" }),
+    );
+
+    await user.click(screen.getAllByRole("button", { name: "Работа" })[0]);
+    // Средство подставлено из строки: выбирать его заново не нужно.
+    expect(screen.getByLabelText("Средство")).toHaveValue(
+      populatedEquipment[0].id,
+    );
+    await user.type(screen.getByLabelText("Дата работы"), "2026-09-01");
+    await user.selectOptions(
+      screen.getByLabelText("Результат"),
+      "with_remarks",
+    );
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(recordMaintenanceMock).toHaveBeenCalled());
+    expect(recordMaintenanceMock.mock.calls[0][0]).toMatchObject({
+      equipment_id: populatedEquipment[0].id,
+      kind: "inspection",
+      performed_on: "2026-09-01",
+      result: "with_remarks",
+      // Следующий срок пуст: его перенесёт сервер по результату.
+      next_due: null,
+    });
+  });
+
+  it("документ ПБ заводится с экрана (срез-103)", async () => {
+    const user = userEvent.setup();
+    getFireSafetySnapshotMock.mockResolvedValue(populatedFireSafetySnapshot);
+    const added = {
+      ...populatedDocuments[0],
+      id: "doc-new",
+      title: "Приказ о противопожарном режиме",
+    };
+    createDocumentMock.mockResolvedValue(added);
+    listDocumentsMock
+      .mockResolvedValueOnce(populatedDocuments)
+      .mockResolvedValue([...populatedDocuments, added]);
+
+    render(
+      <MemoryRouter>
+        <FireSafetyPage />
+      </MemoryRouter>,
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Документы ПБ" }),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Завести документ" }));
+    await user.type(
+      screen.getByLabelText("Документ"),
+      "Приказ о противопожарном режиме",
+    );
+    await user.type(screen.getByLabelText("Номер"), "15-ПБ");
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(createDocumentMock).toHaveBeenCalled());
+    expect(createDocumentMock.mock.calls[0][0]).toMatchObject({
+      kind: "order",
+      title: "Приказ о противопожарном режиме",
+      number: "15-ПБ",
+      // Пустой срок пересмотра — «бессрочный», а не «просрочен».
+      review_due: null,
+    });
+    expect(
+      await screen.findByText("Приказ о противопожарном режиме"),
+    ).toBeInTheDocument();
   });
 
   it("рисует реестр объектов защиты по данным снимка", async () => {

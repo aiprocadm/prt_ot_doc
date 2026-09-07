@@ -31,13 +31,31 @@ ok / due_soon / overdue). Сам классификатор НЕ импорти�
 
 from __future__ import annotations
 
+import re
 from datetime import date, timedelta
+from pathlib import Path
 
 import pytest
 from sqlalchemy import select
 
 from app.models.feature import Feature, FeatureEnablement
+from app.models.fire_safety import FIRE_DOCUMENT_KINDS
 from app.models.models import Tenant
+
+_FRONTEND_FIRE_API = (
+    Path(__file__).resolve().parents[1] / "frontend" / "src" / "api" / "fireSafety.ts"
+)
+
+
+def _front_map(name: str) -> dict[str, str]:
+    """Читает map подписей из ``frontend/src/api/fireSafety.ts``."""
+
+    text = _FRONTEND_FIRE_API.read_text(encoding="utf-8")
+    block = re.search(
+        rf"{name}:\s*Record<[^>]+>\s*=\s*\{{(.*?)\n\}}", text, re.S
+    )
+    assert block is not None, f"не нашёлся map {name}"
+    return dict(re.findall(r'^\s*([A-Za-z_]+):\s*"([^"]+)"', block.group(1), re.M))
 
 pytestmark = pytest.mark.anyio
 
@@ -330,3 +348,19 @@ class TestИзоляцияАрендатора:
             headers=headers,
         )
         assert response.status_code == 404
+
+
+class TestСловарьВидовДокументовНаФронте:
+    """Срез-103: вид документа выбирают в форме из копии словаря на фронте.
+
+    Список формы строится из ``FIRE_DOCUMENT_KIND_TITLES`` в ``api/fireSafety.ts``:
+    вид, добавленный только на бэкенде, нельзя было бы ни выбрать, ни прочитать
+    словами. Тот же приём, что у видов сроков экологии (срез-98).
+    """
+
+    def test_виды_документов_на_фронте_совпадают_с_бэкендом(self) -> None:
+        front = _front_map("FIRE_DOCUMENT_KIND_TITLES")
+        assert front == FIRE_DOCUMENT_KINDS, sorted(
+            front.items() ^ FIRE_DOCUMENT_KINDS.items()
+        )
+
