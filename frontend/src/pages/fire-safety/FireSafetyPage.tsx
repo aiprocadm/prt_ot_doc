@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 
 import {
+  FIRE_EQUIPMENT_STATUS_TITLES,
   FIRE_EQUIPMENT_TITLES,
   FIRE_MAINTENANCE_RESULT_TITLES,
   fireSafetyApi,
@@ -398,12 +399,27 @@ const FireSafetyPage = () => {
               columns={[
                 { accessorKey: "label", header: "Наименование" },
                 {
+                  // Срез-111: вид и состояние — одна колонка. Списанное
+                  // средство должно быть видно сразу (оно не считается в
+                  // готовности), а восьмая колонка вывела бы таблицу за
+                  // UX-бюджет.
                   accessorKey: "kind",
-                  header: "Вид",
-                  cell: ({ row }) =>
-                    FIRE_EQUIPMENT_TITLES[
-                      row.original.kind as FireEquipmentKind
-                    ] ?? row.original.kind,
+                  header: "Вид и состояние",
+                  cell: ({ row }) => (
+                    <span>
+                      {FIRE_EQUIPMENT_TITLES[
+                        row.original.kind as FireEquipmentKind
+                      ] ?? row.original.kind}
+                      {row.original.status !== "active" ? (
+                        <span className="ml-1 text-muted-foreground">
+                          ·{" "}
+                          {row.original.status_label ??
+                            FIRE_EQUIPMENT_STATUS_TITLES[row.original.status] ??
+                            row.original.status}
+                        </span>
+                      ) : null}
+                    </span>
+                  ),
                 },
                 {
                   accessorKey: "location",

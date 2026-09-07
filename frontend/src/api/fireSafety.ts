@@ -30,6 +30,19 @@ export const FIRE_EQUIPMENT_TITLES: Record<FireEquipmentKind, string> = {
   water_supply: "Противопожарный водопровод",
 };
 
+/**
+ * Состояния средства в парке — копия `FIRE_EQUIPMENT_STATUSES` бэкенда
+ * (срез-111). До этого среза состояние было свободной строкой, и списать
+ * средство с экрана было нельзя: словаря не существовало. Просрочки считаются
+ * ТОЛЬКО по средствам «в эксплуатации», поэтому расхождение подписей здесь
+ * означало бы средство, молча выпавшее из готовности к проверке МЧС.
+ */
+export const FIRE_EQUIPMENT_STATUS_TITLES: Record<string, string> = {
+  active: "В эксплуатации",
+  suspended: "Не эксплуатируется",
+  decommissioned: "Списано",
+};
+
 /** Подписи результатов работ — словами, перевод делает сервер, это запас. */
 export const FIRE_MAINTENANCE_RESULT_TITLES: Record<string, string> = {
   passed: "Исправно",
@@ -101,6 +114,8 @@ export type FireEquipmentCreateInput = {
   location?: string | null;
   recharge_due?: string | null;
   inspection_due?: string | null;
+  /** Состояние из закрытого словаря (срез-111); пусто — «в эксплуатации». */
+  status?: string;
 };
 
 export type FireEquipmentUpdateInput = FireEquipmentCreateInput;
@@ -140,6 +155,8 @@ export type FireEquipmentDto = {
   recharge_due?: string | null;
   inspection_due?: string | null;
   status: string;
+  /** Состояние словами — перевод делает сервер (срез-111). */
+  status_label?: string;
   /** Последняя подтверждённая работа: срок без неё — обещание, не доказательство. */
   last_maintenance_on?: string | null;
   last_maintenance_result?: string | null;

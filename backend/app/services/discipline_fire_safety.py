@@ -12,7 +12,8 @@
 
 Правила счёта — те, что были в сводке, слово в слово:
 
-- средства — только действующие (``status == "active"``), не удалённые;
+- средства — только эксплуатируемые (``FIRE_EQUIPMENT_ACTIVE_STATUS``, срез-111:
+  состояние стало закрытым словарём), не удалённые;
   просрочка — ``recharge_due < today`` / ``inspection_due < today``; «скоро» —
   в горизонте ``FIRE_DUE_SOON_DAYS`` от сегодня включительно;
 - «без записи о работах» — средство, у которого нет НИ ОДНОЙ не удалённой
@@ -90,6 +91,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.discipline_status import FireSafetyNumbers
 from app.core.disciplines import BRIEFING_TYPE_DISCIPLINE, BRIEFING_TYPE_TITLES, Discipline
 from app.models.fire_safety import (
+    FIRE_EQUIPMENT_ACTIVE_STATUS,
     FireDrill,
     FireMaintenanceRecord,
     FireSafetyDocument,
@@ -220,7 +222,7 @@ async def collect_fire_safety_numbers(
         (
             await session.execute(
                 _scoped(select(FireSafetyEquipment), FireSafetyEquipment).where(
-                    FireSafetyEquipment.status == "active"
+                    FireSafetyEquipment.status == FIRE_EQUIPMENT_ACTIVE_STATUS
                 )
             )
         )
@@ -338,7 +340,7 @@ async def collect_fire_safety_overdue_by_company(
                     select(FireSafetyEquipment).where(
                         FireSafetyEquipment.tenant_id == tenant_id,
                         FireSafetyEquipment.deleted_at.is_(None),
-                        FireSafetyEquipment.status == "active",
+                        FireSafetyEquipment.status == FIRE_EQUIPMENT_ACTIVE_STATUS,
                         FireSafetyEquipment.site_id.in_(site_ids),
                     )
                 )
@@ -453,7 +455,7 @@ async def collect_fire_safety_deadlines_by_company(
                     select(FireSafetyEquipment).where(
                         FireSafetyEquipment.tenant_id == tenant_id,
                         FireSafetyEquipment.deleted_at.is_(None),
-                        FireSafetyEquipment.status == "active",
+                        FireSafetyEquipment.status == FIRE_EQUIPMENT_ACTIVE_STATUS,
                         FireSafetyEquipment.site_id.in_(site_ids),
                     )
                 )

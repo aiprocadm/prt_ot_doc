@@ -34,6 +34,7 @@ from app.models.fire_safety import (
     FIRE_DRILL_KINDS,
     FIRE_DRILL_OUTCOMES,
     FIRE_EQUIPMENT_KINDS,
+    FIRE_EQUIPMENT_STATUSES,
     FIRE_MAINTENANCE_DUE_FIELD,
     FIRE_MAINTENANCE_KINDS,
     FIRE_MAINTENANCE_PASSING_RESULTS,
@@ -148,6 +149,21 @@ async def _get_unit_or_404(
     return unit
 
 
+def _validate_equipment_status(status_value: str | None) -> None:
+    """Состояние средства — из закрытого словаря (срез-111).
+
+    До словаря сюда писали свободную строку, а просрочки считаются ТОЛЬКО по
+    средствам «в эксплуатации»: опечатка в состоянии молча убирала средство из
+    готовности к проверке МЧС. Теперь неизвестное состояние — ошибка запроса.
+    """
+
+    if status_value is not None and status_value not in FIRE_EQUIPMENT_STATUSES:
+        raise _unprocessable(
+            f"Неизвестное состояние средства {status_value!r}; допустимые: "
+            f"{', '.join(FIRE_EQUIPMENT_STATUSES)}"
+        )
+
+
 async def _validate_payload(
     session: AsyncSession, tenant: Tenant, *, kind: str | None, site_id: str | None
 ) -> None:
@@ -219,6 +235,9 @@ def _equipment_read(
         recharge_due=unit.recharge_due,
         inspection_due=unit.inspection_due,
         status=unit.status,
+        # Срез-111: подпись готовит сервер — экран не переводит коды сам
+        # (прецедент видов документов и результатов работ).
+        status_label=FIRE_EQUIPMENT_STATUSES.get(unit.status, unit.status),
         last_maintenance_on=last[0] if last else None,
         last_maintenance_result=last[1] if last else None,
     )
@@ -269,6 +288,7 @@ async def create_equipment(
 ) -> FireEquipmentRead:
     TenantContextValidator.ensure_tenant_context(tenant)
     await _validate_payload(session, tenant, kind=payload.kind, site_id=payload.site_id)
+    _validate_equipment_status(payload.status)
     unit = FireSafetyEquipment(
         tenant_id=str(tenant.id),
         kind=payload.kind,
@@ -295,7 +315,10 @@ async def create_equipment(
     )
     await session.commit()
     await session.refresh(unit)
-    return FireEquipmentRead.model_validate(unit)
+    # Срез-111: ответ строится общей функцией чтения — иначе подпись состояния
+    # (и любое будущее вычисляемое поле) была бы только в списке, а в ответе
+    # на запись — пустой.
+    return _equipment_read(unit, None)
 
 
 @router.patch("/equipment/{unit_id}", response_model=FireEquipmentRead)
@@ -313,6 +336,7 @@ async def update_equipment(
     await _validate_payload(
         session, tenant, kind=data.get("kind"), site_id=data.get("site_id")
     )
+    _validate_equipment_status(data.get("status"))
     before = FireEquipmentRead.model_validate(unit).model_dump()
     for field in ("kind", "label", "site_id", "location", "recharge_due", "inspection_due"):
         if field in data:
@@ -321,7 +345,10 @@ async def update_equipment(
                 raise _unprocessable("label cannot be empty")
             setattr(unit, field, value.strip() if isinstance(value, str) else value)
     if "status" in data:
-        unit.status = (data["status"] or "active").strip() or "active"
+        # Пустое состояние в PATCH означает «вернуть в эксплуатацию»: словарь
+        # закрыт (срез-111), поэтому подставляется значение по умолчанию, а не
+        # произвольная строка.
+        unit.status = data["status"] or "active"
     after = FireEquipmentRead.model_validate(unit).model_dump()
     await AuditService(session).log_event(
         tenant_id=str(tenant.id),
@@ -337,7 +364,10 @@ async def update_equipment(
     )
     await session.commit()
     await session.refresh(unit)
-    return FireEquipmentRead.model_validate(unit)
+    # Срез-111: ответ строится общей функцией чтения — иначе подпись состояния
+    # (и любое будущее вычисляемое поле) была бы только в списке, а в ответе
+    # на запись — пустой.
+    return _equipment_read(unit, None)
 
 
 def _document_status(review_due: date | None, today: date) -> str:
