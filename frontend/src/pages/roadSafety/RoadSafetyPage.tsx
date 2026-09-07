@@ -1,5 +1,5 @@
 import { type ColumnDef } from "@tanstack/react-table";
-import { type ReactNode, useCallback, useState } from "react";
+import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import {
@@ -11,6 +11,8 @@ import {
   type VehicleDto,
   type WaybillDto,
 } from "@/api/roadSafety";
+import { fetchAllPersons } from "@/api/personsApi";
+import { sitesApi } from "@/api/sites";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -18,6 +20,8 @@ import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
 import { disciplineIncidentsStat } from "@/components/common/disciplineIncidentsStat";
 import { RegistryTable } from "@/components/common/RegistryTable";
 import { Button } from "@/components/ui/button";
+import { DriverFormDialog } from "@/features/road-safety/DriverFormDialog";
+import { VehicleFormDialog } from "@/features/road-safety/VehicleFormDialog";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { useLocalRegistry } from "@/hooks/useLocalRegistry";
 import { formatDate } from "@/utils/datetime";
@@ -36,14 +40,19 @@ const VEHICLE_COLUMNS: ColumnDef<VehicleDto, unknown>[] = [
   { accessorKey: "plate_number", header: "Гос. номер" },
   { accessorKey: "brand_model", header: "Марка и модель" },
   {
+    // Срез-107: вид и состояние — одна колонка. Колонка действий стала бы
+    // восьмой, а это выход за UX-бюджет; «Грузовой · Списано» читается
+    // одной ячейкой не хуже двух.
     accessorKey: "kind_label",
-    header: "Вид",
-    cell: ({ row }) => row.original.kind_label,
-  },
-  {
-    accessorKey: "status_label",
-    header: "Состояние",
-    cell: ({ row }) => row.original.status_label,
+    header: "Вид и состояние",
+    cell: ({ row }) => (
+      <span>
+        {row.original.kind_label}
+        <span className="ml-1 text-muted-foreground">
+          · {row.original.status_label}
+        </span>
+      </span>
+    ),
   },
   {
     accessorKey: "inspection_due",
@@ -391,6 +400,10 @@ const RoadSafetyPage = () => {
     loader: useCallback(
       async () => ({
         vehicles: await roadSafetyApi.listVehicles(),
+        // Площадки и люди — ядровые справочники: ТС привязывают к площадке, а
+        // карточку водителя — к работнику, выбором из списка (срез-107).
+        sites: (await sitesApi.list()).items,
+        persons: await fetchAllPersons(),
         drivers: await roadSafetyApi.listDrivers(
           personFilter ? { person_id: personFilter } : {},
         ),
@@ -403,6 +416,8 @@ const RoadSafetyPage = () => {
     ),
     initialData: {
       vehicles: [] as VehicleDto[],
+      sites: [] as Awaited<ReturnType<typeof sitesApi.list>>["items"],
+      persons: [] as Awaited<ReturnType<typeof fetchAllPersons>>,
       drivers: [] as DriverDto[],
       waybills: [] as WaybillDto[],
       accidents: [] as RoadAccidentDto[],
@@ -541,6 +556,54 @@ const RoadSafetyPage = () => {
     ? (data.drivers.find((driver) => driver.person_id === personFilter)
         ?.person_name ?? personFilter)
     : "";
+
+  // Срез-107: колонка действий добавляется здесь, а не в константе колонок:
+  // формам нужны справочники и перезагрузка, которых у константы нет.
+  const vehicleColumns = useMemo(
+    () => [
+      ...VEHICLE_COLUMNS,
+      {
+        id: "actions",
+        header: "Действия",
+        cell: ({ row }: { row: { original: VehicleDto } }) => (
+          <VehicleFormDialog
+            sites={data.sites}
+            initialData={row.original}
+            onSubmitted={() => void reload()}
+            trigger={
+              <Button variant="ghost" size="sm">
+                Изменить
+              </Button>
+            }
+          />
+        ),
+      },
+    ],
+    [data.sites, reload],
+  );
+
+  const driverColumns = useMemo(
+    () => [
+      ...DRIVER_COLUMNS,
+      {
+        id: "actions",
+        header: "Действия",
+        cell: ({ row }: { row: { original: DriverDto } }) => (
+          <DriverFormDialog
+            persons={data.persons}
+            initialData={row.original}
+            onSubmitted={() => void reload()}
+            trigger={
+              <Button variant="ghost" size="sm">
+                Изменить
+              </Button>
+            }
+          />
+        ),
+      },
+    ],
+    [data.persons, reload],
+  );
 
   return (
     <div className="space-y-4">
@@ -756,6 +819,16 @@ const RoadSafetyPage = () => {
               </button>
             </span>
           ) : null}
+          {/* Срез-107: карточка водителя заводится на работнике из ядра. */}
+          {!loading && !error ? (
+            <div>
+              <DriverFormDialog
+                persons={data.persons}
+                onSubmitted={() => void reload()}
+                trigger={<Button>Завести водителя</Button>}
+              />
+            </div>
+          ) : null}
           {!loading && !error && drivers.total === 0 ? (
             <EmptyState
               title={
@@ -770,7 +843,7 @@ const RoadSafetyPage = () => {
           ) : null}
           {!loading && !error && drivers.total > 0 ? (
             <RegistryTable
-              columns={DRIVER_COLUMNS}
+              columns={driverColumns}
               data={drivers.pagedItems}
               pageIndex={drivers.pageIndex}
               pageSize={drivers.pageSize}
@@ -802,6 +875,19 @@ const RoadSafetyPage = () => {
               бывает. Просрочки считаются только по машинам в эксплуатации.
             </p>
           ) : null}
+          {/*
+            Срез-107: ручки ТС (срез-1 контура) работали только через API —
+            реестр звал «внесите парк», а внести его было негде.
+          */}
+          {!loading && !error ? (
+            <div>
+              <VehicleFormDialog
+                sites={data.sites}
+                onSubmitted={() => void reload()}
+                trigger={<Button>Завести ТС</Button>}
+              />
+            </div>
+          ) : null}
           {!loading && !error && registry.total === 0 ? (
             <EmptyState
               title="Транспортные средства не заведены"
@@ -810,7 +896,7 @@ const RoadSafetyPage = () => {
           ) : null}
           {!loading && !error && registry.total > 0 ? (
             <RegistryTable
-              columns={VEHICLE_COLUMNS}
+              columns={vehicleColumns}
               data={registry.pagedItems}
               pageIndex={registry.pageIndex}
               pageSize={registry.pageSize}

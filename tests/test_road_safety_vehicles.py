@@ -41,17 +41,34 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date, timedelta
+from pathlib import Path
 
 import pytest
 from sqlalchemy import select
 
 from app.models.feature import Feature, FeatureEnablement
 from app.models.models import Tenant
+from app.models.road_safety import VEHICLE_KINDS, VEHICLE_STATUSES
 
 pytestmark = pytest.mark.anyio
 
 _API = "/api/v1/road-safety"
+
+
+_FRONTEND_ROAD_API = (
+    Path(__file__).resolve().parents[1] / "frontend" / "src" / "api" / "roadSafety.ts"
+)
+
+
+def _front_map(name: str) -> dict[str, str]:
+    """Читает map подписей из ``frontend/src/api/roadSafety.ts``."""
+
+    text = _FRONTEND_ROAD_API.read_text(encoding="utf-8")
+    block = re.search(rf"{name}:\s*Record<[^>]+>\s*=\s*\{{(.*?)\n\}}", text, re.S)
+    assert block is not None, f"не нашёлся map {name}"
+    return dict(re.findall(r'^\s*([A-Za-z_0-9]+):\s*"([^"]+)"', block.group(1), re.M))
 
 
 async def _grant(sessionmaker, code: str = "road_safety", on: bool = True) -> None:
@@ -391,3 +408,22 @@ class TestПричиныВБиблиотекеПравил:
 
         for discipline, reason in DISCIPLINES_WITHOUT_RULES.items():
             assert "событ" in reason.lower(), discipline.value
+
+
+class TestСловариТсНаФронте:
+    """Срез-107: вид и состояние ТС выбирают в форме из копий словарей.
+
+    Состояние решает, попадёт ли машина в счёт просрочек (считаются только
+    эксплуатируемые), поэтому расхождение подписей опаснее обычного.
+    """
+
+    def test_виды_тс_на_фронте_совпадают_с_бэкендом(self) -> None:
+        front = _front_map("VEHICLE_KIND_TITLES")
+        assert front == VEHICLE_KINDS, sorted(front.items() ^ VEHICLE_KINDS.items())
+
+    def test_состояния_тс_на_фронте_совпадают_с_бэкендом(self) -> None:
+        front = _front_map("VEHICLE_STATUS_TITLES")
+        assert front == VEHICLE_STATUSES, sorted(
+            front.items() ^ VEHICLE_STATUSES.items()
+        )
+
