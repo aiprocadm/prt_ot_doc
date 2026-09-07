@@ -12,13 +12,20 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date, timedelta
+from pathlib import Path
 
 import pytest
 from sqlalchemy import select
 
 from app.models.feature import Feature, FeatureEnablement
+from app.models.fire_safety import FIRE_EQUIPMENT_KINDS
 from app.models.models import Tenant
+
+_FRONTEND_FIRE_API = (
+    Path(__file__).resolve().parents[1] / "frontend" / "src" / "api" / "fireSafety.ts"
+)
 
 pytestmark = pytest.mark.anyio
 
@@ -170,3 +177,24 @@ class TestПервичныеСредства:
 
         after = (await async_client.get(f"{_API}/readiness", headers=headers)).json()
         assert after["overdue_recharge"] == before["overdue_recharge"] - 1
+
+
+class TestСловарьВидовСредствНаФронте:
+    """Срез-103: вид средства выбирают в форме из копии словаря на фронте.
+
+    Подписи ``FIRE_EQUIPMENT_TITLES`` в ``api/fireSafety.ts`` существовали и
+    раньше (для реестра), но теперь из них СТРОИТСЯ выпадающий список: вид,
+    добавленный только на бэкенде, стало нельзя выбрать вовсе.
+    """
+
+    def test_виды_средств_на_фронте_совпадают_с_бэкендом(self) -> None:
+        text = _FRONTEND_FIRE_API.read_text(encoding="utf-8")
+        block = re.search(
+            r"FIRE_EQUIPMENT_TITLES:\s*Record<[^>]+>\s*=\s*\{(.*?)\n\}", text, re.S
+        )
+        assert block is not None, "не нашёлся map FIRE_EQUIPMENT_TITLES"
+        front = set(re.findall(r'^\s*([a-z_]+):', block.group(1), re.M))
+        assert front == set(FIRE_EQUIPMENT_KINDS), sorted(
+            front ^ set(FIRE_EQUIPMENT_KINDS)
+        )
+

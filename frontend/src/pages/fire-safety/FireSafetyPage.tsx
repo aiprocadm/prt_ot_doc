@@ -7,6 +7,7 @@ import {
   type FireEquipmentKind,
 } from "@/api/fireSafety";
 import { operationsApi } from "@/api/operations";
+import { sitesApi } from "@/api/sites";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -14,6 +15,9 @@ import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
 import { disciplineIncidentsStat } from "@/components/common/disciplineIncidentsStat";
 import { RegistryTable } from "@/components/common/RegistryTable";
 import { Button } from "@/components/ui/button";
+import { FireDocumentFormDialog } from "@/features/fire-safety/FireDocumentFormDialog";
+import { FireEquipmentFormDialog } from "@/features/fire-safety/FireEquipmentFormDialog";
+import { FireMaintenanceFormDialog } from "@/features/fire-safety/FireMaintenanceFormDialog";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { useLocalRegistry } from "@/hooks/useLocalRegistry";
 import { formatDate } from "@/utils/datetime";
@@ -48,12 +52,16 @@ const FireSafetyPage = () => {
         equipment: await fireSafetyApi.listEquipment(),
         documents: await fireSafetyApi.listDocuments(),
         readiness: await fireSafetyApi.readiness(),
+        // Площадки — ядровой справочник: средство и документ привязывают к
+        // площадке выбором, а не вводом id (срез-103).
+        sites: (await sitesApi.list()).items,
       }),
       [],
     ),
     initialData: {
       equipment: [],
       documents: [],
+      sites: [],
       readiness: {
         incidents_open: 0,
         total_units: 0,
@@ -268,6 +276,20 @@ const FireSafetyPage = () => {
               эвакуации зависит от характеристик объекта, которых в данных нет.
             </p>
           ) : null}
+          {/*
+            Срез-103: ручки документов (срез-11) работали только через API —
+            реестр звал «внесите приказы, инструкции, планы эвакуации», а
+            внести их было негде. Одна главная кнопка на секцию.
+          */}
+          {!fire.loading && !fire.error ? (
+            <div>
+              <FireDocumentFormDialog
+                sites={fire.data.sites}
+                onSubmitted={() => void fire.reload()}
+                trigger={<Button>Завести документ</Button>}
+              />
+            </div>
+          ) : null}
           {!fire.loading && !fire.error && documentRegistry.total === 0 ? (
             <EmptyState
               title="Документы ПБ не заведены"
@@ -306,6 +328,22 @@ const FireSafetyPage = () => {
                   header: "Состояние",
                   cell: ({ row }) => row.original.status_label,
                 },
+                {
+                  id: "actions",
+                  header: "Действия",
+                  cell: ({ row }) => (
+                    <FireDocumentFormDialog
+                      sites={fire.data.sites}
+                      initialData={row.original}
+                      onSubmitted={() => void fire.reload()}
+                      trigger={
+                        <Button variant="ghost" size="sm">
+                          Изменить
+                        </Button>
+                      }
+                    />
+                  ),
+                },
               ]}
               data={documentRegistry.pagedItems}
               pageIndex={documentRegistry.pageIndex}
@@ -327,6 +365,27 @@ const FireSafetyPage = () => {
           />
           {fire.loading ? (
             <LoadingScreen label="Загрузка средств пожаротушения" />
+          ) : null}
+          {/*
+            Срез-103: средства (срез-4) и работы по ним (срез-14) заводились
+            только через API. Две кнопки секции: завести средство и записать
+            работу; вторая появляется, когда есть что обслуживать.
+          */}
+          {!fire.loading && !fire.error ? (
+            <div className="flex flex-wrap gap-2">
+              <FireEquipmentFormDialog
+                sites={fire.data.sites}
+                onSubmitted={() => void fire.reload()}
+                trigger={<Button>Завести средство</Button>}
+              />
+              {fire.data.equipment.length > 0 ? (
+                <FireMaintenanceFormDialog
+                  equipment={fire.data.equipment}
+                  onSubmitted={() => void fire.reload()}
+                  trigger={<Button>Записать работу</Button>}
+                />
+              ) : null}
+            </div>
           ) : null}
           {!fire.loading && !fire.error && equipmentRegistry.total === 0 ? (
             <EmptyState
@@ -375,6 +434,34 @@ const FireSafetyPage = () => {
                           ] ?? "—"
                         }`
                       : "нет записей",
+                },
+                {
+                  id: "actions",
+                  header: "Действия",
+                  cell: ({ row }) => (
+                    <div className="flex gap-1">
+                      <FireEquipmentFormDialog
+                        sites={fire.data.sites}
+                        initialData={row.original}
+                        onSubmitted={() => void fire.reload()}
+                        trigger={
+                          <Button variant="ghost" size="sm">
+                            Изменить
+                          </Button>
+                        }
+                      />
+                      <FireMaintenanceFormDialog
+                        equipment={fire.data.equipment}
+                        presetEquipmentId={row.original.id}
+                        onSubmitted={() => void fire.reload()}
+                        trigger={
+                          <Button variant="ghost" size="sm">
+                            Работа
+                          </Button>
+                        }
+                      />
+                    </div>
+                  ),
                 },
               ]}
               data={equipmentRegistry.pagedItems}

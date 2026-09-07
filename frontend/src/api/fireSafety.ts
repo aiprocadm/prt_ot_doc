@@ -37,6 +37,67 @@ export const FIRE_MAINTENANCE_RESULT_TITLES: Record<string, string> = {
   failed: "Неисправно",
 };
 
+/**
+ * Виды документов ПБ — копия `FIRE_DOCUMENT_KINDS` бэкенда. Форма строит
+ * выбор из этого map; совпадение стережёт `tests/test_fire_documents.py`
+ * (срез-103).
+ */
+export const FIRE_DOCUMENT_KIND_TITLES: Record<string, string> = {
+  order: "Приказ",
+  instruction_general: "Инструкция о мерах ПБ (общеобъектовая)",
+  instruction_room: "Инструкция о мерах ПБ (по помещению)",
+  evacuation_plan: "План эвакуации",
+  regulation: "Регламент",
+  declaration: "Декларация пожарной безопасности",
+  journal: "Журнал",
+};
+
+/** Виды регламентных работ — копия `FIRE_MAINTENANCE_KINDS` бэкенда. */
+export const FIRE_MAINTENANCE_KIND_TITLES: Record<string, string> = {
+  recharge: "Перезарядка",
+  inspection: "Техническое обслуживание и поверка",
+  test: "Испытание",
+  repair: "Ремонт и устранение замечаний",
+};
+
+/** Тело средства защиты: вид из закрытого словаря, сроки необязательны. */
+export type FireEquipmentCreateInput = {
+  kind: string;
+  label: string;
+  site_id?: string | null;
+  location?: string | null;
+  recharge_due?: string | null;
+  inspection_due?: string | null;
+};
+
+export type FireEquipmentUpdateInput = FireEquipmentCreateInput;
+
+/** Тело документа ПБ: вид из закрытого словаря, срок пересмотра необязателен. */
+export type FireDocumentCreateInput = {
+  kind: string;
+  title: string;
+  site_id?: string | null;
+  number?: string | null;
+  location?: string | null;
+  approved_on?: string | null;
+  review_due?: string | null;
+  responsible?: string | null;
+  notes?: string | null;
+};
+
+export type FireDocumentUpdateInput = FireDocumentCreateInput;
+
+/** Тело записи о работе: подтверждает исправность и двигает срок. */
+export type FireMaintenanceCreateInput = {
+  equipment_id: string;
+  kind: string;
+  performed_on: string;
+  result: string;
+  performer?: string | null;
+  notes?: string | null;
+  next_due?: string | null;
+};
+
 export type FireEquipmentDto = {
   id: string;
   kind: string;
@@ -174,6 +235,58 @@ export const fireSafetyApi = {
       { params: { limit: 200, offset: 0 } },
     );
     return Array.isArray(data?.items) ? data.items : [];
+  },
+
+  createEquipment: async (
+    body: FireEquipmentCreateInput,
+  ): Promise<FireEquipmentDto> => {
+    const { data } = await apiClient.post<FireEquipmentDto>(
+      "/fire-safety/equipment",
+      body,
+    );
+    return data;
+  },
+
+  updateEquipment: async (
+    id: string,
+    body: FireEquipmentUpdateInput,
+  ): Promise<FireEquipmentDto> => {
+    const { data } = await apiClient.patch<FireEquipmentDto>(
+      `/fire-safety/equipment/${id}`,
+      body,
+    );
+    return data;
+  },
+
+  createDocument: async (
+    body: FireDocumentCreateInput,
+  ): Promise<FireDocumentDto> => {
+    const { data } = await apiClient.post<FireDocumentDto>(
+      "/fire-safety/documents",
+      body,
+    );
+    return data;
+  },
+
+  updateDocument: async (
+    id: string,
+    body: FireDocumentUpdateInput,
+  ): Promise<FireDocumentDto> => {
+    const { data } = await apiClient.patch<FireDocumentDto>(
+      `/fire-safety/documents/${id}`,
+      body,
+    );
+    return data;
+  },
+
+  recordMaintenance: async (
+    body: FireMaintenanceCreateInput,
+  ): Promise<FireMaintenanceDto> => {
+    const { data } = await apiClient.post<FireMaintenanceDto>(
+      "/fire-safety/maintenance",
+      body,
+    );
+    return data;
   },
 
   readiness: async (): Promise<FireReadinessDto> => {
