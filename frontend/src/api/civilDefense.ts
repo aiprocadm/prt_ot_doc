@@ -28,6 +28,66 @@ export const CD_DRILL_OUTCOME_TITLES: Record<string, string> = {
   failed: "Задачи не выполнены",
 };
 
+/** Категории объекта по ГО — копия `CD_GO_CATEGORIES` бэкенда (срез-110). */
+export const CD_GO_CATEGORY_TITLES: Record<string, string> = {
+  special: "Объект особой важности",
+  first: "Первая категория по ГО",
+  second: "Вторая категория по ГО",
+  none: "Категория не присвоена",
+};
+
+/** Виды документов планирования ГО — копия `CD_DOCUMENT_KINDS` бэкенда. */
+export const CD_DOCUMENT_KIND_TITLES: Record<string, string> = {
+  plan_go: "План гражданской обороны",
+  plan_emergency: "План действий по предупреждению и ликвидации ЧС",
+  safety_passport: "Паспорт безопасности объекта",
+  order: "Приказ",
+  regulation: "Положение",
+  instruction: "Инструкция",
+};
+
+/** Строка состава формирования: ФИО из ядра, вывод — дата, а не удаление. */
+export type FormationMemberDto = {
+  id: string;
+  formation_id: string;
+  person_id: string;
+  person_name: string;
+  role_in_formation?: string | null;
+  assigned_on?: string | null;
+  released_on?: string | null;
+  notes?: string | null;
+  /** active | released — считается при чтении по дате вывода. */
+  status: string;
+  status_label: string;
+};
+
+/** Тело сведений по ГО об объекте: категорирование выполняет орган. */
+export type ProfileCreateInput = {
+  site_id: string;
+  category: string;
+  decision_number?: string | null;
+  decision_date?: string | null;
+  responsible?: string | null;
+  notes?: string | null;
+};
+
+/** Правка сведений: площадку не меняют — это сведения другого объекта. */
+export type ProfileUpdateInput = Omit<ProfileCreateInput, "site_id">;
+
+/** Тело документа планирования ГО. */
+export type CdDocumentCreateInput = {
+  kind: string;
+  title: string;
+  number?: string | null;
+  site_id?: string | null;
+  approved_on?: string | null;
+  review_due?: string | null;
+  responsible?: string | null;
+  notes?: string | null;
+};
+
+export type CdDocumentUpdateInput = CdDocumentCreateInput;
+
 /** Тело формирования: вид из закрытого словаря, командир — человек из ядра. */
 export type FormationCreateInput = {
   name: string;
@@ -174,6 +234,56 @@ export type DrillDto = {
 };
 
 export const civilDefenseApi = {
+  listFormationMembers: async (
+    formationId: string,
+  ): Promise<FormationMemberDto[]> => {
+    const { data } = await apiClient.get<{ items?: FormationMemberDto[] }>(
+      `/civil-defense/formations/${formationId}/members`,
+      { params: { limit: 200, offset: 0 } },
+    );
+    return Array.isArray(data?.items) ? data.items : [];
+  },
+
+  createProfile: async (body: ProfileCreateInput): Promise<ProfileDto> => {
+    const { data } = await apiClient.post<ProfileDto>(
+      "/civil-defense/profiles",
+      body,
+    );
+    return data;
+  },
+
+  updateProfile: async (
+    id: string,
+    body: ProfileUpdateInput,
+  ): Promise<ProfileDto> => {
+    const { data } = await apiClient.patch<ProfileDto>(
+      `/civil-defense/profiles/${id}`,
+      body,
+    );
+    return data;
+  },
+
+  createDocument: async (
+    body: CdDocumentCreateInput,
+  ): Promise<CdDocumentDto> => {
+    const { data } = await apiClient.post<CdDocumentDto>(
+      "/civil-defense/documents",
+      body,
+    );
+    return data;
+  },
+
+  updateDocument: async (
+    id: string,
+    body: CdDocumentUpdateInput,
+  ): Promise<CdDocumentDto> => {
+    const { data } = await apiClient.patch<CdDocumentDto>(
+      `/civil-defense/documents/${id}`,
+      body,
+    );
+    return data;
+  },
+
   createFormation: async (
     body: FormationCreateInput,
   ): Promise<FormationDto> => {

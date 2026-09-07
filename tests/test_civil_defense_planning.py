@@ -40,17 +40,34 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date, timedelta
+from pathlib import Path
 
 import pytest
 from sqlalchemy import select
 
+from app.models.civil_defense import CD_DOCUMENT_KINDS, CD_GO_CATEGORIES
 from app.models.feature import Feature, FeatureEnablement
 from app.models.models import Company, Site, Tenant
 
 pytestmark = pytest.mark.anyio
 
 _API = "/api/v1/civil-defense"
+
+
+_FRONTEND_CD_API = (
+    Path(__file__).resolve().parents[1] / "frontend" / "src" / "api" / "civilDefense.ts"
+)
+
+
+def _front_map(name: str) -> dict[str, str]:
+    """Читает map подписей из ``frontend/src/api/civilDefense.ts``."""
+
+    text = _FRONTEND_CD_API.read_text(encoding="utf-8")
+    block = re.search(rf"{name}:\s*Record<[^>]+>\s*=\s*\{{(.*?)\n\}}", text, re.S)
+    assert block is not None, f"не нашёлся map {name}"
+    return dict(re.findall(r'^\s*([A-Za-z_0-9]+):\s*"([^"]+)"', block.group(1), re.M))
 
 
 async def _grant(sessionmaker, code: str = "civil_defense", on: bool = True) -> None:
@@ -401,3 +418,25 @@ class TestСводкаИГраница:
             headers=headers,
         )
         assert response.status_code == 404, response.text
+
+
+class TestСловариПланированияНаФронте:
+    """Срез-110: категорию по ГО и вид документа выбирают из копий словарей.
+
+    «Категория не присвоена» — полноценное значение словаря, а не пустое
+    поле: пропади оно из формы, специалисту нечем было бы ответить «решения
+    ещё нет», и он выбрал бы чужую категорию.
+    """
+
+    def test_категории_на_фронте_совпадают_с_бэкендом(self) -> None:
+        front = _front_map("CD_GO_CATEGORY_TITLES")
+        assert front == CD_GO_CATEGORIES, sorted(
+            front.items() ^ CD_GO_CATEGORIES.items()
+        )
+
+    def test_виды_документов_на_фронте_совпадают_с_бэкендом(self) -> None:
+        front = _front_map("CD_DOCUMENT_KIND_TITLES")
+        assert front == CD_DOCUMENT_KINDS, sorted(
+            front.items() ^ CD_DOCUMENT_KINDS.items()
+        )
+

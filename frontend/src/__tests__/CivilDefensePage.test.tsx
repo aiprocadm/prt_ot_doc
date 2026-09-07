@@ -16,11 +16,24 @@ const createFormationMock = vi.fn();
 const createDrillMock = vi.fn();
 const updateDrillMock = vi.fn();
 const fetchAllPersonsMock = vi.fn();
+const listSitesMock = vi.fn();
+const createProfileMock = vi.fn();
+const createDocumentMock = vi.fn();
+const listMembersMock = vi.fn();
+const addMemberMock = vi.fn();
+const updateMemberMock = vi.fn();
 
 vi.mock("@/api/civilDefense", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   civilDefenseApi: {
     createFormation: (...args: unknown[]) => createFormationMock(...args),
+    createProfile: (...args: unknown[]) => createProfileMock(...args),
+    updateProfile: vi.fn(),
+    createDocument: (...args: unknown[]) => createDocumentMock(...args),
+    updateDocument: vi.fn(),
+    listFormationMembers: (...args: unknown[]) => listMembersMock(...args),
+    addFormationMember: (...args: unknown[]) => addMemberMock(...args),
+    updateFormationMember: (...args: unknown[]) => updateMemberMock(...args),
     updateFormation: vi.fn(),
     createDrill: (...args: unknown[]) => createDrillMock(...args),
     updateDrill: (...args: unknown[]) => updateDrillMock(...args),
@@ -35,6 +48,10 @@ vi.mock("@/api/civilDefense", async (importOriginal) => ({
 
 vi.mock("@/api/personsApi", () => ({
   fetchAllPersons: (...args: unknown[]) => fetchAllPersonsMock(...args),
+}));
+
+vi.mock("@/api/sites", () => ({
+  sitesApi: { list: (...args: unknown[]) => listSitesMock(...args) },
 }));
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -214,12 +231,120 @@ describe("CivilDefensePage", () => {
     fetchAllPersonsMock.mockResolvedValue([
       { id: "person-1", full_name: "Иванов Иван Иванович" },
     ]);
+    listSitesMock.mockReset();
+    createProfileMock.mockReset();
+    createDocumentMock.mockReset();
+    listMembersMock.mockReset();
+    addMemberMock.mockReset();
+    updateMemberMock.mockReset();
+    listSitesMock.mockResolvedValue({
+      items: [{ id: "site-1", name: "Площадка №1" }],
+      total: 1,
+    });
+    listMembersMock.mockResolvedValue([]);
     listFormationsMock.mockResolvedValue(populatedFormations);
     listDrillsMock.mockResolvedValue(populatedDrills);
     listProfilesMock.mockResolvedValue(populatedProfiles);
     listDocumentsMock.mockResolvedValue(populatedDocuments);
     listProgramsMock.mockResolvedValue(populatedPrograms);
     readinessMock.mockResolvedValue(populatedReadiness);
+  });
+
+  it("состав формирования читается по кнопке и пополняется (срез-110)", async () => {
+    const user = userEvent.setup();
+    listMembersMock.mockResolvedValue([
+      {
+        id: "m-1",
+        formation_id: populatedFormations[0].id,
+        person_id: "person-1",
+        person_name: "Иванов Иван Иванович",
+        role_in_formation: "командир звена",
+        assigned_on: "2026-01-10",
+        released_on: null,
+        notes: null,
+        status: "active",
+        status_label: "В составе",
+      },
+    ]);
+    addMemberMock.mockResolvedValue({ id: "m-2" });
+
+    render(
+      <MemoryRouter>
+        <CivilDefensePage />
+      </MemoryRouter>,
+    );
+    await screen.findByText("Звено пожаротушения");
+
+    // Список членов не грузится вместе с экраном: только по кнопке.
+    expect(listMembersMock).not.toHaveBeenCalled();
+    await user.click(screen.getAllByRole("button", { name: "Состав" })[0]);
+
+    expect(await screen.findByText(/командир звена/)).toBeInTheDocument();
+    await waitFor(() => expect(listMembersMock).toHaveBeenCalled());
+
+    await user.selectOptions(screen.getByLabelText("Работник"), "person-1");
+    await user.type(screen.getByLabelText("Роль в формировании"), "спасатель");
+    await user.click(screen.getByRole("button", { name: "Включить в состав" }));
+
+    await waitFor(() => expect(addMemberMock).toHaveBeenCalled());
+    expect(addMemberMock.mock.calls[0][0]).toBe(populatedFormations[0].id);
+    expect(addMemberMock.mock.calls[0][1]).toMatchObject({
+      person_id: "person-1",
+      role_in_formation: "спасатель",
+      assigned_on: null,
+    });
+  });
+
+  it("сведения по ГО и документ планирования заводятся с экрана (срез-110)", async () => {
+    const user = userEvent.setup();
+    createProfileMock.mockResolvedValue({ id: "profile-new" });
+    createDocumentMock.mockResolvedValue({ id: "doc-new" });
+
+    render(
+      <MemoryRouter>
+        <CivilDefensePage />
+      </MemoryRouter>,
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Категорирование и планы" }),
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Внести сведения по ГО" }),
+    );
+    await user.selectOptions(screen.getByLabelText("Площадка"), "site-1");
+    await user.selectOptions(
+      screen.getByLabelText("Категория по ГО"),
+      "second",
+    );
+    await user.type(screen.getByLabelText("Решение №"), "12-ГО");
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(createProfileMock).toHaveBeenCalled());
+    expect(createProfileMock.mock.calls[0][0]).toMatchObject({
+      site_id: "site-1",
+      category: "second",
+      decision_number: "12-ГО",
+    });
+
+    await user.click(screen.getByRole("button", { name: "Завести документ" }));
+    await user.selectOptions(
+      screen.getByLabelText("Вид документа"),
+      "safety_passport",
+    );
+    await user.type(
+      screen.getByLabelText("Документ"),
+      "Паспорт безопасности объекта",
+    );
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(createDocumentMock).toHaveBeenCalled());
+    expect(createDocumentMock.mock.calls[0][0]).toMatchObject({
+      kind: "safety_passport",
+      title: "Паспорт безопасности объекта",
+      // Пустой срок пересмотра — «бессрочный», а не «просрочен».
+      review_due: null,
+    });
   });
 
   it("формирование заводится с экрана, а не только через API (срез-109)", async () => {

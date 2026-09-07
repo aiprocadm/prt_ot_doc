@@ -10,6 +10,7 @@ import {
   type TrainingProgramDto,
 } from "@/api/civilDefense";
 import { fetchAllPersons } from "@/api/personsApi";
+import { sitesApi } from "@/api/sites";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -17,8 +18,11 @@ import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
 import { disciplineIncidentsStat } from "@/components/common/disciplineIncidentsStat";
 import { RegistryTable } from "@/components/common/RegistryTable";
 import { Button } from "@/components/ui/button";
+import { CdDocumentFormDialog } from "@/features/civil-defense/CdDocumentFormDialog";
 import { CdDrillFormDialog } from "@/features/civil-defense/CdDrillFormDialog";
 import { CdFormationFormDialog } from "@/features/civil-defense/CdFormationFormDialog";
+import { CdFormationMembersDialog } from "@/features/civil-defense/CdFormationMembersDialog";
+import { CdProfileFormDialog } from "@/features/civil-defense/CdProfileFormDialog";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { useLocalRegistry } from "@/hooks/useLocalRegistry";
 import { formatDate } from "@/utils/datetime";
@@ -187,6 +191,9 @@ const CivilDefensePage = () => {
         // Люди — ядровой справочник: командира формирования выбирают, а не
         // вводят id (срез-109).
         persons: await fetchAllPersons(),
+        // Площадки — ядровой справочник: сведения по ГО и документы
+        // привязывают к площадке выбором (срез-110).
+        sites: (await sitesApi.list()).items,
         drills: await civilDefenseApi.listDrills(),
         profiles: await civilDefenseApi.listProfiles(),
         documents: await civilDefenseApi.listDocuments(),
@@ -198,6 +205,7 @@ const CivilDefensePage = () => {
     initialData: {
       formations: [] as FormationDto[],
       persons: [] as Awaited<ReturnType<typeof fetchAllPersons>>,
+      sites: [] as Awaited<ReturnType<typeof sitesApi.list>>["items"],
       drills: [] as DrillDto[],
       profiles: [] as ProfileDto[],
       documents: [] as CdDocumentDto[],
@@ -287,8 +295,45 @@ const CivilDefensePage = () => {
         id: "actions",
         header: "Действия",
         cell: ({ row }: { row: { original: FormationDto } }) => (
-          <CdFormationFormDialog
-            persons={data.persons}
+          <div className="flex gap-1">
+            <CdFormationFormDialog
+              persons={data.persons}
+              initialData={row.original}
+              onSubmitted={() => void reload()}
+              trigger={
+                <Button variant="ghost" size="sm">
+                  Изменить
+                </Button>
+              }
+            />
+            {/* Срез-110: состав читается по кнопке — списков столько же,
+                сколько формирований, и грузить их все ради реестра незачем. */}
+            <CdFormationMembersDialog
+              formation={row.original}
+              persons={data.persons}
+              onChanged={() => void reload()}
+              trigger={
+                <Button variant="ghost" size="sm">
+                  Состав
+                </Button>
+              }
+            />
+          </div>
+        ),
+      },
+    ],
+    [data.persons, reload],
+  );
+
+  const profileColumns = useMemo(
+    () => [
+      ...PROFILE_COLUMNS,
+      {
+        id: "actions",
+        header: "Действия",
+        cell: ({ row }: { row: { original: ProfileDto } }) => (
+          <CdProfileFormDialog
+            sites={data.sites}
             initialData={row.original}
             onSubmitted={() => void reload()}
             trigger={
@@ -300,7 +345,30 @@ const CivilDefensePage = () => {
         ),
       },
     ],
-    [data.persons, reload],
+    [data.sites, reload],
+  );
+
+  const documentColumns = useMemo(
+    () => [
+      ...CD_DOCUMENT_COLUMNS,
+      {
+        id: "actions",
+        header: "Действия",
+        cell: ({ row }: { row: { original: CdDocumentDto } }) => (
+          <CdDocumentFormDialog
+            sites={data.sites}
+            initialData={row.original}
+            onSubmitted={() => void reload()}
+            trigger={
+              <Button variant="ghost" size="sm">
+                Изменить
+              </Button>
+            }
+          />
+        ),
+      },
+    ],
+    [data.sites, reload],
   );
 
   const drillColumns = useMemo(
@@ -491,6 +559,25 @@ const CivilDefensePage = () => {
             «Категория не присвоена» — это внесённое сведение, а не пустая
             клетка. Пустой срок пересмотра документа означает «бессрочно».
           </p>
+          {/*
+            Срез-110: сведения по ГО и документы планирования (срез-3 контура)
+            заводились только через API. Сведения привязаны к площадке,
+            поэтому кнопка есть, когда площадки заведены.
+          */}
+          <div className="flex flex-wrap gap-2">
+            {data.sites.length > 0 ? (
+              <CdProfileFormDialog
+                sites={data.sites}
+                onSubmitted={() => void reload()}
+                trigger={<Button>Внести сведения по ГО</Button>}
+              />
+            ) : null}
+            <CdDocumentFormDialog
+              sites={data.sites}
+              onSubmitted={() => void reload()}
+              trigger={<Button>Завести документ</Button>}
+            />
+          </div>
           {profileRegistry.total === 0 ? (
             <EmptyState
               title="Сведения по ГО не внесены"
@@ -498,7 +585,7 @@ const CivilDefensePage = () => {
             />
           ) : (
             <RegistryTable
-              columns={PROFILE_COLUMNS}
+              columns={profileColumns}
               data={profileRegistry.pagedItems}
               pageIndex={profileRegistry.pageIndex}
               pageSize={profileRegistry.pageSize}
@@ -512,7 +599,7 @@ const CivilDefensePage = () => {
           )}
           {documentRegistry.total > 0 ? (
             <RegistryTable
-              columns={CD_DOCUMENT_COLUMNS}
+              columns={documentColumns}
               data={documentRegistry.pagedItems}
               pageIndex={documentRegistry.pageIndex}
               pageSize={documentRegistry.pageSize}
