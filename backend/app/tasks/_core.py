@@ -105,16 +105,15 @@ from app.tasks.file_jobs import (  # noqa: E402, F401
 from app.tasks.import_jobs import run_import_batch_job  # noqa: E402, F401
 
 # Importing notification_jobs registers its tasks with Celery and re-exposes them as
-# ``app.tasks.*``. noqa F401: re-export only (the reminders.scan beat entry resolves by name).
+# ``app.tasks.*``. noqa F401: re-export only (beat entries resolve tasks by name).
+# Срез-113: ре-экспорты сканера правил (``scan_reminders_job`` и его помощники)
+# убраны вместе с самим сканером — механизм был недостижим, см. докстроку
+# ``app.tasks.notification_jobs``.
 from app.tasks.notification_jobs import (  # noqa: E402, F401
     _dispatch_notification_job,
     _dispatch_pending_notifications_job,
-    _resolve_rule_recipients,
-    _scan_reminders_for_tenant,
-    _scan_reminders_job,
     dispatch_notification_job,
     dispatch_pending_notifications_job,
-    scan_reminders_job,
 )
 
 settings = get_settings()
