@@ -559,16 +559,23 @@ describe("FireSafetyPage", () => {
       error: null,
     } as never);
 
+    // Снимок обязателен: без него загрузка экрана падает уже ПОСЛЕ теста и
+    // роняет весь прогон необработанной ошибкой, а сам тест выглядит зелёным.
+    getFireSafetySnapshotMock.mockResolvedValue(populatedFireSafetySnapshot);
+
     render(
       <MemoryRouter>
         <FireSafetyPage />
       </MemoryRouter>,
     );
 
-    await waitFor(() =>
-      expect(
-        screen.queryByRole("button", { name: "Завести документ" }),
-      ).not.toBeInTheDocument(),
-    );
+    // Ждём загруженный экран, а не просто отсутствие кнопки: пустая страница
+    // тоже «не содержит кнопку», и такая проверка ничего бы не значила.
+    expect(
+      await screen.findByRole("button", { name: "Средства и системы" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Завести документ" }),
+    ).not.toBeInTheDocument();
   });
 });
