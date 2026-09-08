@@ -28,7 +28,6 @@ from app.models.models import (
     EdoMessage,
     EdoStatus,
     EdoStatusHistory,
-    Person,
     Tenant,
     WebhookDelivery,
     WebhookEndpoint,
@@ -649,11 +648,23 @@ async def _process_inbound_webhook(
 
 @celery_app.task(name="billing.recompute_active_workers")
 def recompute_active_workers_job(tenant_slug: str) -> dict[str, int | str]:
-    async def _run() -> dict[str, int | str]:
-        from sqlalchemy import func
+    """Счётчик работников арендатора для тарифа (срез-121: «не уволен»).
 
-        from app.models.models import EmploymentStatus
-        from app.services.billing import BillingService, current_period_yyyymm
+    Считаются все, кто у арендатора ЧИСЛИТСЯ, — включая отпуск и отстранение.
+    Раньше стояло ``employment_status == ACTIVE``, и счёт расходился с самим
+    продуктом: у человека в отпуске не пропадают ни медосмотр, ни СИЗ, ни
+    обучение — платформа продолжает вести его так же, как остальных, а в счёт
+    он не попадал. Побочно это ещё и подсказывало способ платить меньше:
+    перевести людей в отпуск. Формула «не уволен» одна на продукт и живёт в
+    ``services/person_scope`` (срез-89).
+    """
+
+    async def _run() -> dict[str, int | str]:
+        from app.services.billing import (
+            BillingService,
+            count_employed_workers,
+            current_period_yyyymm,
+        )
 
         with tenant_context(tenant_slug):
             ensure_tenant_schema(tenant_slug)
@@ -667,18 +678,7 @@ def recompute_active_workers_job(tenant_slug: str) -> dict[str, int | str]:
                         return {"status": "tenant_missing", "active_workers": 0}
                     tenant_id = str(tenant.id)
 
-                active_workers = int(
-                    (
-                        await session.execute(
-                            select(func.count(Person.id)).where(
-                                Person.tenant_id == tenant_id,
-                                Person.deleted_at.is_(None),
-                                Person.employment_status == EmploymentStatus.ACTIVE,
-                            )
-                        )
-                    ).scalar_one()
-                    or 0
-                )
+                active_workers = await count_employed_workers(session, tenant_id)
                 service = BillingService(session)
                 usage = await service.ensure_usage_row(
                     tenant_id=tenant_id,

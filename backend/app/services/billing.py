@@ -41,6 +41,35 @@ def current_period_yyyymm(now: datetime | None = None) -> int:
     return int(value.strftime("%Y%m"))
 
 
+async def count_employed_workers(session: AsyncSession, tenant_id: str) -> int:
+    """Сколько работников арендатор ВЕДЁТ на платформе (срез-121).
+
+    Мера тарифа. Считаются все, кто числится, — включая отпуск и отстранение:
+    у человека в отпуске не пропадают ни медосмотр, ни СИЗ, ни обучение,
+    платформа продолжает вести его наравне с остальными. Раньше счёт шёл по
+    ``employment_status == ACTIVE`` и расходился с самим продуктом, а заодно
+    подсказывал способ платить меньше — перевести людей в отпуск.
+
+    Формула «числится» одна на продукт (``services/person_scope``, срез-89) —
+    здесь она подставляется, а не переписывается.
+    """
+
+    from app.models.master_data import Person
+    from app.services.person_scope import employed_person_where
+
+    return int(
+        (
+            await session.execute(
+                select(func.count(Person.id)).where(
+                    Person.tenant_id == tenant_id,
+                    *employed_person_where(),
+                )
+            )
+        ).scalar_one()
+        or 0
+    )
+
+
 class BillingService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session

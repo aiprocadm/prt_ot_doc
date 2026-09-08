@@ -45,10 +45,25 @@ from app.models.master_data import EmploymentStatus, Person
 
 __all__ = [
     "employed_person_where",
+    "is_employed",
     "employed_record_where",
     "not_employed_person_ids",
     "not_employed_record_where",
 ]
+
+
+def is_employed(person: Any) -> bool:
+    """То же правило для УЖЕ ЗАГРУЖЕННОЙ записи (срез-121).
+
+    ``employed_person_where`` собирает условия для запроса; когда человек уже
+    в руках, писать сравнение заново — снова заводить копию формулы. Разница
+    важна: «числится» — это всё, кроме увольнения, а не только «активен».
+    """
+
+    return (
+        getattr(person, "deleted_at", None) is None
+        and getattr(person, "employment_status", None) != EmploymentStatus.TERMINATED
+    )
 
 
 def employed_person_where() -> tuple[ColumnElement[bool], ...]:

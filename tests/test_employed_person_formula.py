@@ -33,6 +33,17 @@ APP = REPO / "backend" / "app"
 FORMULA_HOME = "services/person_scope.py"
 
 _CONDITION = re.compile(r"employment_status\s*!=\s*(EmploymentStatus\.TERMINATED|\"terminated\")")
+#: Срез-121: «активен» — НЕ синоним «числится». Отпуск и отстранение — это
+#: те же обязательства: медосмотр не перестаёт истекать, СИЗ не перестаёт
+#: изнашиваться. Подмена молча уменьшала счёт: в тарифе арендатор платил за
+#: меньшее число людей, чем платформа ведёт, а качество данных не видело
+#: пробелов у тех, кто в отпуске.
+_ACTIVE_SUBSTITUTE = re.compile(r"employment_status\s*==\s*(EmploymentStatus\.ACTIVE|\"active\")")
+#: Сравнение «уволен» у загруженной записи — тоже формула; для неё есть
+#: ``is_employed``.
+_TERMINATED_OBJECT = re.compile(
+    r"employment_status\s*==\s*(EmploymentStatus\.TERMINATED|\"terminated\")"
+)
 _RECORD_CONDITION = re.compile(r"\.(not_in|in_)\(\s*not_employed_person_ids\(")
 
 
@@ -50,6 +61,40 @@ def test_сторож_условие_не_уволен_пишется_один_�
         "условие «не уволен» написано заново — возьмите "
         f"employed_person_where из {FORMULA_HOME}: {offenders}"
     )
+
+
+def test_сторож_активен_не_подменяет_числится() -> None:
+    """«Активен» — один из статусов, «числится» — все, кроме увольнения.
+
+    Отпуск и отстранение обязательств не снимают: медосмотр истекает, СИЗ
+    изнашивается, обучение просрочивается. Кто считает людей по
+    ``== ACTIVE``, считает меньше, чем ведёт платформа.
+    """
+
+    offenders: list[str] = []
+    for path in APP.rglob("*.py"):
+        rel = path.relative_to(APP).as_posix()
+        if rel.startswith("migrations/") or rel == FORMULA_HOME:
+            continue
+        text = path.read_text(encoding="utf-8")
+        if _ACTIVE_SUBSTITUTE.search(text) or _TERMINATED_OBJECT.search(text):
+            offenders.append(rel)
+    assert offenders == [], (
+        "«активен»/«уволен» сравнивают руками — возьмите employed_person_where "
+        f"или is_employed из {FORMULA_HOME}: {offenders}"
+    )
+
+
+def test_числится_это_не_удалён_и_не_уволен() -> None:
+    """``is_employed`` — та же формула для уже загруженной записи."""
+
+    from app.models.master_data import EmploymentStatus, Person
+    from app.services.person_scope import is_employed
+
+    assert is_employed(Person(employment_status=EmploymentStatus.ACTIVE))
+    assert is_employed(Person(employment_status=EmploymentStatus.ON_LEAVE))
+    assert is_employed(Person(employment_status=EmploymentStatus.SUSPENDED))
+    assert not is_employed(Person(employment_status=EmploymentStatus.TERMINATED))
 
 
 def test_работающий_это_не_удалён_и_не_уволен() -> None:
