@@ -481,6 +481,13 @@ class Settings(BaseSettings):
     # SEC-68: срок жизни сеансового токена внешнего портала (обмен ?token= →
     # X-Portal-Session). Сеанс никогда не живёт дольше самой ссылки.
     portal_session_ttl_minutes: int = Field(60, alias="PORTAL_SESSION_TTL_MINUTES")
+    # SEC-68 (разд. 68.1 «привязка к получателю»): одноразовый код к ссылке.
+    # Код живёт минуты, а не часы: он ходит по почте, а письмо остаётся в
+    # ящике дольше, чем нужно для входа.
+    portal_otp_ttl_minutes: int = Field(10, alias="PORTAL_OTP_TTL_MINUTES")
+    # Шестизначный код без счётчика попыток перебирается за минуты. После
+    # исчерпания код гасится целиком — нужен новый, а не следующая попытка.
+    portal_otp_max_attempts: int = Field(5, alias="PORTAL_OTP_MAX_ATTEMPTS")
     # SEC-64 (разд. 64.1): заголовки безопасности на уровне приложения.
     # CSP пустой = строгая политика по умолчанию (default-src 'none' для JSON-API).
     security_headers_enabled: bool = Field(True, alias="SECURITY_HEADERS_ENABLED")

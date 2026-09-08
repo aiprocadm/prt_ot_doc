@@ -529,6 +529,17 @@ class ClientPortalToken(TenantBaseModel):
     max_uses: Mapped[int | None] = mapped_column(Integer, nullable=True)
     uses_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # SEC-68 (разд. 68.1 «привязка к получателю»): одноразовость не спасает от
+    # пересылки — кто первым откроет, тот и войдёт. Если у ссылки указан адрес,
+    # войти можно только с кодом, пришедшим НА ЭТОТ адрес. NULL = привязки нет
+    # (поведение всех ранее выданных ссылок).
+    otp_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    # Код хранится хешем, как и сам токен: утечка базы не должна давать вход.
+    otp_code_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # Код живёт минуты, а не сутки: он ходит по почте, а почта хранится дольше.
+    otp_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Шестизначный код без счётчика попыток перебирается за минуты.
+    otp_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     __table_args__ = (
         Index("ix_client_portal_tokens_expires_hash", "tenant_id", "expires_at", "token_hash"),

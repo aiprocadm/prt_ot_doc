@@ -928,6 +928,7 @@
     "POST /api/v1/platform/tenants/{tenant_id}/modules/{code}/trial",
     "POST /api/v1/platform/tenants/{tenant_id}/pack-update",
     "POST /api/v1/portal-requests/{request_id}/messages",
+    "POST /api/v1/portal/otp",
     "POST /api/v1/portal/packages/{run_id}/tickets",
     "POST /api/v1/portal/session",
     "POST /api/v1/ppe/budgets",
@@ -2018,6 +2019,7 @@
     "replace_rollback_api_v1_replace_runs__replace_run_id__rollback_post",
     "replay_event_api_v1_webhooks_events__event_id__replay_post",
     "request_offboarding_api_v1_offboarding_request_post",
+    "request_portal_otp_api_v1_portal_otp_post",
     "requeue_outbox_event_api_v1_admin_outbox_events__event_id__requeue_post",
     "rerun_step_api_v1_jobs__job_id__steps__step__rerun_post",
     "resolve_conflict_api_v1_pwa_sync_conflicts__batch_id__resolve_post",
@@ -2944,6 +2946,7 @@
     "PolicyPayload",
     "PortalFilesResponse",
     "PortalLinkResponse",
+    "PortalOtpResponse",
     "PortalSessionResponse",
     "PortfolioItem",
     "PortfolioPage",
@@ -8752,6 +8755,10 @@
     "PortalLinkResponse": {
       "portal_url": "string",
       "expires_at": "string"
+    },
+    "PortalOtpResponse": {
+      "message": "string",
+      "expires_in_minutes": "integer"
     },
     "PortalSessionResponse": {
       "session_token": "string",
