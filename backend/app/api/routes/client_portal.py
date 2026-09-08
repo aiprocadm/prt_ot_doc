@@ -41,6 +41,7 @@ from app.models.models import (
 from app.modules.packs.definitions import PACK_DEFINITIONS_BY_CODE
 from app.modules.packs.operations import resolve_pipeline_profile
 from app.services.file_storage import FileStorageService
+from app.services.portal_otp_mail import mail_channel_ready, send_otp_code
 
 router = APIRouter(prefix="/portal", tags=["client-portal"])
 internal_router = APIRouter(prefix="/packages", tags=["packages"])
@@ -230,6 +231,19 @@ class PortalSessionResponse(BaseModel):
 
     session_token: str
     expires_at: datetime
+
+
+class PortalOtpResponse(BaseModel):
+    """SEC-68 (разд. 68.1): ответ на запрос кода.
+
+    Один и тот же ответ и когда код отправлен, и когда у ссылки привязки нет:
+    иначе по ответу можно было бы перебирать, какие ссылки к кому привязаны.
+    Адрес получателя в ответе НЕ называется — его знает тот, кому письмо
+    пришло, а для пересылающего это была бы подсказка.
+    """
+
+    message: str
+    expires_in_minutes: int
 
 
 class PackageTicketCreate(BaseModel):
@@ -698,9 +712,34 @@ async def create_portal_link(
         int | None,
         Query(ge=1, description="Лимит использований ссылки; не задан — без ограничения"),
     ] = None,
+    otp_email: Annotated[
+        str | None,
+        Query(
+            max_length=320,
+            description=(
+                "Привязать ссылку к получателю: войти можно будет только с кодом, "
+                "пришедшим на этот адрес. Не задан — привязки нет"
+            ),
+        ),
+    ] = None,
     _: AccessContext = StaffWriteAccess,
 ):
     run = await _get_run_for_tenant(session, run_id=run_id, tenant_id=str(tenant.id))
+    recipient = (otp_email or "").strip()
+    if recipient:
+        if "@" not in recipient:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "Адрес получателя выглядит неверным",
+            )
+        # Проверяем ЗДЕСЬ, а не при входе: выдать ссылку с привязкой там, где
+        # письмо уйти не может, значит запереть клиента снаружи — и узнает он
+        # об этом позже специалиста, уже получив ссылку.
+        if not mail_channel_ready():
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "Привязка к получателю требует настроенной почты: без неё код не дойдёт",
+            )
     # 24 байта = 192 бита энтропии (разд. 68.1 требует >= 128).
     plain = secrets.token_urlsafe(24)
     settings = get_settings()
@@ -714,6 +753,7 @@ async def create_portal_link(
             package_run_id=run.id,
             expires_at=expires_at,
             max_uses=max_uses,
+            otp_email=recipient or None,
             scope_json={
                 "package_run_ids": [run.id],
                 "download": True,
@@ -726,12 +766,83 @@ async def create_portal_link(
     return PortalLinkResponse(portal_url=f"/portal?token={plain}", expires_at=expires_at)
 
 
+def _otp_alive(record: ClientPortalToken) -> bool:
+    """Код есть и ещё жив."""
+
+    if not record.otp_code_hash or record.otp_expires_at is None:
+        return False
+    return _as_utc(record.otp_expires_at) > _utcnow()
+
+
+def _clear_otp(record: ClientPortalToken) -> None:
+    record.otp_code_hash = None
+    record.otp_expires_at = None
+    record.otp_attempts = 0
+
+
+@router.post("/otp", response_model=PortalOtpResponse)
+async def request_portal_otp(
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    x_portal_token: Annotated[str | None, Header(alias="X-Portal-Token")] = None,
+    token: Annotated[str | None, Query()] = None,
+) -> PortalOtpResponse:
+    """SEC-68 (разд. 68.1): выслать одноразовый код на адрес получателя ссылки.
+
+    Ссылка сама по себе больше не пускает: пересланная копия открывается, но
+    код уходит ТОМУ, кому ссылку выдавали. Использований ссылки запрос не
+    тратит — иначе одноразовая ссылка сгорала бы на попытке войти.
+
+    Ответ одинаков и когда код отправлен, и когда привязки у ссылки нет:
+    разный ответ позволял бы перебирать, какие ссылки к кому привязаны.
+    """
+
+    enforce_portal_traffic(request)
+    assert_not_locked_out(request)
+    raw = x_portal_token or token
+    if not raw:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Portal token is required")
+    record = await _resolve_link_token(request, session, raw, burn_use=False)
+
+    settings = get_settings()
+    ttl = max(1, int(settings.portal_otp_ttl_minutes))
+    if record.otp_email:
+        # Каждый запрос выдаёт НОВЫЙ код и обнуляет счётчик попыток: иначе
+        # исчерпав попытки, легитимный получатель остался бы без входа.
+        code = f"{secrets.randbelow(1_000_000):06d}"
+        record.otp_code_hash = _hash_token(code)
+        record.otp_expires_at = _utcnow() + timedelta(minutes=ttl)
+        record.otp_attempts = 0
+        await session.commit()
+        outcome = await send_otp_code(
+            tenant_id=str(record.tenant_id),
+            recipient=record.otp_email,
+            code=code,
+            ttl_minutes=ttl,
+        )
+        if not outcome.delivered:
+            # Код уже записан, но не дошёл — гасим его, чтобы «отправлено» не
+            # означало «где-то лежит действующий код».
+            _clear_otp(record)
+            await session.commit()
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, outcome.reason)
+
+    return PortalOtpResponse(
+        message="Если ссылка привязана к получателю, код отправлен на его адрес",
+        expires_in_minutes=ttl,
+    )
+
+
 @router.post("/session", response_model=PortalSessionResponse)
 async def create_portal_session(
     request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
     x_portal_token: Annotated[str | None, Header(alias="X-Portal-Token")] = None,
     token: Annotated[str | None, Query()] = None,
+    code: Annotated[
+        str | None,
+        Query(max_length=16, description="Одноразовый код, если ссылка привязана к получателю"),
+    ] = None,
 ) -> PortalSessionResponse:
     """SEC-68 (разд. 68.1): обменять ссылочный токен на короткоживущий сеансовый.
 
@@ -749,6 +860,36 @@ async def create_portal_session(
     record = await _resolve_link_token(request, session, raw, burn_use=True)
 
     settings = get_settings()
+    if record.otp_email:
+        # SEC-68 (разд. 68.1): ссылка привязана к получателю — одной ссылки мало.
+        if not code:
+            raise HTTPException(
+                status.HTTP_401_UNAUTHORIZED,
+                "Ссылка привязана к получателю: запросите код и введите его",
+            )
+        if not _otp_alive(record):
+            raise HTTPException(
+                status.HTTP_401_UNAUTHORIZED,
+                "Код не запрашивался или истёк: запросите новый",
+            )
+        if (record.otp_attempts or 0) >= max(1, int(settings.portal_otp_max_attempts)):
+            # Гасим код целиком: следующая попытка должна начинаться с нового
+            # кода, иначе счётчик обходится повторными запросами сеанса.
+            _clear_otp(record)
+            await session.commit()
+            record_auth_failure(request)
+            raise HTTPException(
+                status.HTTP_401_UNAUTHORIZED,
+                "Слишком много неверных попыток: запросите новый код",
+            )
+        if not hmac.compare_digest(_hash_token(code.strip()), record.otp_code_hash or ""):
+            record.otp_attempts = (record.otp_attempts or 0) + 1
+            await session.commit()
+            record_auth_failure(request)
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Неверный код")
+        # Код одноразовый: вошли — погасили.
+        _clear_otp(record)
+
     link_expires = _as_utc(record.expires_at)
     session_expires = min(
         _utcnow() + timedelta(minutes=settings.portal_session_ttl_minutes), link_expires
