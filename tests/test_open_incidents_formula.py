@@ -156,3 +156,29 @@ async def test_сводка_карты_рисков_считает_живые_п
 
     assert summary.status_code == 200, summary.text
     assert summary.json()["incident_pressure"] == 1
+
+
+def test_мёртвый_жизненный_цикл_incident_case_не_воскрешён() -> None:
+    """Срез-117: слой ЖЦ ``IncidentCase`` удалён — сторож против возврата вслепую.
+
+    ``IncidentCaseService`` / ``IncidentInvestigationService`` /
+    ``RiskReviewTriggerService`` описывали переходы статусов таблицы, которую
+    не заполняет ни одна ручка, и не имели потребителей в продукте. Живой
+    контур происшествий — ядровая ``Incident``; второе описание того же
+    процесса означало бы два места правды.
+
+    Если контур понадобится — возвращать его надо ВМЕСТЕ с ручками; тогда этот
+    тест обновляют осознанно.
+    """
+
+    import app.modules.incidents as incidents
+
+    for dead in (
+        "IncidentCaseService",
+        "IncidentInvestigationService",
+        "RiskReviewTriggerService",
+    ):
+        assert not hasattr(incidents, dead), dead
+    # Живые операции контура на месте.
+    assert hasattr(incidents, "register_incident")
+    assert hasattr(incidents, "append_log_entry")

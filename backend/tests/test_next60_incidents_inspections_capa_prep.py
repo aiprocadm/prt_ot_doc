@@ -3,20 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from app.modules.capa.service import CorrectiveActionService, FindingService, PrescriptionService
-from app.modules.incidents.service import IncidentCaseService, RiskReviewTriggerService
 from app.modules.inspection_prep.service import GapAnalysisService, InspectionPrepPackageService
 from app.modules.inspections.service import InspectionChecklistService, InspectionService
-
-
-def test_incident_status_transitions() -> None:
-    assert IncidentCaseService.validate_transition("draft", "registered") is True
-    assert IncidentCaseService.validate_transition("investigating", "registered") is False
-    assert IncidentCaseService.can_close(has_open_actions=True, manual_override=False) is False
-    assert IncidentCaseService.can_close(has_open_actions=True, manual_override=True) is True
-    assert IncidentCaseService.next_status_on_register("draft") == "registered"
-    assert (
-        IncidentCaseService.close_status(has_open_actions=False, manual_override=False) == "closed"
-    )
 
 
 def test_inspection_checklist_snapshot_semantics() -> None:
@@ -62,8 +50,10 @@ def test_inspection_prep_gap_detection_logic() -> None:
     assert {gap.gap_type for gap in gaps} == {"missing_doc", "open_prescription", "open_risk"}
 
 
-def test_risk_review_trigger_on_incident_high_finding() -> None:
-    assert RiskReviewTriggerService.needs_trigger(False, "critical") is True
+def test_finding_requests_risk_review_on_high_severity() -> None:
+    # Срез-117: проверка триггера пересмотра риска осталась только по живому
+    # `FindingService`; мёртвый `RiskReviewTriggerService` удалён вместе со
+    # слоем жизненного цикла `IncidentCase`.
     assert FindingService.should_request_risk_review("high") is True
 
 
