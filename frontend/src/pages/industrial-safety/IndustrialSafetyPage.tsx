@@ -1,4 +1,6 @@
 import { useCallback, useState } from "react";
+import { Can } from "@/components/permissions/Can";
+import { PERMISSIONS } from "@/permissions/permissions";
 
 import {
   industrialSafetyApi,
@@ -240,16 +242,20 @@ const IndustrialSafetyPage = () => {
           */}
           {!loading && !error ? (
             <div className="flex flex-wrap gap-2">
-              <PcPlanFormDialog
-                onSubmitted={() => void reload()}
-                trigger={<Button>Завести план ПК</Button>}
-              />
-              {data.pcPlans.length > 0 ? (
-                <PcMeasureFormDialog
-                  plans={data.pcPlans}
+              <Can permission={PERMISSIONS.INDUSTRIAL_SAFETY_MANAGE}>
+                <PcPlanFormDialog
                   onSubmitted={() => void reload()}
-                  trigger={<Button>Запланировать мероприятие</Button>}
+                  trigger={<Button>Завести план ПК</Button>}
                 />
+              </Can>
+              {data.pcPlans.length > 0 ? (
+                <Can permission={PERMISSIONS.INDUSTRIAL_SAFETY_MANAGE}>
+                  <PcMeasureFormDialog
+                    plans={data.pcPlans}
+                    onSubmitted={() => void reload()}
+                    trigger={<Button>Запланировать мероприятие</Button>}
+                  />
+                </Can>
               ) : null}
             </div>
           ) : null}
@@ -295,16 +301,18 @@ const IndustrialSafetyPage = () => {
                   id: "actions",
                   header: "Действия",
                   cell: ({ row }) => (
-                    <PcMeasureFormDialog
-                      plans={data.pcPlans}
-                      initialData={row.original}
-                      onSubmitted={() => void reload()}
-                      trigger={
-                        <Button variant="ghost" size="sm">
-                          Изменить
-                        </Button>
-                      }
-                    />
+                    <Can permission={PERMISSIONS.INDUSTRIAL_SAFETY_MANAGE}>
+                      <PcMeasureFormDialog
+                        plans={data.pcPlans}
+                        initialData={row.original}
+                        onSubmitted={() => void reload()}
+                        trigger={
+                          <Button variant="ghost" size="sm">
+                            Изменить
+                          </Button>
+                        }
+                      />
+                    </Can>
                   ),
                 },
               ]}
@@ -330,11 +338,13 @@ const IndustrialSafetyPage = () => {
           */}
           {!loading && !error ? (
             <div>
-              <OpoAttestationFormDialog
-                persons={data.persons}
-                onSubmitted={() => void reload()}
-                trigger={<Button>Внести аттестацию</Button>}
-              />
+              <Can permission={PERMISSIONS.INDUSTRIAL_SAFETY_MANAGE}>
+                <OpoAttestationFormDialog
+                  persons={data.persons}
+                  onSubmitted={() => void reload()}
+                  trigger={<Button>Внести аттестацию</Button>}
+                />
+              </Can>
             </div>
           ) : null}
           {!loading && !error && attestationRegistry.total === 0 ? (
@@ -378,16 +388,18 @@ const IndustrialSafetyPage = () => {
                   id: "actions",
                   header: "Действия",
                   cell: ({ row }) => (
-                    <OpoAttestationFormDialog
-                      persons={data.persons}
-                      initialData={row.original}
-                      onSubmitted={() => void reload()}
-                      trigger={
-                        <Button variant="ghost" size="sm">
-                          Изменить
-                        </Button>
-                      }
-                    />
+                    <Can permission={PERMISSIONS.INDUSTRIAL_SAFETY_MANAGE}>
+                      <OpoAttestationFormDialog
+                        persons={data.persons}
+                        initialData={row.original}
+                        onSubmitted={() => void reload()}
+                        trigger={
+                          <Button variant="ghost" size="sm">
+                            Изменить
+                          </Button>
+                        }
+                      />
+                    </Can>
                   ),
                 },
               ]}
@@ -429,11 +441,13 @@ const IndustrialSafetyPage = () => {
           {!loading && !error ? (
             <div className="flex flex-wrap gap-2">
               {data.facilities.length > 0 ? (
-                <OpoDeviceFormDialog
-                  facilities={data.facilities}
-                  onSubmitted={() => void reload()}
-                  trigger={<Button>Завести устройство</Button>}
-                />
+                <Can permission={PERMISSIONS.INDUSTRIAL_SAFETY_MANAGE}>
+                  <OpoDeviceFormDialog
+                    facilities={data.facilities}
+                    onSubmitted={() => void reload()}
+                    trigger={<Button>Завести устройство</Button>}
+                  />
+                </Can>
               ) : (
                 <p className="text-sm text-muted-foreground">
                   Устройства учитываются на объекте: сначала заведите объект в
@@ -441,11 +455,13 @@ const IndustrialSafetyPage = () => {
                 </p>
               )}
               {data.devices.length > 0 ? (
-                <OpoDeviceWorkFormDialog
-                  devices={data.devices}
-                  onSubmitted={() => void reload()}
-                  trigger={<Button>Записать работу</Button>}
-                />
+                <Can permission={PERMISSIONS.INDUSTRIAL_SAFETY_MANAGE}>
+                  <OpoDeviceWorkFormDialog
+                    devices={data.devices}
+                    onSubmitted={() => void reload()}
+                    trigger={<Button>Записать работу</Button>}
+                  />
+                </Can>
               ) : null}
             </div>
           ) : null}
@@ -517,26 +533,30 @@ const IndustrialSafetyPage = () => {
                   header: "Действия",
                   cell: ({ row }) => (
                     <div className="flex gap-1">
-                      <OpoDeviceFormDialog
-                        facilities={data.facilities}
-                        initialData={row.original}
-                        onSubmitted={() => void reload()}
-                        trigger={
-                          <Button variant="ghost" size="sm">
-                            Изменить
-                          </Button>
-                        }
-                      />
-                      <OpoDeviceWorkFormDialog
-                        devices={data.devices}
-                        presetDeviceId={row.original.id}
-                        onSubmitted={() => void reload()}
-                        trigger={
-                          <Button variant="ghost" size="sm">
-                            Работа
-                          </Button>
-                        }
-                      />
+                      <Can permission={PERMISSIONS.INDUSTRIAL_SAFETY_MANAGE}>
+                        <OpoDeviceFormDialog
+                          facilities={data.facilities}
+                          initialData={row.original}
+                          onSubmitted={() => void reload()}
+                          trigger={
+                            <Button variant="ghost" size="sm">
+                              Изменить
+                            </Button>
+                          }
+                        />
+                      </Can>
+                      <Can permission={PERMISSIONS.INDUSTRIAL_SAFETY_MANAGE}>
+                        <OpoDeviceWorkFormDialog
+                          devices={data.devices}
+                          presetDeviceId={row.original.id}
+                          onSubmitted={() => void reload()}
+                          trigger={
+                            <Button variant="ghost" size="sm">
+                              Работа
+                            </Button>
+                          }
+                        />
+                      </Can>
                     </div>
                   ),
                 },
@@ -560,11 +580,13 @@ const IndustrialSafetyPage = () => {
       */}
       {section === "facilities" && !loading && !error ? (
         <div>
-          <OpoFacilityFormDialog
-            sites={data.sites}
-            onSubmitted={() => void reload()}
-            trigger={<Button>Завести объект</Button>}
-          />
+          <Can permission={PERMISSIONS.INDUSTRIAL_SAFETY_MANAGE}>
+            <OpoFacilityFormDialog
+              sites={data.sites}
+              onSubmitted={() => void reload()}
+              trigger={<Button>Завести объект</Button>}
+            />
+          </Can>
         </div>
       ) : null}
       {section === "facilities" &&
@@ -613,16 +635,18 @@ const IndustrialSafetyPage = () => {
               id: "actions",
               header: "Действия",
               cell: ({ row }) => (
-                <OpoFacilityFormDialog
-                  sites={data.sites}
-                  initialData={row.original}
-                  onSubmitted={() => void reload()}
-                  trigger={
-                    <Button variant="ghost" size="sm">
-                      Изменить
-                    </Button>
-                  }
-                />
+                <Can permission={PERMISSIONS.INDUSTRIAL_SAFETY_MANAGE}>
+                  <OpoFacilityFormDialog
+                    sites={data.sites}
+                    initialData={row.original}
+                    onSubmitted={() => void reload()}
+                    trigger={
+                      <Button variant="ghost" size="sm">
+                        Изменить
+                      </Button>
+                    }
+                  />
+                </Can>
               ),
             },
           ]}

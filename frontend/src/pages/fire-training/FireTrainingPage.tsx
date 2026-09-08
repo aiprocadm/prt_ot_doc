@@ -1,4 +1,6 @@
 import { useCallback, useState } from "react";
+import { Can } from "@/components/permissions/Can";
+import { PERMISSIONS } from "@/permissions/permissions";
 import { Link } from "react-router-dom";
 
 import { fireSafetyApi } from "@/api/fireSafety";
@@ -208,11 +210,13 @@ const FireTrainingPage = () => {
           */}
           {!drills.loading && !drills.error ? (
             <div>
-              <FireDrillFormDialog
-                sites={drills.data.sites}
-                onSubmitted={() => void drills.reload()}
-                trigger={<Button>Запланировать тренировку</Button>}
-              />
+              <Can permission={PERMISSIONS.FIRE_SAFETY_MANAGE}>
+                <FireDrillFormDialog
+                  sites={drills.data.sites}
+                  onSubmitted={() => void drills.reload()}
+                  trigger={<Button>Запланировать тренировку</Button>}
+                />
+              </Can>
             </div>
           ) : null}
           {!drills.loading && !drills.error && drillRegistry.total === 0 ? (
@@ -258,16 +262,18 @@ const FireTrainingPage = () => {
                   // Правка и внесение протокола — одна и та же форма: пока
                   // тренировка не проведена, протокольная часть свёрнута.
                   cell: ({ row }) => (
-                    <FireDrillFormDialog
-                      sites={drills.data.sites}
-                      initialData={row.original}
-                      onSubmitted={() => void drills.reload()}
-                      trigger={
-                        <Button variant="ghost" size="sm">
-                          {row.original.held_on ? "Изменить" : "Протокол"}
-                        </Button>
-                      }
-                    />
+                    <Can permission={PERMISSIONS.FIRE_SAFETY_MANAGE}>
+                      <FireDrillFormDialog
+                        sites={drills.data.sites}
+                        initialData={row.original}
+                        onSubmitted={() => void drills.reload()}
+                        trigger={
+                          <Button variant="ghost" size="sm">
+                            {row.original.held_on ? "Изменить" : "Протокол"}
+                          </Button>
+                        }
+                      />
+                    </Can>
                   ),
                 },
               ]}

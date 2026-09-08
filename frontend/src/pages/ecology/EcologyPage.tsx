@@ -1,4 +1,6 @@
 import { useCallback, useState } from "react";
+import { Can } from "@/components/permissions/Can";
+import { PERMISSIONS } from "@/permissions/permissions";
 
 import { ecologyApi } from "@/api/ecology";
 import { sitesApi } from "@/api/sites";
@@ -350,11 +352,13 @@ const EcologyPage = () => {
       */}
       {section === "facilities" && !loading && !error ? (
         <div>
-          <EcologyFacilityFormDialog
-            sites={data.sites}
-            onSubmitted={() => void reload()}
-            trigger={<Button>Завести объект</Button>}
-          />
+          <Can permission={PERMISSIONS.ECOLOGY_MANAGE}>
+            <EcologyFacilityFormDialog
+              sites={data.sites}
+              onSubmitted={() => void reload()}
+              trigger={<Button>Завести объект</Button>}
+            />
+          </Can>
         </div>
       ) : null}
       {section === "facilities" &&
@@ -406,16 +410,18 @@ const EcologyPage = () => {
               id: "actions",
               header: "Действия",
               cell: ({ row }) => (
-                <EcologyFacilityFormDialog
-                  sites={data.sites}
-                  initialData={row.original}
-                  onSubmitted={() => void reload()}
-                  trigger={
-                    <Button variant="ghost" size="sm">
-                      Изменить
-                    </Button>
-                  }
-                />
+                <Can permission={PERMISSIONS.ECOLOGY_MANAGE}>
+                  <EcologyFacilityFormDialog
+                    sites={data.sites}
+                    initialData={row.original}
+                    onSubmitted={() => void reload()}
+                    trigger={
+                      <Button variant="ghost" size="sm">
+                        Изменить
+                      </Button>
+                    }
+                  />
+                </Can>
               ),
             },
           ]}
@@ -444,11 +450,13 @@ const EcologyPage = () => {
             о превышении не судит.
           </p>
           <div>
-            <EcologyWastePassportFormDialog
-              facilities={data.facilities}
-              onSubmitted={() => void reload()}
-              trigger={<Button>Завести паспорт</Button>}
-            />
+            <Can permission={PERMISSIONS.ECOLOGY_MANAGE}>
+              <EcologyWastePassportFormDialog
+                facilities={data.facilities}
+                onSubmitted={() => void reload()}
+                trigger={<Button>Завести паспорт</Button>}
+              />
+            </Can>
           </div>
           {passportRegistry.total === 0 ? (
             <EmptyState
@@ -488,16 +496,18 @@ const EcologyPage = () => {
                   id: "actions",
                   header: "Действия",
                   cell: ({ row }) => (
-                    <EcologyWastePassportFormDialog
-                      facilities={data.facilities}
-                      initialData={row.original}
-                      onSubmitted={() => void reload()}
-                      trigger={
-                        <Button variant="ghost" size="sm">
-                          Изменить
-                        </Button>
-                      }
-                    />
+                    <Can permission={PERMISSIONS.ECOLOGY_MANAGE}>
+                      <EcologyWastePassportFormDialog
+                        facilities={data.facilities}
+                        initialData={row.original}
+                        onSubmitted={() => void reload()}
+                        trigger={
+                          <Button variant="ghost" size="sm">
+                            Изменить
+                          </Button>
+                        }
+                      />
+                    </Can>
                   ),
                 },
               ]}
@@ -522,12 +532,14 @@ const EcologyPage = () => {
           */}
           {data.passports.length > 0 ? (
             <div>
-              <EcologyWasteMovementFormDialog
-                passports={data.passports}
-                contracts={data.wasteContracts}
-                onSubmitted={() => void reload()}
-                trigger={<Button>Записать движение</Button>}
-              />
+              <Can permission={PERMISSIONS.ECOLOGY_MANAGE}>
+                <EcologyWasteMovementFormDialog
+                  passports={data.passports}
+                  contracts={data.wasteContracts}
+                  onSubmitted={() => void reload()}
+                  trigger={<Button>Записать движение</Button>}
+                />
+              </Can>
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
@@ -584,17 +596,19 @@ const EcologyPage = () => {
                   id: "actions",
                   header: "Действия",
                   cell: ({ row }) => (
-                    <EcologyWasteMovementFormDialog
-                      passports={data.passports}
-                      contracts={data.wasteContracts}
-                      initialData={row.original}
-                      onSubmitted={() => void reload()}
-                      trigger={
-                        <Button variant="ghost" size="sm">
-                          Изменить
-                        </Button>
-                      }
-                    />
+                    <Can permission={PERMISSIONS.ECOLOGY_MANAGE}>
+                      <EcologyWasteMovementFormDialog
+                        passports={data.passports}
+                        contracts={data.wasteContracts}
+                        initialData={row.original}
+                        onSubmitted={() => void reload()}
+                        trigger={
+                          <Button variant="ghost" size="sm">
+                            Изменить
+                          </Button>
+                        }
+                      />
+                    </Can>
                   ),
                 },
               ]}
@@ -630,18 +644,22 @@ const EcologyPage = () => {
           */}
           <div className="flex flex-wrap gap-2">
             {data.facilities.length > 0 ? (
-              <EcologyEmissionSourceFormDialog
-                facilities={data.facilities}
-                onSubmitted={() => void reload()}
-                trigger={<Button>Завести источник</Button>}
-              />
+              <Can permission={PERMISSIONS.ECOLOGY_MANAGE}>
+                <EcologyEmissionSourceFormDialog
+                  facilities={data.facilities}
+                  onSubmitted={() => void reload()}
+                  trigger={<Button>Завести источник</Button>}
+                />
+              </Can>
             ) : null}
             {data.sources.length > 0 ? (
-              <EcologyEmissionNormFormDialog
-                sources={data.sources}
-                onSubmitted={() => void reload()}
-                trigger={<Button>Внести норматив</Button>}
-              />
+              <Can permission={PERMISSIONS.ECOLOGY_MANAGE}>
+                <EcologyEmissionNormFormDialog
+                  sources={data.sources}
+                  onSubmitted={() => void reload()}
+                  trigger={<Button>Внести норматив</Button>}
+                />
+              </Can>
             ) : null}
           </div>
           {data.facilities.length === 0 ? (
@@ -690,16 +708,18 @@ const EcologyPage = () => {
                   id: "actions",
                   header: "Действия",
                   cell: ({ row }) => (
-                    <EcologyEmissionSourceFormDialog
-                      facilities={data.facilities}
-                      initialData={row.original}
-                      onSubmitted={() => void reload()}
-                      trigger={
-                        <Button variant="ghost" size="sm">
-                          Изменить
-                        </Button>
-                      }
-                    />
+                    <Can permission={PERMISSIONS.ECOLOGY_MANAGE}>
+                      <EcologyEmissionSourceFormDialog
+                        facilities={data.facilities}
+                        initialData={row.original}
+                        onSubmitted={() => void reload()}
+                        trigger={
+                          <Button variant="ghost" size="sm">
+                            Изменить
+                          </Button>
+                        }
+                      />
+                    </Can>
                   ),
                 },
               ]}
@@ -745,16 +765,18 @@ const EcologyPage = () => {
                   id: "actions",
                   header: "Действия",
                   cell: ({ row }) => (
-                    <EcologyEmissionNormFormDialog
-                      sources={data.sources}
-                      initialData={row.original}
-                      onSubmitted={() => void reload()}
-                      trigger={
-                        <Button variant="ghost" size="sm">
-                          Изменить
-                        </Button>
-                      }
-                    />
+                    <Can permission={PERMISSIONS.ECOLOGY_MANAGE}>
+                      <EcologyEmissionNormFormDialog
+                        sources={data.sources}
+                        initialData={row.original}
+                        onSubmitted={() => void reload()}
+                        trigger={
+                          <Button variant="ghost" size="sm">
+                            Изменить
+                          </Button>
+                        }
+                      />
+                    </Can>
                   ),
                 },
               ]}
@@ -791,17 +813,21 @@ const EcologyPage = () => {
           */}
           {data.sources.length > 0 ? (
             <div className="flex flex-wrap gap-2">
-              <EcologyMonitoringPlanFormDialog
-                sources={data.sources}
-                onSubmitted={() => void reload()}
-                trigger={<Button>Внести строку плана</Button>}
-              />
-              <EcologyMeasurementFormDialog
-                sources={data.sources}
-                planItems={data.planItems}
-                onSubmitted={() => void reload()}
-                trigger={<Button>Внести замер</Button>}
-              />
+              <Can permission={PERMISSIONS.ECOLOGY_MANAGE}>
+                <EcologyMonitoringPlanFormDialog
+                  sources={data.sources}
+                  onSubmitted={() => void reload()}
+                  trigger={<Button>Внести строку плана</Button>}
+                />
+              </Can>
+              <Can permission={PERMISSIONS.ECOLOGY_MANAGE}>
+                <EcologyMeasurementFormDialog
+                  sources={data.sources}
+                  planItems={data.planItems}
+                  onSubmitted={() => void reload()}
+                  trigger={<Button>Внести замер</Button>}
+                />
+              </Can>
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
@@ -850,16 +876,18 @@ const EcologyPage = () => {
                   id: "actions",
                   header: "Действия",
                   cell: ({ row }) => (
-                    <EcologyMonitoringPlanFormDialog
-                      sources={data.sources}
-                      initialData={row.original}
-                      onSubmitted={() => void reload()}
-                      trigger={
-                        <Button variant="ghost" size="sm">
-                          Изменить
-                        </Button>
-                      }
-                    />
+                    <Can permission={PERMISSIONS.ECOLOGY_MANAGE}>
+                      <EcologyMonitoringPlanFormDialog
+                        sources={data.sources}
+                        initialData={row.original}
+                        onSubmitted={() => void reload()}
+                        trigger={
+                          <Button variant="ghost" size="sm">
+                            Изменить
+                          </Button>
+                        }
+                      />
+                    </Can>
                   ),
                 },
               ]}
@@ -906,17 +934,19 @@ const EcologyPage = () => {
                   id: "actions",
                   header: "Действия",
                   cell: ({ row }) => (
-                    <EcologyMeasurementFormDialog
-                      sources={data.sources}
-                      planItems={data.planItems}
-                      initialData={row.original}
-                      onSubmitted={() => void reload()}
-                      trigger={
-                        <Button variant="ghost" size="sm">
-                          Изменить
-                        </Button>
-                      }
-                    />
+                    <Can permission={PERMISSIONS.ECOLOGY_MANAGE}>
+                      <EcologyMeasurementFormDialog
+                        sources={data.sources}
+                        planItems={data.planItems}
+                        initialData={row.original}
+                        onSubmitted={() => void reload()}
+                        trigger={
+                          <Button variant="ghost" size="sm">
+                            Изменить
+                          </Button>
+                        }
+                      />
+                    </Can>
                   ),
                 },
               ]}
@@ -954,18 +984,22 @@ const EcologyPage = () => {
           {/* Срез-101: точка заводится на объекте НВОС, объём — на точке. */}
           <div className="flex flex-wrap gap-2">
             {data.facilities.length > 0 ? (
-              <EcologyWaterPointFormDialog
-                facilities={data.facilities}
-                onSubmitted={() => void reload()}
-                trigger={<Button>Завести точку</Button>}
-              />
+              <Can permission={PERMISSIONS.ECOLOGY_MANAGE}>
+                <EcologyWaterPointFormDialog
+                  facilities={data.facilities}
+                  onSubmitted={() => void reload()}
+                  trigger={<Button>Завести точку</Button>}
+                />
+              </Can>
             ) : null}
             {data.waterPoints.length > 0 ? (
-              <EcologyWaterRecordFormDialog
-                points={data.waterPoints}
-                onSubmitted={() => void reload()}
-                trigger={<Button>Записать объём</Button>}
-              />
+              <Can permission={PERMISSIONS.ECOLOGY_MANAGE}>
+                <EcologyWaterRecordFormDialog
+                  points={data.waterPoints}
+                  onSubmitted={() => void reload()}
+                  trigger={<Button>Записать объём</Button>}
+                />
+              </Can>
             ) : null}
           </div>
           {data.facilities.length === 0 ? (
@@ -1014,16 +1048,18 @@ const EcologyPage = () => {
                   id: "actions",
                   header: "Действия",
                   cell: ({ row }) => (
-                    <EcologyWaterPointFormDialog
-                      facilities={data.facilities}
-                      initialData={row.original}
-                      onSubmitted={() => void reload()}
-                      trigger={
-                        <Button variant="ghost" size="sm">
-                          Изменить
-                        </Button>
-                      }
-                    />
+                    <Can permission={PERMISSIONS.ECOLOGY_MANAGE}>
+                      <EcologyWaterPointFormDialog
+                        facilities={data.facilities}
+                        initialData={row.original}
+                        onSubmitted={() => void reload()}
+                        trigger={
+                          <Button variant="ghost" size="sm">
+                            Изменить
+                          </Button>
+                        }
+                      />
+                    </Can>
                   ),
                 },
               ]}
@@ -1060,16 +1096,18 @@ const EcologyPage = () => {
                   id: "actions",
                   header: "Действия",
                   cell: ({ row }) => (
-                    <EcologyWaterRecordFormDialog
-                      points={data.waterPoints}
-                      initialData={row.original}
-                      onSubmitted={() => void reload()}
-                      trigger={
-                        <Button variant="ghost" size="sm">
-                          Изменить
-                        </Button>
-                      }
-                    />
+                    <Can permission={PERMISSIONS.ECOLOGY_MANAGE}>
+                      <EcologyWaterRecordFormDialog
+                        points={data.waterPoints}
+                        initialData={row.original}
+                        onSubmitted={() => void reload()}
+                        trigger={
+                          <Button variant="ghost" size="sm">
+                            Изменить
+                          </Button>
+                        }
+                      />
+                    </Can>
                   ),
                 },
               ]}
@@ -1110,14 +1148,18 @@ const EcologyPage = () => {
             не внесена» вместо ложного нуля.
           */}
           <div className="flex flex-wrap gap-2">
-            <EcologyFeeLineFormDialog
-              onSubmitted={() => void reload()}
-              trigger={<Button>Внести строку расчёта</Button>}
-            />
-            <EcologyFeeRateFormDialog
-              onSubmitted={() => void reload()}
-              trigger={<Button>Внести ставку</Button>}
-            />
+            <Can permission={PERMISSIONS.ECOLOGY_MANAGE}>
+              <EcologyFeeLineFormDialog
+                onSubmitted={() => void reload()}
+                trigger={<Button>Внести строку расчёта</Button>}
+              />
+            </Can>
+            <Can permission={PERMISSIONS.ECOLOGY_MANAGE}>
+              <EcologyFeeRateFormDialog
+                onSubmitted={() => void reload()}
+                trigger={<Button>Внести ставку</Button>}
+              />
+            </Can>
           </div>
           {feeLineRegistry.total === 0 ? (
             <EmptyState
@@ -1152,15 +1194,17 @@ const EcologyPage = () => {
                   id: "actions",
                   header: "Действия",
                   cell: ({ row }) => (
-                    <EcologyFeeLineFormDialog
-                      initialData={row.original}
-                      onSubmitted={() => void reload()}
-                      trigger={
-                        <Button variant="ghost" size="sm">
-                          Изменить
-                        </Button>
-                      }
-                    />
+                    <Can permission={PERMISSIONS.ECOLOGY_MANAGE}>
+                      <EcologyFeeLineFormDialog
+                        initialData={row.original}
+                        onSubmitted={() => void reload()}
+                        trigger={
+                          <Button variant="ghost" size="sm">
+                            Изменить
+                          </Button>
+                        }
+                      />
+                    </Can>
                   ),
                 },
               ]}
@@ -1196,15 +1240,17 @@ const EcologyPage = () => {
                   id: "actions",
                   header: "Действия",
                   cell: ({ row }) => (
-                    <EcologyFeeRateFormDialog
-                      initialData={row.original}
-                      onSubmitted={() => void reload()}
-                      trigger={
-                        <Button variant="ghost" size="sm">
-                          Изменить
-                        </Button>
-                      }
-                    />
+                    <Can permission={PERMISSIONS.ECOLOGY_MANAGE}>
+                      <EcologyFeeRateFormDialog
+                        initialData={row.original}
+                        onSubmitted={() => void reload()}
+                        trigger={
+                          <Button variant="ghost" size="sm">
+                            Изменить
+                          </Button>
+                        }
+                      />
+                    </Can>
                   ),
                 },
               ]}
@@ -1243,10 +1289,12 @@ const EcologyPage = () => {
             правка и отметка об исполнении — той же формой из строки.
           */}
           <div>
-            <EcologyDeadlineFormDialog
-              onSubmitted={() => void reload()}
-              trigger={<Button>Внести срок</Button>}
-            />
+            <Can permission={PERMISSIONS.ECOLOGY_MANAGE}>
+              <EcologyDeadlineFormDialog
+                onSubmitted={() => void reload()}
+                trigger={<Button>Внести срок</Button>}
+              />
+            </Can>
           </div>
           {reportingRegistry.total === 0 ? (
             <EmptyState
@@ -1297,15 +1345,17 @@ const EcologyPage = () => {
                   id: "actions",
                   header: "Действия",
                   cell: ({ row }) => (
-                    <EcologyDeadlineFormDialog
-                      initialData={row.original}
-                      onSubmitted={() => void reload()}
-                      trigger={
-                        <Button variant="ghost" size="sm">
-                          Изменить
-                        </Button>
-                      }
-                    />
+                    <Can permission={PERMISSIONS.ECOLOGY_MANAGE}>
+                      <EcologyDeadlineFormDialog
+                        initialData={row.original}
+                        onSubmitted={() => void reload()}
+                        trigger={
+                          <Button variant="ghost" size="sm">
+                            Изменить
+                          </Button>
+                        }
+                      />
+                    </Can>
                   ),
                 },
               ]}

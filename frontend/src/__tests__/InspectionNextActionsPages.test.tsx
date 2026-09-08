@@ -2,6 +2,8 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { PERMISSIONS } from "@/permissions/permissions";
+import { useAuthStore } from "@/stores/auth";
 
 import FireInspectionsPage from "@/pages/fire-inspections/FireInspectionsPage";
 import FireTrainingPage from "@/pages/fire-training/FireTrainingPage";
@@ -100,6 +102,25 @@ const populatedDrill = {
 
 describe("Inspection/fire next actions", () => {
   beforeEach(() => {
+    // Срез-120: кнопки записи закрыты правом `<контур>.manage` — экран
+    // рендерится от лица того, кому запись разрешена.
+    useAuthStore.setState({
+      user: {
+        id: "discipline-writer",
+        created_at: "2024-01-01",
+        updated_at: "2024-01-02",
+        email: "writer@example.com",
+        full_name: "Discipline Writer",
+        roles: ["ot_specialist"],
+        permissions: [
+          PERMISSIONS.FIRE_SAFETY_VIEW,
+          PERMISSIONS.FIRE_SAFETY_MANAGE,
+        ],
+        attributes: { tenant_id: "tenant-1" },
+      },
+      loading: false,
+      error: null,
+    } as never);
     getInspectionWorkspaceSnapshotMock.mockReset();
     getFireTrainingSnapshotMock.mockReset();
     listDrillsMock.mockReset();

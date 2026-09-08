@@ -136,6 +136,37 @@ def test_модуль_не_объявляет_свой_список_ролей(d
     assert '_ROLES = ["' not in source, f"{code}: список ролей снова написан руками"
 
 
+#: Экраны контура: где стоят кнопки записи (срез-120).
+CONTOUR_PAGES: dict[str, tuple[str, ...]] = {
+    "fire_safety": (
+        "frontend/src/pages/fire-safety/FireSafetyPage.tsx",
+        "frontend/src/pages/fire-training/FireTrainingPage.tsx",
+    ),
+    "industrial_safety": ("frontend/src/pages/industrial-safety/IndustrialSafetyPage.tsx",),
+    "ecology": ("frontend/src/pages/ecology/EcologyPage.tsx",),
+    "civil_defense": ("frontend/src/pages/civilDefense/CivilDefensePage.tsx",),
+    "road_safety": ("frontend/src/pages/roadSafety/RoadSafetyPage.tsx",),
+}
+
+
+@pytest.mark.parametrize("discipline,code", sorted(CONTOURS.items(), key=lambda i: i[1]))
+def test_каждая_форма_записи_закрыта_правом(discipline: Discipline, code: str) -> None:
+    """Срез-120: новая форма без права — кнопка, которая приводит к отказу сервера.
+
+    Считаем в лоб: сколько на экране форм записи, столько и обёрток с правом
+    ``<модуль>.manage``. Добавили форму и забыли право — счёт не сойдётся.
+    """
+
+    permission = f"PERMISSIONS.{code.upper()}_MANAGE"
+    for page in CONTOUR_PAGES[code]:
+        source = Path(page).read_text(encoding="utf-8")
+        dialogs = set(re.findall(r"import \{ (\w+Dialog) \} from \"@/features/", source))
+        assert dialogs, f"{page}: формы записи не найдены"
+        used = sum(len(re.findall(rf"<{name}[\s/>]", source)) for name in dialogs)
+        gates = source.count(f"<Can permission={{{permission}}}>")
+        assert used == gates, f"{page}: форм записи {used}, а обёрток с {permission} — {gates}"
+
+
 def test_профильная_роль_названа_только_там_где_она_есть() -> None:
     """Роль дисциплины нельзя выдумать: у ПромБеза, ГО-ЧС и БДД её в продукте нет."""
 

@@ -1,4 +1,6 @@
 import { type ColumnDef } from "@tanstack/react-table";
+import { Can } from "@/components/permissions/Can";
+import { PERMISSIONS } from "@/permissions/permissions";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
@@ -569,16 +571,18 @@ const RoadSafetyPage = () => {
         id: "actions",
         header: "Действия",
         cell: ({ row }: { row: { original: VehicleDto } }) => (
-          <VehicleFormDialog
-            sites={data.sites}
-            initialData={row.original}
-            onSubmitted={() => void reload()}
-            trigger={
-              <Button variant="ghost" size="sm">
-                Изменить
-              </Button>
-            }
-          />
+          <Can permission={PERMISSIONS.ROAD_SAFETY_MANAGE}>
+            <VehicleFormDialog
+              sites={data.sites}
+              initialData={row.original}
+              onSubmitted={() => void reload()}
+              trigger={
+                <Button variant="ghost" size="sm">
+                  Изменить
+                </Button>
+              }
+            />
+          </Can>
         ),
       },
     ],
@@ -592,17 +596,19 @@ const RoadSafetyPage = () => {
         id: "actions",
         header: "Действия",
         cell: ({ row }: { row: { original: WaybillDto } }) => (
-          <WaybillFormDialog
-            vehicles={data.vehicles}
-            drivers={data.drivers}
-            initialData={row.original}
-            onSubmitted={() => void reload()}
-            trigger={
-              <Button variant="ghost" size="sm">
-                Изменить
-              </Button>
-            }
-          />
+          <Can permission={PERMISSIONS.ROAD_SAFETY_MANAGE}>
+            <WaybillFormDialog
+              vehicles={data.vehicles}
+              drivers={data.drivers}
+              initialData={row.original}
+              onSubmitted={() => void reload()}
+              trigger={
+                <Button variant="ghost" size="sm">
+                  Изменить
+                </Button>
+              }
+            />
+          </Can>
         ),
       },
     ],
@@ -616,17 +622,19 @@ const RoadSafetyPage = () => {
         id: "actions",
         header: "Действия",
         cell: ({ row }: { row: { original: RoadAccidentDto } }) => (
-          <AccidentFormDialog
-            vehicles={data.vehicles}
-            drivers={data.drivers}
-            initialData={row.original}
-            onSubmitted={() => void reload()}
-            trigger={
-              <Button variant="ghost" size="sm">
-                Изменить
-              </Button>
-            }
-          />
+          <Can permission={PERMISSIONS.ROAD_SAFETY_MANAGE}>
+            <AccidentFormDialog
+              vehicles={data.vehicles}
+              drivers={data.drivers}
+              initialData={row.original}
+              onSubmitted={() => void reload()}
+              trigger={
+                <Button variant="ghost" size="sm">
+                  Изменить
+                </Button>
+              }
+            />
+          </Can>
         ),
       },
     ],
@@ -640,17 +648,19 @@ const RoadSafetyPage = () => {
         id: "actions",
         header: "Действия",
         cell: ({ row }: { row: { original: TrafficViolationDto } }) => (
-          <ViolationFormDialog
-            vehicles={data.vehicles}
-            drivers={data.drivers}
-            initialData={row.original}
-            onSubmitted={() => void reload()}
-            trigger={
-              <Button variant="ghost" size="sm">
-                Изменить
-              </Button>
-            }
-          />
+          <Can permission={PERMISSIONS.ROAD_SAFETY_MANAGE}>
+            <ViolationFormDialog
+              vehicles={data.vehicles}
+              drivers={data.drivers}
+              initialData={row.original}
+              onSubmitted={() => void reload()}
+              trigger={
+                <Button variant="ghost" size="sm">
+                  Изменить
+                </Button>
+              }
+            />
+          </Can>
         ),
       },
     ],
@@ -664,16 +674,18 @@ const RoadSafetyPage = () => {
         id: "actions",
         header: "Действия",
         cell: ({ row }: { row: { original: DriverDto } }) => (
-          <DriverFormDialog
-            persons={data.persons}
-            initialData={row.original}
-            onSubmitted={() => void reload()}
-            trigger={
-              <Button variant="ghost" size="sm">
-                Изменить
-              </Button>
-            }
-          />
+          <Can permission={PERMISSIONS.ROAD_SAFETY_MANAGE}>
+            <DriverFormDialog
+              persons={data.persons}
+              initialData={row.original}
+              onSubmitted={() => void reload()}
+              trigger={
+                <Button variant="ghost" size="sm">
+                  Изменить
+                </Button>
+              }
+            />
+          </Can>
         ),
       },
     ],
@@ -732,12 +744,14 @@ const RoadSafetyPage = () => {
           {/* Срез-108: нарушение вносится по машине из реестра. */}
           {!loading && !error && data.vehicles.length > 0 ? (
             <div>
-              <ViolationFormDialog
-                vehicles={data.vehicles}
-                drivers={data.drivers}
-                onSubmitted={() => void reload()}
-                trigger={<Button>Внести нарушение</Button>}
-              />
+              <Can permission={PERMISSIONS.ROAD_SAFETY_MANAGE}>
+                <ViolationFormDialog
+                  vehicles={data.vehicles}
+                  drivers={data.drivers}
+                  onSubmitted={() => void reload()}
+                  trigger={<Button>Внести нарушение</Button>}
+                />
+              </Can>
             </div>
           ) : null}
           {!loading && !error && violations.total === 0 ? (
@@ -785,12 +799,14 @@ const RoadSafetyPage = () => {
           {/* Срез-108: ДТП регистрируется по машине из реестра. */}
           {!loading && !error && data.vehicles.length > 0 ? (
             <div>
-              <AccidentFormDialog
-                vehicles={data.vehicles}
-                drivers={data.drivers}
-                onSubmitted={() => void reload()}
-                trigger={<Button>Зарегистрировать ДТП</Button>}
-              />
+              <Can permission={PERMISSIONS.ROAD_SAFETY_MANAGE}>
+                <AccidentFormDialog
+                  vehicles={data.vehicles}
+                  drivers={data.drivers}
+                  onSubmitted={() => void reload()}
+                  trigger={<Button>Зарегистрировать ДТП</Button>}
+                />
+              </Can>
             </div>
           ) : null}
           {!loading && !error && accidents.total === 0 ? (
@@ -846,12 +862,14 @@ const RoadSafetyPage = () => {
           data.vehicles.length > 0 &&
           data.drivers.length > 0 ? (
             <div>
-              <WaybillFormDialog
-                vehicles={data.vehicles}
-                drivers={data.drivers}
-                onSubmitted={() => void reload()}
-                trigger={<Button>Выписать лист</Button>}
-              />
+              <Can permission={PERMISSIONS.ROAD_SAFETY_MANAGE}>
+                <WaybillFormDialog
+                  vehicles={data.vehicles}
+                  drivers={data.drivers}
+                  onSubmitted={() => void reload()}
+                  trigger={<Button>Выписать лист</Button>}
+                />
+              </Can>
             </div>
           ) : null}
           {!loading && !error && waybills.total === 0 ? (
@@ -936,11 +954,13 @@ const RoadSafetyPage = () => {
           {/* Срез-107: карточка водителя заводится на работнике из ядра. */}
           {!loading && !error ? (
             <div>
-              <DriverFormDialog
-                persons={data.persons}
-                onSubmitted={() => void reload()}
-                trigger={<Button>Завести водителя</Button>}
-              />
+              <Can permission={PERMISSIONS.ROAD_SAFETY_MANAGE}>
+                <DriverFormDialog
+                  persons={data.persons}
+                  onSubmitted={() => void reload()}
+                  trigger={<Button>Завести водителя</Button>}
+                />
+              </Can>
             </div>
           ) : null}
           {!loading && !error && drivers.total === 0 ? (
@@ -995,11 +1015,13 @@ const RoadSafetyPage = () => {
           */}
           {!loading && !error ? (
             <div>
-              <VehicleFormDialog
-                sites={data.sites}
-                onSubmitted={() => void reload()}
-                trigger={<Button>Завести ТС</Button>}
-              />
+              <Can permission={PERMISSIONS.ROAD_SAFETY_MANAGE}>
+                <VehicleFormDialog
+                  sites={data.sites}
+                  onSubmitted={() => void reload()}
+                  trigger={<Button>Завести ТС</Button>}
+                />
+              </Can>
             </div>
           ) : null}
           {!loading && !error && registry.total === 0 ? (
