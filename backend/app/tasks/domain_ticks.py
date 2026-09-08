@@ -426,7 +426,11 @@ async def _api_deprecation_notify_tick() -> int:
     max_retries=5,
 )
 def analytics_projections_tick() -> int:
-    """BIZ-54-57 срез-97: ночная пересборка read model'ов аналитики."""
+    """BIZ-54-57 срез-97: ночная пересборка read model'ов аналитики.
+
+    Срез-128: сюда же добавлен снимок кабинета клиента — он из той же семьи и
+    стоит одно дешёвое чтение.
+    """
 
     return _run_coroutine(_analytics_projections_tick())
 
@@ -456,6 +460,59 @@ async def _analytics_projections_tick() -> int:
                 total += await orchestrator.rebuild_package_projection()
                 total += await orchestrator.rebuild_person_projection()
                 total += await orchestrator.rebuild_site_safety_projection()
+                # Срез-128: снимок кабинета клиента остался в том же положении,
+                # из которого срез-97 вытащил три соседних, — его пересобирала
+                # только Celery-задача, которую никто не звал. Кабинет —
+                # ЕДИНСТВЕННОЕ, что видит клиент: пустой снимок читается как
+                # «подрядчик ничего не сделал».
+                total += await orchestrator.rebuild_client_portal_projection()
+    return total
+
+
+@celery_app.task(
+    name="search.reindex.tick",
+    autoretry_for=RETRYABLE_EXCEPTIONS,
+    retry_backoff=True,
+    retry_jitter=True,
+    max_retries=5,
+)
+def search_reindex_tick() -> int:
+    """BIZ-54-57 срез-128: ночная пересборка поискового снимка."""
+
+    return _run_coroutine(_search_reindex_tick())
+
+
+async def _search_reindex_tick() -> int:
+    # Общий поиск и командная строка (CMD+K) читают ТОЛЬКО снимок
+    # ``search_index_entries`` — живого запроса к таблицам у них нет. А снимок
+    # пересобирала лишь ручка ``POST /search/reindex``: пока её никто не нажал,
+    # поиск честно отвечал «ничего не найдено» по живым данным. Нанятый сегодня
+    # человек не находился вовсе, а уволенный находился вечно.
+    #
+    # Это тот же случай, что проекции аналитики (срез-97) и снимок контрольных
+    # сроков (срез-116): пересборка была написана и не была НИКЕМ позвана.
+    # Ручка сохранена: после массового импорта ждать до ночи незачем.
+    #
+    # Полная пересборка, а не досборка: снимок сводит одиннадцать таблиц, и
+    # «добавить новое» оставило бы в нём удалённые записи навсегда.
+    from app.modules.projections.services import ProjectionOrchestrator
+
+    async with AsyncSessionLocal(tenant=settings.default_tenant_slug) as session:
+        tenants = list(
+            (await session.execute(select(Tenant).where(Tenant.is_active.is_(True))))
+            .scalars()
+            .all()
+        )
+    total = 0
+    # Изоляция арендаторов — как у соседних тиков: падение одного прерывает
+    # прогон, autoretry перезапустит; пересборка идёт «переписать заново»,
+    # повтор безопасен.
+    for tenant in tenants:
+        with tenant_context(tenant.slug):
+            ensure_tenant_schema(tenant.slug)
+            async with session_scope(tenant=tenant.slug) as session:
+                tenant_id, _scope = await _resolve_task_tenant_scope(session, tenant.slug)
+                total += await ProjectionOrchestrator(session, tenant_id).rebuild_search_index()
     return total
 
 

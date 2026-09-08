@@ -39,6 +39,35 @@ from app.services.discipline_incidents import open_incidents_where
 from app.services.person_scope import employed_person_where, not_employed_record_where
 
 
+def package_run_progress(run: ClientPackageRun) -> float:
+    """Прогресс прогона пакета — одна формула на оба снимка (срез-128).
+
+    Поля «сколько процентов готово» у ``ClientPackageRun`` НЕТ. До среза-128
+    проекция пакетов читала несуществующее ``run.progress_percent`` — и ночная
+    пересборка падала с ``AttributeError`` у любого арендатора, у которого есть
+    хоть один прогон. Падала не только она: тик собирает подряд пакеты,
+    соответствие по людям и площадки, поэтому обрывались и они.
+
+    Достоверно о прогоне известно ровно одно: завершён он или нет. Выдумывать
+    промежуточные проценты нельзя — их не из чего считать, а нарисованные «60%»
+    в кабинете клиента читались бы как факт.
+    """
+
+    return 100.0 if run.finished_at is not None else 0.0
+
+
+def package_run_status(run: ClientPackageRun) -> str:
+    """Состояние прогона словом, а не именем перечисления (срез-128).
+
+    ``str(run.status)`` даёт ``"PackageRunStatus.RUNNING"`` — и ровно это
+    лежало в снимке кабинета, который читает КЛИЕНТ. Остальной код снимков
+    берёт ``.value`` (см. поисковый индекс); здесь была единственная копия
+    с другим правилом.
+    """
+
+    return run.status.value if hasattr(run.status, "value") else str(run.status)
+
+
 class PackageProjectionService:
     def __init__(self, session: AsyncSession, tenant_id: str) -> None:
         self.session = session
@@ -290,17 +319,17 @@ class ClientPortalProjectionService:
                     package_id=run.id,
                     item_type="package",
                     title=f"Package {run.id[:8]}",
-                    status=str(run.status),
+                    status=package_run_status(run),
                 )
                 self.session.add(row)
             row.client_company_id = run.client_company_id
-            row.status = str(run.status)
-            row.progress_percent = 0
+            row.status = package_run_status(run)
+            row.progress_percent = package_run_progress(run)
             row.last_event_at = run.updated_at
             row.safe_payload = SafePortalPayloadService.sanitize(
                 {
-                    "progress_percent": 0,
-                    "status": str(run.status),
+                    "progress_percent": package_run_progress(run),
+                    "status": package_run_status(run),
                     "internal_notes": (
                         (run.qc_report_json or {}).get("internal_notes")
                         if run.qc_report_json
@@ -342,9 +371,9 @@ class ProjectionOrchestrator:
                 row = PackageReadModel(tenant_id=self.tenant_id, package_id=run.id)
                 self.session.add(row)
             row.package_code = run.id[:8]
-            row.status = str(run.status)
+            row.status = package_run_status(run)
             row.client_company_id = run.client_company_id
-            row.progress_percent = float(run.progress_percent or 0)
+            row.progress_percent = package_run_progress(run)
             row.last_event_at = run.updated_at
             row.search_text = f"{row.package_code} {row.status}"
             count += 1
@@ -572,6 +601,12 @@ class ProjectionOrchestrator:
         )
         count = 0
 
+        #: Что снимок увидел в этот проход. Всё, чего здесь нет, из снимка
+        #: убирается: до среза-128 пересборка только дописывала, и удалённая
+        #: запись оставалась находимой НАВСЕГДА. Пока пересборку не звал никто
+        #: (снимок стоял пустым), это не было заметно; с ночным тиком стало бы.
+        seen: set[tuple[str, str]] = set()
+
         async def upsert_entry(
             *,
             entity_type: str,
@@ -611,6 +646,7 @@ class ProjectionOrchestrator:
             row.search_text = search_text or " ".join(
                 part for part in [title, subtitle or "", str(preview_payload or "")] if part
             )
+            seen.add((entity_type, str(entity_id)))
             count += 1
 
         for person in persons:
@@ -837,6 +873,24 @@ class ProjectionOrchestrator:
                     )
                 ),
             )
+        # Убрать то, чего в источниках больше нет. Сравниваем ПО КЛЮЧУ записи, а
+        # не по времени обновления: «давно не трогали» и «исчезло» — разное, и
+        # по времени первое молча удалялось бы вместе со вторым.
+        stale = [
+            row
+            for row in (
+                (
+                    await self.session.execute(
+                        select(SearchIndexEntry).where(SearchIndexEntry.tenant_id == self.tenant_id)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            if (row.entity_type, str(row.entity_id)) not in seen
+        ]
+        for row in stale:
+            await self.session.delete(row)
         await self.session.commit()
         return count
 
