@@ -10,7 +10,6 @@ from sqlalchemy.orm import selectinload
 
 from app.domains.medical import lifecycle as lc
 from app.models.models import (
-    EmploymentStatus,
     MedicalExam,
     MedicalExamKind,
     MedicalFactor,
@@ -494,15 +493,24 @@ async def status_summary(session: AsyncSession, *, tenant_id: str, today: date) 
 # ---------------------------------------------------------------------------
 
 
-async def _active_headcount_by_position(session: AsyncSession, *, tenant_id: str) -> dict[str, int]:
-    """Count of active (non-deleted, employment_status=active) persons per position."""
+async def _headcount_by_position(session: AsyncSession, *, tenant_id: str) -> dict[str, int]:
+    """Численность по должностям для «контингента» 29н.
+
+    «Уволенный не в счёт» (срез-114): условие приведено к общему правилу
+    ``employed_person_where`` — не удалён и не уволен. ДО ЭТОГО здесь стояло
+    ``employment_status == ACTIVE``, и это молча выбрасывало из документа не
+    только уволенных, но и людей В ОТПУСКЕ и ОТСТРАНЁННЫХ: отпускник обязан
+    проходить периодический осмотр, а отстранён человек часто ровно из-за
+    непройденного медосмотра — прятать его в документе о медосмотрах значит
+    прятать саму проблему.
+    """
+
     stmt = (
         select(Person.position_id, func.count())
         .where(
             Person.tenant_id == tenant_id,
-            Person.deleted_at.is_(None),
+            *employed_person_where(),
             Person.position_id.is_not(None),
-            Person.employment_status == EmploymentStatus.ACTIVE,
         )
         .group_by(Person.position_id)
     )
@@ -521,7 +529,7 @@ async def build_contingent_register(
     catalog = await _load_factor_catalog(session, tenant_id=tenant_id)
     if not catalog:
         return []
-    headcount = await _active_headcount_by_position(session, tenant_id=tenant_id)
+    headcount = await _headcount_by_position(session, tenant_id=tenant_id)
     pos_stmt = (
         select(Position)
         .where(Position.tenant_id == tenant_id, Position.deleted_at.is_(None))
@@ -554,7 +562,15 @@ async def build_contingent_register(
 async def build_named_list(
     session: AsyncSession, *, tenant_id: str, today: date, warning_days: int = 30
 ) -> list[dict]:
-    """29н «поименный список»: person-level rows with factors, last/next exam, status (factor-driven)."""
+    """29н «поименный список»: строки по людям с факторами, датами осмотров и состоянием.
+
+    «Уволенный не в счёт» (срез-114): отбор — общее правило
+    ``employed_person_where`` (не удалён и не уволен), как в контингенте и
+    карточках. Раньше здесь стояло ``employment_status == ACTIVE``, и список
+    терял людей в отпуске и отстранённых — тех самых, кого чаще всего и надо
+    направить на осмотр.
+    """
+
     catalog = await _load_factor_catalog(session, tenant_id=tenant_id)
     if not catalog:
         return []
@@ -562,9 +578,8 @@ async def build_named_list(
         select(Person)
         .where(
             Person.tenant_id == tenant_id,
-            Person.deleted_at.is_(None),
+            *employed_person_where(),
             Person.position_id.is_not(None),
-            Person.employment_status == EmploymentStatus.ACTIVE,
         )
         .options(
             selectinload(Person.position).selectinload(Position.hazards),

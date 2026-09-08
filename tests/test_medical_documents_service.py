@@ -5,6 +5,7 @@ from datetime import date
 import pytest
 
 from app.domains.medical.service import build_contingent_register, build_named_list
+from app.models.master_data import EmploymentStatus
 from app.models.models import MedicalFactor, Position, PositionHazardLink
 from app.models.risk import RiskHazard
 
@@ -77,3 +78,62 @@ async def test_documents_empty_without_factor_mapping(sessionmaker, data_factory
         reg = await build_contingent_register(session, tenant_id=tenant_id, today=date(2026, 6, 13))
         named = await build_named_list(session, tenant_id=tenant_id, today=date(2026, 6, 13))
     assert reg == [] and named == []
+
+
+@pytest.mark.asyncio
+async def test_отпускник_и_отстранённый_в_документах_29н_остаются(sessionmaker, data_factory):
+    """«Уволенный не в счёт» — но только уволенный (срез-114).
+
+    До среза документы 29н отбирали ``employment_status == ACTIVE``, и из
+    поимённого списка молча выпадали люди В ОТПУСКЕ и ОТСТРАНЁННЫЕ. Отпускник
+    обязан пройти периодический осмотр, а отстранён человек часто ровно из-за
+    непройденного медосмотра: спрятать его в документе о медосмотрах значит
+    спрятать саму проблему. Теперь условие общее — не удалён и не уволен.
+    """
+
+    async with sessionmaker() as session:
+        tenant_id, pos_id = await _seed(session, data_factory)
+        tenant = await data_factory.ensure_tenant(session=session)
+        # Компания у арендатора уникальна по имени: `_seed` уже завёл «ACME
+        # Corp», поэтому здесь берём вторую с явным названием.
+        company = await data_factory.create_company(
+            tenant=tenant, name="ACME Corp 114", session=session
+        )
+        await data_factory.create_person(
+            tenant=tenant,
+            company=company,
+            session=session,
+            position_id=pos_id,
+            last_name="Отпускник",
+            employment_status=EmploymentStatus.ON_LEAVE,
+        )
+        await data_factory.create_person(
+            tenant=tenant,
+            company=company,
+            session=session,
+            position_id=pos_id,
+            last_name="Отстранён",
+            employment_status=EmploymentStatus.SUSPENDED,
+        )
+        await data_factory.create_person(
+            tenant=tenant,
+            company=company,
+            session=session,
+            position_id=pos_id,
+            last_name="Уволен",
+            employment_status=EmploymentStatus.TERMINATED,
+        )
+        await session.commit()
+
+        named = await build_named_list(session, tenant_id=tenant_id, today=date(2026, 6, 13))
+        register = await build_contingent_register(
+            session, tenant_id=tenant_id, today=date(2026, 6, 13)
+        )
+
+    surnames = {row["full_name"].split()[0] for row in named}
+    assert "Отпускник" in surnames, named
+    assert "Отстранён" in surnames, named
+    assert "Уволен" not in surnames, named
+    # Численность в «контингенте» считается тем же правилом: трое работающих.
+    assert register[0]["headcount"] == 3, register
+
