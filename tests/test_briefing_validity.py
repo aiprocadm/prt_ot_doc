@@ -21,6 +21,7 @@ import pytest
 
 from app.models.briefings import BriefingEntry, BriefingJournal
 from app.models.master_data import EmploymentStatus
+from app.modules.briefings.services import BriefingEntryService
 from app.services.briefing_validity import latest_briefing_validity
 
 pytestmark = pytest.mark.anyio
@@ -188,3 +189,63 @@ async def test_без_списка_людей_уволенный_и_удалён
 
     assert {owner for owner, _ in everyone} == {here_id, orphan_id}
     assert {owner for owner, _ in explicit} == {gone_id}
+
+
+class TestПросроченныеИнструктажи:
+    """Список и рассылка «просрочено» считают одно множество людей (срез-115).
+
+    Кнопка «напомнить о просроченных» (``POST /briefings/entries/remind-overdue``)
+    берёт данные из того же ``list_overdue``, что и экран. До среза отбор не знал
+    правила «уволенный не в счёт»: просроченный инструктаж уволенного попадал и
+    в список, и в рассылку — напоминание уходило по тому, кого в организации
+    больше нет.
+    """
+
+    async def test_уволенный_и_удалённый_не_попадают_а_запись_без_человека_остаётся(
+        self, sessionmaker, data_factory
+    ) -> None:
+        async with sessionmaker() as session:
+            tenant = await data_factory.ensure_tenant(session=session)
+            company = await data_factory.create_company(
+                tenant=tenant, name="АКМЕ-115", session=session
+            )
+            here = await data_factory.create_person(
+                tenant=tenant, company=company, last_name="Работает", session=session
+            )
+            gone = await data_factory.create_person(
+                tenant=tenant,
+                company=company,
+                last_name="Уволен",
+                session=session,
+                employment_status=EmploymentStatus.TERMINATED,
+            )
+            erased = await data_factory.create_person(
+                tenant=tenant, company=company, last_name="Удалён", session=session
+            )
+            erased.deleted_at = NOW
+            journal = BriefingJournal(
+                tenant_id=tenant.id, code="J-115", title="Журнал", journal_type="all"
+            )
+            session.add(journal)
+            await session.flush()
+            entries = [
+                _entry(tenant, journal, person_id=here.id, briefing_type="repeat", valid_days=-10),
+                _entry(tenant, journal, person_id=gone.id, briefing_type="repeat", valid_days=-10),
+                _entry(
+                    tenant, journal, person_id=erased.id, briefing_type="repeat", valid_days=-10
+                ),
+                # Инструктаж без человека (по подразделению) — увольнять некого.
+                _entry(tenant, journal, briefing_type="targeted", valid_days=-10),
+            ]
+            for entry in entries:
+                entry.status = "planned"
+            session.add_all(entries)
+            await session.commit()
+
+            overdue = await BriefingEntryService().list_overdue(session, tenant_id=str(tenant.id))
+
+        person_ids = {item.person_id for item in overdue}
+        assert here.id in person_ids
+        assert gone.id not in person_ids
+        assert erased.id not in person_ids
+        assert None in person_ids, "запись без человека должна остаться видимой"
