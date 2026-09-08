@@ -71,6 +71,7 @@ from app.tasks.document_jobs import (  # noqa: E402, F401
 from app.tasks.domain_ticks import (  # noqa: E402, F401
     _analytics_projections_tick,
     _api_deprecation_notify_tick,
+    _compliance_deadlines_tick,
     _contractors_documents_tick,
     _contractors_readiness_tick,
     _disciplines_deadlines_tick,
@@ -80,6 +81,7 @@ from app.tasks.domain_ticks import (  # noqa: E402, F401
     _prescriptions_escalate_tick,
     analytics_projections_tick,
     api_deprecation_notify_tick,
+    compliance_deadlines_tick,
     contractors_documents_tick,
     contractors_readiness_tick,
     disciplines_deadlines_tick,
