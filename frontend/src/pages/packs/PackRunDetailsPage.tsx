@@ -85,6 +85,15 @@ const PackRunDetailsPage = () => {
             items.map((item) => (
               <div key={item.id}>
                 {item.row_no}. {item.file_name} — {item.status}
+                {/* Причина отказа приходит с сервера, но раньше не
+                    показывалась: строка «не получилось» без причины не
+                    говорит, что чинить. */}
+                {item.error_code ? (
+                  <span className="text-muted-foreground">
+                    {" "}
+                    — {item.error_code}
+                  </span>
+                ) : null}
               </div>
             ))
           )}

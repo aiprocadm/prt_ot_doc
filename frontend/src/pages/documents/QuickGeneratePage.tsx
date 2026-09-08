@@ -352,14 +352,6 @@ const QuickGeneratePage = () => {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="qg-category">Категория (опционально)</Label>
-              <Input
-                id="qg-category"
-                value={category}
-                onChange={(event) => setCategory(event.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
               <Label htmlFor="qg-date">Дата действия</Label>
               <Input
                 id="qg-date"
@@ -368,14 +360,32 @@ const QuickGeneratePage = () => {
                 onChange={(event) => setEffectiveDate(event.target.value)}
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="qg-comments">Комментарий</Label>
-              <Input
-                id="qg-comments"
-                value={comments}
-                onChange={(event) => setComments(event.target.value)}
-              />
-            </div>
+            {/* Необязательное — под «Дополнительно» (UX-бюджет, разд. 59.2):
+                на виду остаётся то, без чего документ не собрать. Поля
+                работают как прежде, просто не занимают внимание сразу. */}
+            <details className="space-y-2 md:col-span-2">
+              <summary className="cursor-pointer text-sm text-muted-foreground">
+                Дополнительно
+              </summary>
+              <div className="grid gap-4 pt-2 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="qg-category">Категория (опционально)</Label>
+                  <Input
+                    id="qg-category"
+                    value={category}
+                    onChange={(event) => setCategory(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="qg-comments">Комментарий</Label>
+                  <Input
+                    id="qg-comments"
+                    value={comments}
+                    onChange={(event) => setComments(event.target.value)}
+                  />
+                </div>
+              </div>
+            </details>
           </div>
 
           <div className="flex flex-wrap gap-2">
