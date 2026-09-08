@@ -1,4 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
+import { Can } from "@/components/permissions/Can";
+import { PERMISSIONS } from "@/permissions/permissions";
 
 import {
   FIRE_EQUIPMENT_STATUS_TITLES,
@@ -284,11 +286,13 @@ const FireSafetyPage = () => {
           */}
           {!fire.loading && !fire.error ? (
             <div>
-              <FireDocumentFormDialog
-                sites={fire.data.sites}
-                onSubmitted={() => void fire.reload()}
-                trigger={<Button>Завести документ</Button>}
-              />
+              <Can permission={PERMISSIONS.FIRE_SAFETY_MANAGE}>
+                <FireDocumentFormDialog
+                  sites={fire.data.sites}
+                  onSubmitted={() => void fire.reload()}
+                  trigger={<Button>Завести документ</Button>}
+                />
+              </Can>
             </div>
           ) : null}
           {!fire.loading && !fire.error && documentRegistry.total === 0 ? (
@@ -333,16 +337,18 @@ const FireSafetyPage = () => {
                   id: "actions",
                   header: "Действия",
                   cell: ({ row }) => (
-                    <FireDocumentFormDialog
-                      sites={fire.data.sites}
-                      initialData={row.original}
-                      onSubmitted={() => void fire.reload()}
-                      trigger={
-                        <Button variant="ghost" size="sm">
-                          Изменить
-                        </Button>
-                      }
-                    />
+                    <Can permission={PERMISSIONS.FIRE_SAFETY_MANAGE}>
+                      <FireDocumentFormDialog
+                        sites={fire.data.sites}
+                        initialData={row.original}
+                        onSubmitted={() => void fire.reload()}
+                        trigger={
+                          <Button variant="ghost" size="sm">
+                            Изменить
+                          </Button>
+                        }
+                      />
+                    </Can>
                   ),
                 },
               ]}
@@ -374,17 +380,21 @@ const FireSafetyPage = () => {
           */}
           {!fire.loading && !fire.error ? (
             <div className="flex flex-wrap gap-2">
-              <FireEquipmentFormDialog
-                sites={fire.data.sites}
-                onSubmitted={() => void fire.reload()}
-                trigger={<Button>Завести средство</Button>}
-              />
-              {fire.data.equipment.length > 0 ? (
-                <FireMaintenanceFormDialog
-                  equipment={fire.data.equipment}
+              <Can permission={PERMISSIONS.FIRE_SAFETY_MANAGE}>
+                <FireEquipmentFormDialog
+                  sites={fire.data.sites}
                   onSubmitted={() => void fire.reload()}
-                  trigger={<Button>Записать работу</Button>}
+                  trigger={<Button>Завести средство</Button>}
                 />
+              </Can>
+              {fire.data.equipment.length > 0 ? (
+                <Can permission={PERMISSIONS.FIRE_SAFETY_MANAGE}>
+                  <FireMaintenanceFormDialog
+                    equipment={fire.data.equipment}
+                    onSubmitted={() => void fire.reload()}
+                    trigger={<Button>Записать работу</Button>}
+                  />
+                </Can>
               ) : null}
             </div>
           ) : null}
@@ -456,26 +466,30 @@ const FireSafetyPage = () => {
                   header: "Действия",
                   cell: ({ row }) => (
                     <div className="flex gap-1">
-                      <FireEquipmentFormDialog
-                        sites={fire.data.sites}
-                        initialData={row.original}
-                        onSubmitted={() => void fire.reload()}
-                        trigger={
-                          <Button variant="ghost" size="sm">
-                            Изменить
-                          </Button>
-                        }
-                      />
-                      <FireMaintenanceFormDialog
-                        equipment={fire.data.equipment}
-                        presetEquipmentId={row.original.id}
-                        onSubmitted={() => void fire.reload()}
-                        trigger={
-                          <Button variant="ghost" size="sm">
-                            Работа
-                          </Button>
-                        }
-                      />
+                      <Can permission={PERMISSIONS.FIRE_SAFETY_MANAGE}>
+                        <FireEquipmentFormDialog
+                          sites={fire.data.sites}
+                          initialData={row.original}
+                          onSubmitted={() => void fire.reload()}
+                          trigger={
+                            <Button variant="ghost" size="sm">
+                              Изменить
+                            </Button>
+                          }
+                        />
+                      </Can>
+                      <Can permission={PERMISSIONS.FIRE_SAFETY_MANAGE}>
+                        <FireMaintenanceFormDialog
+                          equipment={fire.data.equipment}
+                          presetEquipmentId={row.original.id}
+                          onSubmitted={() => void fire.reload()}
+                          trigger={
+                            <Button variant="ghost" size="sm">
+                              Работа
+                            </Button>
+                          }
+                        />
+                      </Can>
                     </div>
                   ),
                 },

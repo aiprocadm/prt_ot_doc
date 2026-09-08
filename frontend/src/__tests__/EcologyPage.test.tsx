@@ -2,6 +2,8 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { PERMISSIONS } from "@/permissions/permissions";
+import { useAuthStore } from "@/stores/auth";
 
 import EcologyPage from "@/pages/ecology/EcologyPage";
 import { uxBudgetDelta } from "@/test-utils/uxBudget";
@@ -468,6 +470,22 @@ const populatedReadiness = {
 
 describe("EcologyPage", () => {
   beforeEach(() => {
+    // Срез-120: кнопки записи закрыты правом `<контур>.manage` — экран
+    // рендерится от лица того, кому запись разрешена.
+    useAuthStore.setState({
+      user: {
+        id: "discipline-writer",
+        created_at: "2024-01-01",
+        updated_at: "2024-01-02",
+        email: "writer@example.com",
+        full_name: "Discipline Writer",
+        roles: ["ot_specialist"],
+        permissions: [PERMISSIONS.ECOLOGY_VIEW, PERMISSIONS.ECOLOGY_MANAGE],
+        attributes: { tenant_id: "tenant-1" },
+      },
+      loading: false,
+      error: null,
+    } as never);
     listFacilitiesMock.mockReset();
     listPassportsMock.mockReset();
     listMovementsMock.mockReset();
@@ -1246,5 +1264,36 @@ describe("EcologyPage", () => {
     const budget = uxBudgetDelta(document.body, "EcologyPage");
     expect(budget.unexpected).toEqual([]);
     expect(budget.stale).toEqual([]);
+  });
+
+  it("без права на запись кнопки записи не показываются (срез-120)", async () => {
+    // Читателю контура экран доступен целиком, а вести записи он не может:
+    // сервер такой запрос отклонит, и предлагать форму — обманывать человека.
+    useAuthStore.setState({
+      user: {
+        id: "discipline-reader",
+        created_at: "2024-01-01",
+        updated_at: "2024-01-02",
+        email: "reader@example.com",
+        full_name: "Discipline Reader",
+        roles: ["line_manager"],
+        permissions: [PERMISSIONS.ECOLOGY_VIEW],
+        attributes: { tenant_id: "tenant-1" },
+      },
+      loading: false,
+      error: null,
+    } as never);
+
+    render(
+      <MemoryRouter>
+        <EcologyPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: "Завести объект" }),
+      ).not.toBeInTheDocument(),
+    );
   });
 });

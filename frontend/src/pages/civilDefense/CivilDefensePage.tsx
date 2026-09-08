@@ -1,4 +1,6 @@
 import { type ColumnDef } from "@tanstack/react-table";
+import { Can } from "@/components/permissions/Can";
+import { PERMISSIONS } from "@/permissions/permissions";
 import { useCallback, useMemo, useState } from "react";
 
 import {
@@ -296,28 +298,32 @@ const CivilDefensePage = () => {
         header: "Действия",
         cell: ({ row }: { row: { original: FormationDto } }) => (
           <div className="flex gap-1">
-            <CdFormationFormDialog
-              persons={data.persons}
-              initialData={row.original}
-              onSubmitted={() => void reload()}
-              trigger={
-                <Button variant="ghost" size="sm">
-                  Изменить
-                </Button>
-              }
-            />
+            <Can permission={PERMISSIONS.CIVIL_DEFENSE_MANAGE}>
+              <CdFormationFormDialog
+                persons={data.persons}
+                initialData={row.original}
+                onSubmitted={() => void reload()}
+                trigger={
+                  <Button variant="ghost" size="sm">
+                    Изменить
+                  </Button>
+                }
+              />
+            </Can>
             {/* Срез-110: состав читается по кнопке — списков столько же,
                 сколько формирований, и грузить их все ради реестра незачем. */}
-            <CdFormationMembersDialog
-              formation={row.original}
-              persons={data.persons}
-              onChanged={() => void reload()}
-              trigger={
-                <Button variant="ghost" size="sm">
-                  Состав
-                </Button>
-              }
-            />
+            <Can permission={PERMISSIONS.CIVIL_DEFENSE_MANAGE}>
+              <CdFormationMembersDialog
+                formation={row.original}
+                persons={data.persons}
+                onChanged={() => void reload()}
+                trigger={
+                  <Button variant="ghost" size="sm">
+                    Состав
+                  </Button>
+                }
+              />
+            </Can>
           </div>
         ),
       },
@@ -332,16 +338,18 @@ const CivilDefensePage = () => {
         id: "actions",
         header: "Действия",
         cell: ({ row }: { row: { original: ProfileDto } }) => (
-          <CdProfileFormDialog
-            sites={data.sites}
-            initialData={row.original}
-            onSubmitted={() => void reload()}
-            trigger={
-              <Button variant="ghost" size="sm">
-                Изменить
-              </Button>
-            }
-          />
+          <Can permission={PERMISSIONS.CIVIL_DEFENSE_MANAGE}>
+            <CdProfileFormDialog
+              sites={data.sites}
+              initialData={row.original}
+              onSubmitted={() => void reload()}
+              trigger={
+                <Button variant="ghost" size="sm">
+                  Изменить
+                </Button>
+              }
+            />
+          </Can>
         ),
       },
     ],
@@ -355,16 +363,18 @@ const CivilDefensePage = () => {
         id: "actions",
         header: "Действия",
         cell: ({ row }: { row: { original: CdDocumentDto } }) => (
-          <CdDocumentFormDialog
-            sites={data.sites}
-            initialData={row.original}
-            onSubmitted={() => void reload()}
-            trigger={
-              <Button variant="ghost" size="sm">
-                Изменить
-              </Button>
-            }
-          />
+          <Can permission={PERMISSIONS.CIVIL_DEFENSE_MANAGE}>
+            <CdDocumentFormDialog
+              sites={data.sites}
+              initialData={row.original}
+              onSubmitted={() => void reload()}
+              trigger={
+                <Button variant="ghost" size="sm">
+                  Изменить
+                </Button>
+              }
+            />
+          </Can>
         ),
       },
     ],
@@ -380,16 +390,18 @@ const CivilDefensePage = () => {
         // Пока учение не проведено, кнопка зовёт внести протокол (приём
         // среза-104): подпись говорит, что делать дальше.
         cell: ({ row }: { row: { original: DrillDto } }) => (
-          <CdDrillFormDialog
-            formations={data.formations}
-            initialData={row.original}
-            onSubmitted={() => void reload()}
-            trigger={
-              <Button variant="ghost" size="sm">
-                {row.original.held_on ? "Изменить" : "Протокол"}
-              </Button>
-            }
-          />
+          <Can permission={PERMISSIONS.CIVIL_DEFENSE_MANAGE}>
+            <CdDrillFormDialog
+              formations={data.formations}
+              initialData={row.original}
+              onSubmitted={() => void reload()}
+              trigger={
+                <Button variant="ghost" size="sm">
+                  {row.original.held_on ? "Изменить" : "Протокол"}
+                </Button>
+              }
+            />
+          </Can>
         ),
       },
     ],
@@ -474,11 +486,13 @@ const CivilDefensePage = () => {
       */}
       {section === "formations" && !loading && !error ? (
         <div>
-          <CdFormationFormDialog
-            persons={data.persons}
-            onSubmitted={() => void reload()}
-            trigger={<Button>Завести формирование</Button>}
-          />
+          <Can permission={PERMISSIONS.CIVIL_DEFENSE_MANAGE}>
+            <CdFormationFormDialog
+              persons={data.persons}
+              onSubmitted={() => void reload()}
+              trigger={<Button>Завести формирование</Button>}
+            />
+          </Can>
         </div>
       ) : null}
       {section === "formations" &&
@@ -519,11 +533,13 @@ const CivilDefensePage = () => {
           </p>
           {/* Срез-109: учение планируется здесь же, протокол — правкой. */}
           <div>
-            <CdDrillFormDialog
-              formations={data.formations}
-              onSubmitted={() => void reload()}
-              trigger={<Button>Запланировать учение</Button>}
-            />
+            <Can permission={PERMISSIONS.CIVIL_DEFENSE_MANAGE}>
+              <CdDrillFormDialog
+                formations={data.formations}
+                onSubmitted={() => void reload()}
+                trigger={<Button>Запланировать учение</Button>}
+              />
+            </Can>
           </div>
           {drillRegistry.total === 0 ? (
             <EmptyState
@@ -566,17 +582,21 @@ const CivilDefensePage = () => {
           */}
           <div className="flex flex-wrap gap-2">
             {data.sites.length > 0 ? (
-              <CdProfileFormDialog
+              <Can permission={PERMISSIONS.CIVIL_DEFENSE_MANAGE}>
+                <CdProfileFormDialog
+                  sites={data.sites}
+                  onSubmitted={() => void reload()}
+                  trigger={<Button>Внести сведения по ГО</Button>}
+                />
+              </Can>
+            ) : null}
+            <Can permission={PERMISSIONS.CIVIL_DEFENSE_MANAGE}>
+              <CdDocumentFormDialog
                 sites={data.sites}
                 onSubmitted={() => void reload()}
-                trigger={<Button>Внести сведения по ГО</Button>}
+                trigger={<Button>Завести документ</Button>}
               />
-            ) : null}
-            <CdDocumentFormDialog
-              sites={data.sites}
-              onSubmitted={() => void reload()}
-              trigger={<Button>Завести документ</Button>}
-            />
+            </Can>
           </div>
           {profileRegistry.total === 0 ? (
             <EmptyState
