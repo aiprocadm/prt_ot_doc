@@ -111,10 +111,15 @@ async def billing_usage(
         "s3_bytes_used": int(usage.s3_bytes_used or 0),
     }
     percentages: dict[str, float | None] = {}
+    # Срез-121: у работников лимита НЕТ. `max_users` ограничивает учётные
+    # записи (квота считает строки `User`, см. billing._count_tenant_entities),
+    # а здесь считаются сотрудники — делить одно на другое значит показывать
+    # выдуманный процент: у арендатора со 100 сотрудниками и лимитом в 20
+    # входов на экране горело «500%». Нет лимита — нет процента.
+    percentages["active_workers_count"] = None
     for usage_key, limit_key in {
         "generations_count": "max_generations_per_month",
         "edo_outgoing_count": "edo_outgoing_per_month",
-        "active_workers_count": "max_users",
         "s3_bytes_used": "max_s3_bytes",
     }.items():
         raw_limit = ctx.limits.get(limit_key)

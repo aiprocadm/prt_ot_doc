@@ -67,7 +67,6 @@ from app.models.models import (
     BriefingTemplate,
     Company,
     ComplianceDeadline,
-    EmploymentStatus,
     Incident,
     IncidentPerson,
     MedicalExam,
@@ -126,6 +125,7 @@ from app.services.discipline_applicability import (
 from app.services.discipline_fire_safety import collect_fire_briefing_numbers
 from app.services.discipline_numbers import collect_people_numbers
 from app.services.person_link import resolve_user
+from app.services.person_scope import is_employed
 
 __all__ = ["EmployeeCardService", "MAX_ITEMS_PER_SECTION", "TERMINATED_REASON"]
 
@@ -322,7 +322,7 @@ class EmployeeCardService:
         """Светофор по всем дисциплинам словаря — одними правилами с площадкой."""
 
         applicability = await collect_applicability(self.db, self.tenant_id)
-        if person.employment_status == EmploymentStatus.TERMINATED:
+        if not is_employed(person):
             rows = [
                 DisciplineStatus(
                     discipline=discipline,

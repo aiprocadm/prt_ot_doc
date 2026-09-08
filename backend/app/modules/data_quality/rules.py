@@ -15,7 +15,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.document import Document, DocumentStatus, DocumentVersion
 from app.models.models import (
     Company,
-    EmploymentStatus,
     MedicalExam,
     MedicalFitness,
     MedicalSuspension,
@@ -32,6 +31,7 @@ from app.models.models import (
     TrainingStatus,
     Workplace,
 )
+from app.services.person_scope import employed_person_where, is_employed
 
 from .schemas import DataQualityIssue, IssueSeverity, IssueType
 
@@ -133,14 +133,13 @@ class MissingMandatoryFieldsRule(DataQualityRule):
                 if _is_blank(person.last_name):
                     missing_fields.append("last_name")
 
-                if person.employment_status == EmploymentStatus.ACTIVE and _is_blank(
-                    getattr(person, "email", None)
-                ):
+                # Срез-121: «числится», а не «активен». У человека в отпуске
+                # пустая почта — такой же пробел: он вернётся, и уведомления
+                # снова будут некуда слать.
+                if is_employed(person) and _is_blank(getattr(person, "email", None)):
                     missing_fields.append("email")
 
-                if person.employment_status == EmploymentStatus.ACTIVE and not getattr(
-                    person, "position_id", None
-                ):
+                if is_employed(person) and not getattr(person, "position_id", None):
                     missing_fields.append("position_id")
 
                 if not missing_fields:
@@ -465,8 +464,7 @@ class OrphanedAssignmentsRule(DataQualityRule):
                 .join(Position, Person.position_id == Position.id)
                 .where(
                     Person.tenant_id == self.tenant_id,
-                    Person.deleted_at.is_(None),
-                    Person.employment_status == EmploymentStatus.ACTIVE,
+                    *employed_person_where(),
                     Person.position_id.is_not(None),
                     Position.deleted_at.is_not(None),
                 )
@@ -504,8 +502,7 @@ class OrphanedAssignmentsRule(DataQualityRule):
                 .join(Workplace, Person.workplace_id == Workplace.id)
                 .where(
                     Person.tenant_id == self.tenant_id,
-                    Person.deleted_at.is_(None),
-                    Person.employment_status == EmploymentStatus.ACTIVE,
+                    *employed_person_where(),
                     Person.workplace_id.is_not(None),
                     Workplace.deleted_at.is_not(None),
                 )

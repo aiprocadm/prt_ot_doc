@@ -98,6 +98,66 @@ class TestMissingMandatoryFieldsRule:
             "position_id" in i.additional_info.get("missing_fields", []) for i in rule.issues
         )
 
+    async def test_пробел_у_человека_в_отпуске_тоже_виден(
+        self,
+        test_db_session: AsyncSession,
+        data_factory: TestDataFactory,
+    ) -> None:
+        """Срез-121: правило смотрит «числится», а не «активен».
+
+        Отпуск — не увольнение: человек вернётся, и пустая почта снова станет
+        причиной, по которой ему нечего отправить. Раньше правило проверяло
+        только ``employment_status == ACTIVE`` и такие пробелы прятало.
+        """
+
+        from app.models.master_data import EmploymentStatus
+
+        tenant = await data_factory.ensure_tenant(session=test_db_session)
+        company = await data_factory.create_company(tenant=tenant, session=test_db_session)
+        person = await data_factory.create_person(
+            tenant=tenant,
+            company=company,
+            first_name="Иван",
+            last_name="Отпускной",
+            email=None,
+            employment_status=EmploymentStatus.ON_LEAVE,
+            session=test_db_session,
+        )
+
+        rule = MissingMandatoryFieldsRule(str(tenant.id), test_db_session)
+        await rule.check()
+
+        issues = [i for i in rule.issues if i.affected_entity_id == person.id]
+        assert issues, "пробел у человека в отпуске должен быть виден"
+        assert "email" in issues[0].additional_info.get("missing_fields", [])
+
+    async def test_у_уволенного_пробелы_не_считаются(
+        self,
+        test_db_session: AsyncSession,
+        data_factory: TestDataFactory,
+    ) -> None:
+        """Уволенный — история: его пустая почта уже ни на что не влияет."""
+
+        from app.models.master_data import EmploymentStatus
+
+        tenant = await data_factory.ensure_tenant(session=test_db_session)
+        company = await data_factory.create_company(tenant=tenant, session=test_db_session)
+        person = await data_factory.create_person(
+            tenant=tenant,
+            company=company,
+            first_name="Пётр",
+            last_name="Уволенный",
+            email=None,
+            employment_status=EmploymentStatus.TERMINATED,
+            session=test_db_session,
+        )
+
+        rule = MissingMandatoryFieldsRule(str(tenant.id), test_db_session)
+        await rule.check()
+
+        issues = [i for i in rule.issues if i.affected_entity_id == person.id]
+        assert issues == []
+
     async def test_ok_complete_person(
         self,
         test_db_session: AsyncSession,
