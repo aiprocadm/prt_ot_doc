@@ -2451,7 +2451,14 @@ class CalendarAggregatorService:
     ) -> tuple[list[CalendarEventItem], int, int]:
         stmt = (
             select(ComplianceDeadline)
-            .where(ComplianceDeadline.tenant_id == self.tenant_id)
+            .where(
+                ComplianceDeadline.tenant_id == self.tenant_id,
+                # Срез-116: снимок контрольных сроков — про человека, значит на
+                # него распространяется общее правило «уволенный не в счёт».
+                # Раньше единственный источник календаря, который его не знал:
+                # просроченное удостоверение уволенного оставалось «горящим».
+                self._employed_only(ComplianceDeadline),
+            )
             .order_by(ComplianceDeadline.due_at.asc())
             .limit(self._limit)
         )
@@ -2508,7 +2515,9 @@ class CalendarAggregatorService:
             )
 
         base_count = self._apply_window(
-            self._scoped_count(ComplianceDeadline, person_id=person_id, site_id=site_id),
+            self._scoped_count(ComplianceDeadline, person_id=person_id, site_id=site_id).where(
+                self._employed_only(ComplianceDeadline)
+            ),
             ComplianceDeadline.due_at,
             from_at,
             to_at,

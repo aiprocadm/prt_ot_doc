@@ -83,6 +83,13 @@ celery_app.conf.beat_schedule = {
         "task": "analytics.projections.tick",
         "schedule": crontab(hour=3, minute=15),
     },
+    # BIZ-54-57 срез-116: снимок контрольных сроков (удостоверения обучения)
+    # пересобирается ночью, а не только по кнопке: между нажатиями он врал в
+    # календаре и в карточке сотрудника в обе стороны.
+    "compliance-deadlines-daily": {
+        "task": "compliance.deadlines.tick",
+        "schedule": crontab(hour=3, minute=30),
+    },
     # BIZ-51 срез-7: еженедельная сверка «что изменилось, что просрочено,
     # что нужно сделать» — как в ТЗ (разд. 51.3, «напр. еженедельно»).
     "managed-clients-audit-weekly": {
