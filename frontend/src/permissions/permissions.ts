@@ -37,16 +37,21 @@ export const PERMISSIONS = {
   INSPECTION_CREATE: "inspection.create",
   AUDIT_PREP_VIEW: "audit_prep.view",
   FIRE_SAFETY_VIEW: "fire_safety.view",
+  FIRE_SAFETY_MANAGE: "fire_safety.manage",
   FIRE_TRAINING_VIEW: "fire_training.view",
   FIRE_INSPECTIONS_VIEW: "fire_inspections.view",
   // Доп. №1 разд. 54.2: право модуля «Промышленная безопасность».
   INDUSTRIAL_SAFETY_VIEW: "industrial_safety.view",
+  INDUSTRIAL_SAFETY_MANAGE: "industrial_safety.manage",
   // Доп. №1 разд. 55: право модуля «Экология».
   ECOLOGY_VIEW: "ecology.view",
+  ECOLOGY_MANAGE: "ecology.manage",
   // Доп. №1 разд. 56.1: право модуля «ГО и ЧС».
   CIVIL_DEFENSE_VIEW: "civil_defense.view",
+  CIVIL_DEFENSE_MANAGE: "civil_defense.manage",
   // Доп. №1 разд. 56.2: право модуля «БДД».
   ROAD_SAFETY_VIEW: "road_safety.view",
+  ROAD_SAFETY_MANAGE: "road_safety.manage",
   REFERENCE_VIEW: "reference.view",
   CONTRACTOR_VIEW: "contractor.view",
   CONTRACTOR_MANAGE: "contractor.manage",
@@ -192,12 +197,28 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     PERMISSIONS.PERSON_CREATE,
     PERMISSIONS.CALENDAR_VIEW,
     PERMISSIONS.ANALYTICS_VIEW,
+    // Срез-119: сервер пускает специалиста по охране труда вести записи всех
+    // пяти контуров дисциплин (`core/disciplines.discipline_write_roles`), а
+    // экраны этих контуров ему не показывались вовсе.
+    PERMISSIONS.FIRE_SAFETY_VIEW,
+    PERMISSIONS.FIRE_SAFETY_MANAGE,
+    PERMISSIONS.INDUSTRIAL_SAFETY_VIEW,
+    PERMISSIONS.INDUSTRIAL_SAFETY_MANAGE,
+    PERMISSIONS.ECOLOGY_VIEW,
+    PERMISSIONS.ECOLOGY_MANAGE,
+    PERMISSIONS.CIVIL_DEFENSE_VIEW,
+    PERMISSIONS.CIVIL_DEFENSE_MANAGE,
+    PERMISSIONS.ROAD_SAFETY_VIEW,
+    PERMISSIONS.ROAD_SAFETY_MANAGE,
   ],
   pb_engineer: [
     PERMISSIONS.DASHBOARD_VIEW,
     PERMISSIONS.DOCUMENT_VIEW,
     PERMISSIONS.DOCUMENT_EXPORT,
     PERMISSIONS.FIRE_SAFETY_VIEW,
+    // Срез-119: экран пожарной безопасности инженеру ПБ показывали, а запись
+    // сервер отклонял — теперь право одно на обе стороны.
+    PERMISSIONS.FIRE_SAFETY_MANAGE,
     PERMISSIONS.FIRE_TRAINING_VIEW,
     PERMISSIONS.FIRE_INSPECTIONS_VIEW,
     PERMISSIONS.INSPECTION_VIEW,
@@ -212,6 +233,10 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     PERMISSIONS.DASHBOARD_VIEW,
     PERMISSIONS.DOCUMENT_VIEW,
     PERMISSIONS.DOCUMENT_EXPORT,
+    // Срез-119: роль заведена ради экологии, а экран экологии ей не
+    // показывался вовсе — роль, которой нечего делать.
+    PERMISSIONS.ECOLOGY_VIEW,
+    PERMISSIONS.ECOLOGY_MANAGE,
     PERMISSIONS.RISK_VIEW,
     PERMISSIONS.RISK_EXPORT,
     PERMISSIONS.AUDIT_VIEW,

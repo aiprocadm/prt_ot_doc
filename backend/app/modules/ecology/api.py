@@ -22,7 +22,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
-from app.core.disciplines import Discipline
+from app.core.disciplines import Discipline, discipline_write_roles
 from app.core.errors import api_problem_detail
 from app.core.feature_flags import is_module_enabled, raise_for_disabled_module
 from app.core.security import AccessContext, abac, rbac
@@ -122,7 +122,9 @@ router = APIRouter(prefix="/ecology", tags=["ecology"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 
-_ROLES = ["admin", "owner", "ot_pb_lead", "ot_specialist"]
+#: Право на запись у контура — общее для всех дисциплин (срез-119):
+#: один список в ядре вместо пяти одинаковых копий по модулям.
+_ROLES = list(discipline_write_roles(Discipline.ECOLOGY))
 
 
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:

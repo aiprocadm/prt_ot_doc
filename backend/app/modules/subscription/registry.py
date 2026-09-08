@@ -195,6 +195,7 @@ SELLABLE_MODULES: tuple[ModuleDescriptor, ...] = (
         ui_routes=("/fire-safety", "/fire-training", "/fire-inspections"),
         permissions=(
             "fire_safety.view",
+            "fire_safety.manage",
             "fire_training.view",
             "fire_inspections.view",
         ),
@@ -214,7 +215,7 @@ SELLABLE_MODULES: tuple[ModuleDescriptor, ...] = (
         title="Промышленная безопасность",
         category="Промышленная безопасность",
         ui_routes=("/industrial-safety",),
-        permissions=("industrial_safety.view",),
+        permissions=("industrial_safety.view", "industrial_safety.manage"),
     ),
     # Доп. №1 разд. 55, срез-1: дисциплина экологии получила содержание —
     # собственный реестр объектов НВОС с закрытой категорией I–IV и своими
@@ -229,7 +230,7 @@ SELLABLE_MODULES: tuple[ModuleDescriptor, ...] = (
         title="Экология",
         category="Экология",
         ui_routes=("/ecology",),
-        permissions=("ecology.view",),
+        permissions=("ecology.view", "ecology.manage"),
     ),
     # Доп. №1 разд. 56.1: контур ГО и ЧС получил первое содержание — реестр
     # нештатных формирований. Тариф «Всё включено» сдвигается сам собой;
@@ -239,7 +240,7 @@ SELLABLE_MODULES: tuple[ModuleDescriptor, ...] = (
         title="ГО и ЧС",
         category="ГО и ЧС",
         ui_routes=("/civil-defense",),
-        permissions=("civil_defense.view",),
+        permissions=("civil_defense.view", "civil_defense.manage"),
     ),
     # Доп. №1 разд. 56.2: контур БДД получил первое содержание — реестр
     # транспортных средств. Тариф «Всё включено» сдвигается сам собой;
@@ -249,7 +250,7 @@ SELLABLE_MODULES: tuple[ModuleDescriptor, ...] = (
         title="БДД",
         category="Безопасность дорожного движения",
         ui_routes=("/road-safety",),
-        permissions=("road_safety.view",),
+        permissions=("road_safety.view", "road_safety.manage"),
     ),
 )
 

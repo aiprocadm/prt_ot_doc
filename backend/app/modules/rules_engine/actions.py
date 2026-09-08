@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.master_data import Person
@@ -29,6 +29,7 @@ from app.models.rules_engine import AutomationRule, AutomationRuleTrigger
 from app.modules.rules_engine.conditions import resolve_field
 from app.services.notifications import send_notification
 from app.services.obligations import next_task_reminder
+from app.services.person_link import resolve_user_id
 from app.services.person_scope import employed_person_where
 
 ALLOWED_ACTION_TYPES = frozenset({"create_task", "notify", "webhook"})
@@ -263,10 +264,10 @@ async def _resolve_person_user(
 ) -> list[str]:
     """Учётная запись работника из события.
 
-    Связь «работник — вход в систему» в продукте одна: совпадение почты
-    (прецедент ``services/employee_card._build_roles_and_assignments``),
-    отдельной ссылки у ``User`` нет. Уволенного не уведомляем — общее правило
-    ``person_scope`` (срез-89): его сроки больше не его обязательства.
+    Связь «работник — вход в систему» в продукте одна и живёт в
+    ``services/person_link``: отдельной ссылки у ``User`` нет, сопоставление
+    идёт по почте. Уволенного не уведомляем — общее правило ``person_scope``
+    (срез-89): его сроки больше не его обязательства.
     """
     person = await session.scalar(
         select(Person).where(
@@ -275,18 +276,10 @@ async def _resolve_person_user(
             *employed_person_where(),
         )
     )
-    if person is None or not person.email:
+    if person is None:
         return []
-    user_id = await session.scalar(
-        select(User.id)
-        .where(
-            User.tenant_id == tenant_id,
-            func.lower(User.email) == person.email.lower(),
-            User.deleted_at.is_(None),
-        )
-        .limit(1)
-    )
-    return [str(user_id)] if user_id else []
+    user_id = await resolve_user_id(session, tenant_id, person.email)
+    return [user_id] if user_id else []
 
 
 async def _resolve_recipients(

@@ -26,6 +26,7 @@ from app.core.disciplines import (
     BRIEFING_TYPE_DISCIPLINE,
     Discipline,
     areas_of_discipline,
+    discipline_write_roles,
 )
 from app.core.errors import api_problem_detail
 from app.core.feature_flags import is_module_enabled, raise_for_disabled_module
@@ -93,7 +94,9 @@ router = APIRouter(prefix="/road-safety", tags=["road-safety"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 
-_ROLES = ["admin", "owner", "ot_pb_lead", "ot_specialist"]
+#: Право на запись у контура — общее для всех дисциплин (срез-119):
+#: один список в ядре вместо пяти одинаковых копий по модулям.
+_ROLES = list(discipline_write_roles(Discipline.ROAD_SAFETY))
 
 #: горизонт «скоро истекает» — тот же, что у остальных сводок продукта
 _DUE_SOON_DAYS = 30

@@ -82,7 +82,6 @@ from app.models.models import (
     TrainingCertificate,
     TrainingCourse,
     TrainingSessionStatus,
-    User,
     UserRole,
     Workplace,
 )
@@ -126,6 +125,7 @@ from app.services.discipline_applicability import (
 )
 from app.services.discipline_fire_safety import collect_fire_briefing_numbers
 from app.services.discipline_numbers import collect_people_numbers
+from app.services.person_link import resolve_user
 
 __all__ = ["EmployeeCardService", "MAX_ITEMS_PER_SECTION", "TERMINATED_REASON"]
 
@@ -279,16 +279,10 @@ class EmployeeCardService:
     ) -> EmployeeRolesAndAssignments:
         user_account: EmployeeUserAccount | None = None
         if person.email:
-            stmt = (
-                select(User)
-                .where(
-                    User.tenant_id == self.tenant_id,
-                    func.lower(User.email) == person.email.lower(),
-                    User.deleted_at.is_(None),
-                )
-                .limit(1)
-            )
-            user = (await self.db.execute(stmt)).scalar_one_or_none()
+            # Сопоставление «работник → учётная запись» одно на продукт и живёт
+            # в services/person_link (срез-119): вторая копия того же SQL
+            # показала бы здесь и в правилах разные учётные записи.
+            user = await resolve_user(self.db, self.tenant_id, person.email)
             if user is not None:
                 additional_roles = (
                     (

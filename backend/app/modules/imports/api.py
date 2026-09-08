@@ -46,7 +46,6 @@ from app.modules.imports.parsers import (
 from app.modules.imports.planner import template_headers
 from app.modules.imports.profiles import ImportProfile, detect_profile, get_profile, list_profiles
 from app.modules.imports.quality import run_quality_check_for_batch
-from app.services.client_change_signals import record_client_changes_for_batch
 from app.modules.imports.registry import (
     CREATABLE_LOOKUPS,
     ImportTarget,
@@ -60,6 +59,7 @@ from app.modules.imports.service import (
     ImportRollbackError,
     ImportService,
 )
+from app.services.client_change_signals import record_client_changes_for_batch
 from app.tasks.import_jobs import run_import_batch_job
 
 router = APIRouter(prefix="/imports", tags=["imports"])
