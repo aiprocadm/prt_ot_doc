@@ -2152,6 +2152,11 @@ class CalendarAggregatorService:
             .where(
                 Permit.tenant_id == self.tenant_id,
                 Permit.valid_until.is_not(None),
+                # Срез-127: наряды-допуски были единственной веткой календаря
+                # без этого отбора — медосмотры, СИЗ, обучение и сроки его
+                # применяют с среза-93. Календарь не может считать уволенного
+                # в одной строке и не считать в соседней.
+                self._employed_only(Permit),
             )
             .order_by(Permit.valid_until.asc())
             .limit(self._limit)
@@ -2211,7 +2216,9 @@ class CalendarAggregatorService:
             )
 
         base_count = self._apply_window(
-            self._scoped_count(Permit, person_id=person_id).where(Permit.valid_until.is_not(None)),
+            self._scoped_count(Permit, person_id=person_id).where(
+                Permit.valid_until.is_not(None), self._employed_only(Permit)
+            ),
             Permit.valid_until,
             from_at,
             to_at,

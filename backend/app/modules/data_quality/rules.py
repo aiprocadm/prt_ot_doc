@@ -31,7 +31,11 @@ from app.models.models import (
     TrainingStatus,
     Workplace,
 )
-from app.services.person_scope import employed_person_where, is_employed
+from app.services.person_scope import (
+    employed_person_where,
+    employed_record_where,
+    is_employed,
+)
 
 from .schemas import DataQualityIssue, IssueSeverity, IssueType
 
@@ -269,7 +273,15 @@ class BrokenRelationshipsRule(DataQualityRule):
 
 
 class ExpiredRecordsRule(DataQualityRule):
-    """Expired medical exams and trainings (by valid_until / expires_at)."""
+    """Expired medical exams and trainings (by valid_until / expires_at).
+
+    Уволенный не в счёт (срез-127, то же правило ``person_scope``, что у
+    светофора и календаря). Просроченный медосмотр уволенного — история, а не
+    разрыв с эталоном: обязанности перед ним у арендатора больше нет. Правило
+    важно вдвойне, потому что именно эту тройку правил просрочки запускает
+    лента сигналов по портфелю (``services/client_dq_signals``): без отбора
+    аутсорсер видел «горит» у клиента, чей собственный светофор чист.
+    """
 
     @property
     def rule_name(self) -> str:
@@ -288,6 +300,7 @@ class ExpiredRecordsRule(DataQualityRule):
                 MedicalExam.tenant_id == self.tenant_id,
                 MedicalExam.deleted_at.is_(None),
                 MedicalExam.valid_until < today,
+                employed_record_where(MedicalExam, self.tenant_id),
             )
             exams = (await self.db.execute(mex_stmt)).scalars().all()
             self.total_checked += len(exams)
@@ -314,6 +327,7 @@ class ExpiredRecordsRule(DataQualityRule):
                 Training.expires_at.is_not(None),
                 Training.expires_at < now,
                 Training.status == TrainingStatus.COMPLETED,
+                employed_record_where(Training, self.tenant_id),
             )
             trainings = (await self.db.execute(tr_stmt)).scalars().all()
             self.total_checked += len(trainings)
@@ -338,7 +352,10 @@ class ExpiredRecordsRule(DataQualityRule):
 
 
 class ExpiredPermitsRule(DataQualityRule):
-    """Permits past valid_until that are still flagged ACTIVE."""
+    """Permits past valid_until that are still flagged ACTIVE.
+
+    Уволенный не в счёт — см. ``ExpiredRecordsRule`` (срез-127).
+    """
 
     @property
     def rule_name(self) -> str:
@@ -357,6 +374,7 @@ class ExpiredPermitsRule(DataQualityRule):
                 Permit.status == PermitStatus.ACTIVE.value,
                 Permit.valid_until.is_not(None),
                 Permit.valid_until < today,
+                employed_record_where(Permit, self.tenant_id),
             )
             permits = (await self.db.execute(stmt)).scalars().all()
             self.total_checked = len(permits)
@@ -387,7 +405,10 @@ class ExpiredPermitsRule(DataQualityRule):
 
 
 class ExpiredPPEIssuesRule(DataQualityRule):
-    """PPE issuances with expires_at in the past while still ISSUED."""
+    """PPE issuances with expires_at in the past while still ISSUED.
+
+    Уволенный не в счёт — см. ``ExpiredRecordsRule`` (срез-127).
+    """
 
     @property
     def rule_name(self) -> str:
@@ -407,6 +428,7 @@ class ExpiredPPEIssuesRule(DataQualityRule):
                 PPEIssue.status == PPEIssueStatus.ISSUED,
                 PPEIssue.expires_at.is_not(None),
                 PPEIssue.expires_at < now,
+                employed_record_where(PPEIssue, self.tenant_id),
             )
             issuances = (await self.db.execute(stmt)).scalars().all()
             self.total_checked = len(issuances)

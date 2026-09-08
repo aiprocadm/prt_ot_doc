@@ -20,6 +20,7 @@ from app.models.models import (
 )
 from app.modules.ppe import lifecycle as lc
 from app.modules.ppe.services import NormItem, PPENormService
+from app.services.person_scope import employed_record_where
 
 
 @dataclass(slots=True)
@@ -114,7 +115,12 @@ async def list_expiring_issues(
     within_days: int,
     reference: datetime | None = None,
 ) -> list[PPEIssue]:
-    """Return PPE issues that will expire within the given period."""
+    """Return PPE issues that will expire within the given period.
+
+    Уволенный не в счёт (срез-127): это выборка «что горит», а не журнал
+    выдач. Формула одна на продукт (``services/person_scope``) — та же, что у
+    напоминаний о замене СИЗ и у виджетов аналитики.
+    """
 
     now = reference or datetime.now(tz=timezone.utc)
     horizon = now + timedelta(days=within_days)
@@ -125,6 +131,7 @@ async def list_expiring_issues(
         PPEIssue.expires_at.is_not(None),
         PPEIssue.expires_at <= horizon,
         PPEIssue.expires_at >= now,
+        employed_record_where(PPEIssue, tenant_id),
     )
     return (await session.execute(stmt)).scalars().all()
 

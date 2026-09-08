@@ -22,6 +22,7 @@ from app.models.models import (
 )
 from app.models.risk import RiskAssessmentItem
 from app.services.discipline_incidents import open_incidents_where
+from app.services.person_scope import employed_record_where
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -65,6 +66,8 @@ async def get_kpi(
             RiskAssessmentItem.level.in_(["high", "crit"]),
         )
     )
+    # «Уволенный не в счёт» (срез-127) — тот же счётчик, что на сводке и в
+    # аналитике (срез-96); KPI обязан совпадать с ними число в число.
     trainings_overdue_stmt = (
         select(func.count())
         .select_from(TrainingPlan)
@@ -72,6 +75,7 @@ async def get_kpi(
             TrainingPlan.tenant_id == tenant.id,
             TrainingPlan.due_date.is_not(None),
             TrainingPlan.due_date < today,
+            employed_record_where(TrainingPlan, str(tenant.id)),
         )
     )
     month_start = datetime.now(timezone.utc).replace(

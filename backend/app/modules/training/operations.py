@@ -25,6 +25,7 @@ from app.models.models import (
 from app.services.events import EventType
 from app.services.obligations import create_training_task
 from app.services.outbox import OutboxService
+from app.services.person_scope import employed_record_where
 
 
 @dataclass(slots=True)
@@ -296,7 +297,12 @@ async def upcoming_certificate_expirations(
     tenant_id: str,
     before: date | None = None,
 ) -> Iterable[TrainingCertificate]:
-    """Return certificates that expire before or on the provided date."""
+    """Return certificates that expire before or on the provided date.
+
+    Уволенный не в счёт (срез-127): выборка отвечает на вопрос «кого учить
+    заново», а не «какие удостоверения выдавались». Формула одна на продукт
+    (``services/person_scope``) — та же, что у календаря удостоверений.
+    """
 
     cutoff = before or (date.today() + timedelta(days=30))
     stmt = select(TrainingCertificate).where(
@@ -304,6 +310,7 @@ async def upcoming_certificate_expirations(
         TrainingCertificate.deleted_at.is_(None),
         TrainingCertificate.valid_until.is_not(None),
         TrainingCertificate.valid_until <= cutoff,
+        employed_record_where(TrainingCertificate, tenant_id),
     )
     result = await session.execute(stmt)
     return result.scalars().all()

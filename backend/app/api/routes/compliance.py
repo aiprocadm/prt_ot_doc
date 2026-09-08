@@ -11,6 +11,7 @@ from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
 from app.models.models import ComplianceDeadline, Tenant
 from app.modules.compliance_deadlines.services import ComplianceDeadlineService
+from app.services.person_scope import employed_record_where
 
 router = APIRouter(prefix="/compliance", tags=["compliance"])
 
@@ -66,7 +67,13 @@ async def list_deadlines(
         (
             await session.execute(
                 select(ComplianceDeadline)
-                .where(ComplianceDeadline.tenant_id == tenant.id)
+                .where(
+                    ComplianceDeadline.tenant_id == tenant.id,
+                    # Уволенный не в счёт (срез-127): снимок сроков строится по
+                    # всем удостоверениям арендатора, включая удостоверения
+                    # уволенных, — их убирает отбор при чтении, как в календаре.
+                    employed_record_where(ComplianceDeadline, tenant.id),
+                )
                 .order_by(ComplianceDeadline.due_at.asc())
             )
         )

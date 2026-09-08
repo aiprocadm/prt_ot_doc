@@ -28,6 +28,7 @@ from app.schemas.dashboard import (
     DashboardTrainingSummary,
 )
 from app.services.discipline_incidents import open_incidents_where
+from app.services.person_scope import employed_record_where
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -119,6 +120,9 @@ async def dashboard_summary(
     training_total_stmt = (
         select(func.count()).select_from(TrainingPlan).where(TrainingPlan.tenant_id == tenant.id)
     )
+    # «Уволенный не в счёт» — то же правило, что у виджетов аналитики
+    # (срез-96) и Командного центра: «просрочено» и «скоро» — это сводка
+    # «что горит сейчас». План без человека (на организацию) остаётся.
     training_overdue_stmt = (
         select(func.count())
         .select_from(TrainingPlan)
@@ -126,6 +130,7 @@ async def dashboard_summary(
             TrainingPlan.tenant_id == tenant.id,
             TrainingPlan.due_date.is_not(None),
             TrainingPlan.due_date < today,
+            employed_record_where(TrainingPlan, str(tenant.id)),
         )
     )
     training_due_soon_stmt = (
@@ -136,6 +141,7 @@ async def dashboard_summary(
             TrainingPlan.due_date.is_not(None),
             TrainingPlan.due_date >= today,
             TrainingPlan.due_date <= due_soon_date,
+            employed_record_where(TrainingPlan, str(tenant.id)),
         )
     )
 
