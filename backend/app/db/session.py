@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 from uuid import UUID
 
 from sqlalchemy import MetaData, Table, event, or_, select, text
+from sqlalchemy.engine import Engine
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -84,6 +85,34 @@ def _initialize_engine(url: str, *, echo: bool) -> None:
         expire_on_commit=False,
         autoflush=False,
     )
+
+
+def _unicode_lower(value):
+    return value.lower() if isinstance(value, str) else value
+
+
+@event.listens_for(Engine, "connect")
+def _teach_sqlite_unicode_lower(dbapi_connection, _record) -> None:
+    """SQLite должен понижать регистр КИРИЛЛИЦЫ так же, как PostgreSQL.
+
+    Встроенные ``lower()`` и ``LIKE`` в SQLite знают только латиницу: «ГАЗель»
+    и «газель» для них разные слова. Поиск по реестрам (``ilike``)
+    компилируется в ``lower(a) LIKE lower(b)``, и без подмены он вёл бы себя в
+    разработке и тестах иначе, чем в бою, — расхождение, которое ловится
+    только на живом сервере.
+
+    Хук повешен на КЛАСС движка, а не на один экземпляр: тесты поднимают свой
+    SQLite-движок рядом с приложением, и правило обязано действовать в обоих.
+    На PostgreSQL хук молчит — у его соединения нет ``create_function``.
+    """
+
+    register = getattr(dbapi_connection, "create_function", None)
+    if register is None:  # PostgreSQL и всё, что не SQLite
+        return
+    try:
+        register("lower", 1, _unicode_lower, deterministic=True)
+    except TypeError:  # старый SQLite без deterministic
+        register("lower", 1, _unicode_lower)
 
 
 _initialize_engine(_settings.database_url, echo=_settings.database_echo)

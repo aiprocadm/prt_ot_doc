@@ -62,6 +62,14 @@ from app.models.road_safety import (
 )
 from app.models.safety_ops import CorrectiveAction
 from app.models.training import Internship
+from app.modules.road_safety.search import (
+    accident_search,
+    driver_search,
+    normalize_needle,
+    vehicle_search,
+    violation_search,
+    waybill_search,
+)
 from app.schemas.road_safety import (
     DriverCreate,
     DriverPage,
@@ -96,6 +104,8 @@ TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 
 #: Право на запись у контура — общее для всех дисциплин (срез-119):
 #: один список в ядре вместо пяти одинаковых копий по модулям.
+#: Подсказка к параметру поиска — одна на все реестры экрана.
+_Q_HELP = "Текстовый отбор по реестру (в базе, а не по загруженной странице)"
 _ROLES = list(discipline_write_roles(Discipline.ROAD_SAFETY))
 
 #: горизонт «скоро истекает» — тот же, что у остальных сводок продукта
@@ -303,15 +313,26 @@ async def list_vehicles(
     access: Access,
     kind: str | None = Query(default=None),
     status_filter: str | None = Query(default=None, alias="status"),
+    q: str | None = Query(default=None, max_length=200, description=_Q_HELP),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> VehiclePage:
-    """Реестр парка: и эксплуатируемые, и списанные — история цела."""
+    """Реестр парка: и эксплуатируемые, и списанные — история цела.
+
+    ``q`` — текстовый отбор В БАЗЕ (срез-123). До него экран искал по 200
+    загруженным строкам, и у арендатора с большим парком существующая машина
+    просто «не находилась».
+    """
 
     TenantContextValidator.ensure_tenant_context(tenant)
     stmt = select(Vehicle).where(
         Vehicle.tenant_id == tenant.id, Vehicle.deleted_at.is_(None)
     )
+    needle = normalize_needle(q)
+    if needle:
+        condition = vehicle_search(needle)
+        if condition is not None:
+            stmt = stmt.where(condition)
     if kind:
         stmt = stmt.where(Vehicle.kind == kind)
     if status_filter:
@@ -998,6 +1019,7 @@ async def list_drivers(
     status_filter: str | None = Query(default=None, alias="status"),
     category: str | None = Query(default=None),
     person_id: str | None = Query(default=None, min_length=1, max_length=36),
+    q: str | None = Query(default=None, max_length=200, description=_Q_HELP),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> DriverPage:
@@ -1013,6 +1035,12 @@ async def list_drivers(
         .options(selectinload(Driver.person))
         .where(Driver.tenant_id == tenant.id, Driver.deleted_at.is_(None))
     )
+    needle = normalize_needle(q)
+    if needle:
+        condition = driver_search(needle)
+        if condition is not None:
+            # join, а не подзапрос: имя водителя живёт в кадровой записи.
+            stmt = stmt.join(Person, Driver.person_id == Person.id).where(condition)
     if status_filter:
         stmt = stmt.where(Driver.status == status_filter)
     if person_id:
@@ -1443,6 +1471,7 @@ async def list_waybills(
     issued_from: date | None = Query(default=None),
     issued_to: date | None = Query(default=None),
     release_status: str | None = Query(default=None),
+    q: str | None = Query(default=None, max_length=200, description=_Q_HELP),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> WaybillPage:
@@ -1462,6 +1491,18 @@ async def list_waybills(
         )
         .where(Waybill.tenant_id == tenant.id, Waybill.deleted_at.is_(None))
     )
+    needle = normalize_needle(q)
+    if needle:
+        condition = waybill_search(needle)
+        if condition is not None:
+            # Водителя у листа может не быть — outer join, иначе поиск по
+            # номеру потерял бы листы без водителя.
+            stmt = (
+                stmt.join(Vehicle, Waybill.vehicle_id == Vehicle.id)
+                .outerjoin(Driver, Waybill.driver_id == Driver.id)
+                .outerjoin(Person, Driver.person_id == Person.id)
+                .where(condition)
+            )
     if status_filter:
         stmt = stmt.where(Waybill.status == status_filter)
     if vehicle_id:
@@ -1856,6 +1897,7 @@ async def list_accidents(
     fault: str | None = Query(default=None),
     occurred_from: datetime | None = Query(default=None),
     occurred_to: datetime | None = Query(default=None),
+    q: str | None = Query(default=None, max_length=200, description=_Q_HELP),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> RoadAccidentPage:
@@ -1872,6 +1914,16 @@ async def list_accidents(
             RoadAccident.tenant_id == tenant.id, RoadAccident.deleted_at.is_(None)
         )
     )
+    needle = normalize_needle(q)
+    if needle:
+        condition = accident_search(needle)
+        if condition is not None:
+            stmt = (
+                stmt.join(Vehicle, RoadAccident.vehicle_id == Vehicle.id)
+                .outerjoin(Driver, RoadAccident.driver_id == Driver.id)
+                .outerjoin(Person, Driver.person_id == Person.id)
+                .where(condition)
+            )
     if vehicle_id:
         stmt = stmt.where(RoadAccident.vehicle_id == vehicle_id)
     if driver_id:
@@ -2139,6 +2191,7 @@ async def list_violations(
     fine_status: str | None = Query(default=None),
     occurred_from: datetime | None = Query(default=None),
     occurred_to: datetime | None = Query(default=None),
+    q: str | None = Query(default=None, max_length=200, description=_Q_HELP),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> TrafficViolationPage:
@@ -2156,6 +2209,16 @@ async def list_violations(
             TrafficViolation.deleted_at.is_(None),
         )
     )
+    needle = normalize_needle(q)
+    if needle:
+        condition = violation_search(needle)
+        if condition is not None:
+            stmt = (
+                stmt.join(Vehicle, TrafficViolation.vehicle_id == Vehicle.id)
+                .outerjoin(Driver, TrafficViolation.driver_id == Driver.id)
+                .outerjoin(Person, Driver.person_id == Person.id)
+                .where(condition)
+            )
     if vehicle_id:
         stmt = stmt.where(TrafficViolation.vehicle_id == vehicle_id)
     if driver_id:

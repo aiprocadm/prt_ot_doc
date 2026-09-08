@@ -540,17 +540,22 @@ export const roadSafetyApi = {
     return data;
   },
 
-  listVehicles: async (): Promise<VehicleDto[]> => {
+  /**
+   * `q` — текстовый отбор НА СЕРВЕРЕ (срез-123). Экран грузит первую страницу
+   * реестра; без серверного отбора поиск по большому парку молча не находил
+   * существующую машину, и человек заводил дубль.
+   */
+  listVehicles: async (params: { q?: string } = {}): Promise<VehicleDto[]> => {
     const { data } = await apiClient.get<{ items?: VehicleDto[] }>(
       "/road-safety/vehicles",
-      { params: { limit: 200, offset: 0 } },
+      { params: { limit: 200, offset: 0, ...params } },
     );
     return Array.isArray(data?.items) ? data.items : [];
   },
 
   /** `person_id` — состав НА ЧЕЛОВЕКЕ (срез-67): отбирает сервер, не экран. */
   listDrivers: async (
-    params: { person_id?: string } = {},
+    params: { person_id?: string; q?: string } = {},
   ): Promise<DriverDto[]> => {
     const { data } = await apiClient.get<{ items?: DriverDto[] }>(
       "/road-safety/drivers",
@@ -558,24 +563,28 @@ export const roadSafetyApi = {
     );
     return Array.isArray(data?.items) ? data.items : [];
   },
-  listWaybills: async (): Promise<WaybillDto[]> => {
+  listWaybills: async (params: { q?: string } = {}): Promise<WaybillDto[]> => {
     const { data } = await apiClient.get<{ items?: WaybillDto[] }>(
       "/road-safety/waybills",
-      { params: { limit: 200, offset: 0 } },
+      { params: { limit: 200, offset: 0, ...params } },
     );
     return Array.isArray(data?.items) ? data.items : [];
   },
-  listAccidents: async (): Promise<RoadAccidentDto[]> => {
+  listAccidents: async (
+    params: { q?: string } = {},
+  ): Promise<RoadAccidentDto[]> => {
     const { data } = await apiClient.get<{ items?: RoadAccidentDto[] }>(
       "/road-safety/accidents",
-      { params: { limit: 200, offset: 0 } },
+      { params: { limit: 200, offset: 0, ...params } },
     );
     return Array.isArray(data?.items) ? data.items : [];
   },
-  listViolations: async (): Promise<TrafficViolationDto[]> => {
+  listViolations: async (
+    params: { q?: string } = {},
+  ): Promise<TrafficViolationDto[]> => {
     const { data } = await apiClient.get<{ items?: TrafficViolationDto[] }>(
       "/road-safety/violations",
-      { params: { limit: 200, offset: 0 } },
+      { params: { limit: 200, offset: 0, ...params } },
     );
     return Array.isArray(data?.items) ? data.items : [];
   },

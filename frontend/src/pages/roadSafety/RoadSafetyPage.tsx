@@ -469,6 +469,12 @@ const RoadSafetyPage = () => {
 
   const registry = useLocalRegistry({
     items: data.vehicles,
+    // Срез-123: непустой запрос уходит на сервер — на большом парке поиск по
+    // загруженной странице молча терял существующие машины.
+    remoteSearch: useCallback(
+      (q: string) => roadSafetyApi.listVehicles({ q }),
+      [],
+    ),
     match: (item, query) =>
       [item.plate_number, item.brand_model, item.kind_label, item.status_label]
         .filter(Boolean)
@@ -479,6 +485,13 @@ const RoadSafetyPage = () => {
 
   const drivers = useLocalRegistry({
     items: data.drivers,
+    remoteSearch: useCallback(
+      (q: string) =>
+        roadSafetyApi.listDrivers(
+          personFilter ? { person_id: personFilter, q } : { q },
+        ),
+      [personFilter],
+    ),
     match: (item, query) =>
       [
         item.person_name,
@@ -494,6 +507,10 @@ const RoadSafetyPage = () => {
 
   const waybills = useLocalRegistry({
     items: data.waybills,
+    remoteSearch: useCallback(
+      (q: string) => roadSafetyApi.listWaybills({ q }),
+      [],
+    ),
     match: (item, query) =>
       [
         item.number,
@@ -510,6 +527,10 @@ const RoadSafetyPage = () => {
 
   const accidents = useLocalRegistry({
     items: data.accidents,
+    remoteSearch: useCallback(
+      (q: string) => roadSafetyApi.listAccidents({ q }),
+      [],
+    ),
     match: (item, query) =>
       [
         item.place,
@@ -526,6 +547,10 @@ const RoadSafetyPage = () => {
 
   const violations = useLocalRegistry({
     items: data.violations,
+    remoteSearch: useCallback(
+      (q: string) => roadSafetyApi.listViolations({ q }),
+      [],
+    ),
     match: (item, query) =>
       [
         item.vehicle_plate,
