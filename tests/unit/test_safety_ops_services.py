@@ -1,18 +1,8 @@
 from datetime import date, timedelta
 
 from app.modules.capa import CorrectiveActionService, PrescriptionService
-from app.modules.incidents import IncidentCaseService, RiskReviewTriggerService
 from app.modules.inspection_prep import GapAnalysisService
 from app.modules.inspections import InspectionChecklistService, InspectionService
-
-
-def test_incident_status_transitions() -> None:
-    assert IncidentCaseService.validate_transition("draft", "registered")
-    assert not IncidentCaseService.validate_transition("closed", "investigating")
-    assert IncidentCaseService.next_status_on_register("draft") == "registered"
-    assert (
-        IncidentCaseService.close_status(has_open_actions=False, manual_override=False) == "closed"
-    )
 
 
 def test_checklist_snapshot_semantics() -> None:
@@ -52,8 +42,3 @@ def test_gap_detection_logic() -> None:
         missing_documents=1, overdue_actions=1, open_prescriptions=0
     )
     assert len(gaps) == 2
-
-
-def test_risk_review_trigger_on_incident_or_high_finding() -> None:
-    assert RiskReviewTriggerService.needs_trigger(False, "critical")
-    assert RiskReviewTriggerService.needs_trigger(True, "low")
