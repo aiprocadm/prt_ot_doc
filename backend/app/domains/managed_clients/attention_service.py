@@ -38,13 +38,17 @@ from app.domains.managed_clients.attention import (
     not_aggregated,
     sort_portfolio,
 )
+from app.domains.managed_clients.consent import ClientConsent
+from app.domains.managed_clients.delegation import evaluate_delegated_read
 from app.domains.managed_clients.lifecycle import ManagedClientMode, is_contract_expiring
-from app.models.managed_clients import ManagedClient
+from app.models.managed_clients import ManagedClient, ManagedClientConsent
 from app.models.master_data import Person
 from app.models.medical import MedicalExam
 from app.models.ppe import PPEIssue
 from app.models.road_safety import Driver
+from app.models.tenanting import Tenant
 from app.models.training import TrainingEnrollment
+from app.services.delegated_attention import collect_dedicated_client_signals
 from app.services.discipline_fire_safety import collect_fire_safety_overdue_by_company
 from app.services.discipline_road_safety import expired_license_where
 from app.services.discipline_training import overdue_training_enrollment_where
@@ -56,6 +60,77 @@ DEDICATED_REASON = (
     "Данные ведутся в отдельном контуре клиента; сводка станет доступна "
     "после подключения делегированного доступа"
 )
+
+#: Контур прочитать не удалось (удалён, переименован, недоступен). Ноль здесь
+#: читался бы как «у клиента всё в порядке» — худшая ошибка в сводке про риски.
+DELEGATED_READ_FAILED_REASON = "Контур клиента сейчас недоступен — сводка по нему не собрана"
+
+
+async def _delegated_signals(
+    session: AsyncSession,
+    *,
+    client: ManagedClient,
+    outsourcer_tenant_id: str,
+    today: date,
+    now: datetime,
+) -> tuple[dict[SignalKind, int] | None, str]:
+    """Сигналы по контуру Dedicated-клиента или причина, почему их нет.
+
+    Право читать чужой контур проверяется ЗДЕСЬ и целиком (иерархия арендаторов
+    плюс действующее согласие); само чтение — в ``services/delegated_attention``.
+    """
+
+    slug = (client.dedicated_tenant_slug or "").strip()
+    client_tenant = None
+    if slug:
+        client_tenant = (
+            await session.execute(select(Tenant).where(Tenant.slug == slug))
+        ).scalar_one_or_none()
+
+    consents = [
+        ClientConsent(
+            client_id=str(row.managed_client_id),
+            document_ref=row.document_ref,
+            granted_at=row.granted_at,
+            expires_at=row.expires_at,
+            revoked_at=row.revoked_at,
+        )
+        for row in (
+            (
+                await session.execute(
+                    select(ManagedClientConsent).where(
+                        ManagedClientConsent.tenant_id == outsourcer_tenant_id,
+                        ManagedClientConsent.managed_client_id == client.id,
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+    ]
+
+    verdict = evaluate_delegated_read(
+        mode=client.mode,
+        client_tenant_slug=slug or None,
+        client_tenant_exists=client_tenant is not None,
+        client_tenant_parent_id=getattr(client_tenant, "parent_id", None),
+        client_tenant_is_active=bool(getattr(client_tenant, "is_active", False)),
+        outsourcer_tenant_id=outsourcer_tenant_id,
+        consents=consents,
+        now=now,
+    )
+    if not verdict.allowed:
+        return None, verdict.reason or DEDICATED_REASON
+
+    counts = await collect_dedicated_client_signals(
+        tenant_slug=str(verdict.tenant_slug),
+        tenant_id=str(client_tenant.id),
+        today=today,
+        now=now,
+    )
+    if counts is None:
+        return None, DELEGATED_READ_FAILED_REASON
+    return counts, ""
 
 
 async def _count_by_company(session: AsyncSession, stmt) -> dict[str, int]:
@@ -182,7 +257,46 @@ async def collect_portfolio_attention(
             today=today,
             horizon_days=horizon_days,
         )
-        if client.mode is ManagedClientMode.DEDICATED or not client.company_id:
+        if client.mode is ManagedClientMode.DEDICATED:
+            # Срез-126: контур клиента читается делегированно — если для этого
+            # есть основание (иерархия арендаторов) и согласие клиента.
+            counts, reason = await _delegated_signals(
+                session,
+                client=client,
+                outsourcer_tenant_id=tenant_id,
+                today=today,
+                now=now,
+            )
+            if counts is not None:
+                rows.append(
+                    build_client_attention(
+                        client_id=client.id,
+                        client_name=client.name,
+                        counts=counts,
+                        contract_expiring=expiring,
+                    )
+                )
+                continue
+            row = not_aggregated(client_id=client.id, client_name=client.name, reason=reason)
+            if expiring:
+                row = ClientAttention(
+                    client_id=row.client_id,
+                    client_name=row.client_name,
+                    aggregation=row.aggregation,
+                    signals=build_client_attention(
+                        client_id=client.id,
+                        client_name=client.name,
+                        counts={},
+                        contract_expiring=True,
+                    ).signals,
+                    total=None,
+                    severity=None,
+                    reason=row.reason,
+                )
+            rows.append(row)
+            continue
+
+        if not client.company_id:
             # Договор ведёт аутсорсер, и он виден всегда; остальное — не читаем.
             row = not_aggregated(
                 client_id=client.id, client_name=client.name, reason=DEDICATED_REASON
