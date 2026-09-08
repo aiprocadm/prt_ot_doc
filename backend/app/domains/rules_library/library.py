@@ -148,7 +148,17 @@ LIBRARY_RULES: tuple[LibraryRule, ...] = (
                 "priority": "high",
                 "due_in_days": 7,
                 "assignee_mode": "none",
-            }
+            },
+            {
+                "type": "notify",
+                "title_template": "Скоро замена СИЗ: {item_name}",
+                "body_template": (
+                    "Срок носки СИЗ «{item_name}» истекает {expires_at}. "
+                    "Обратитесь на склад за заменой."
+                ),
+                "recipient_mode": "person",
+                "priority": "medium",
+            },
         ],
         priority=30,
     ),

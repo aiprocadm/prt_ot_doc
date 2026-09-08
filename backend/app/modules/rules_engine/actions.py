@@ -13,9 +13,10 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.master_data import Person
 from app.models.models import RoleEnum, User
 from app.models.notifications import (
     Notification,
@@ -28,13 +29,27 @@ from app.models.rules_engine import AutomationRule, AutomationRuleTrigger
 from app.modules.rules_engine.conditions import resolve_field
 from app.services.notifications import send_notification
 from app.services.obligations import next_task_reminder
+from app.services.person_scope import employed_person_where
 
 ALLOWED_ACTION_TYPES = frozenset({"create_task", "notify", "webhook"})
 MAX_ACTIONS = 10
 _TEMPLATE_RE = re.compile(r"\{([A-Za-z0-9_.]+)\}")
 _TASK_PRIORITIES = frozenset(p.value for p in TaskPriority)
 _NOTIFY_PRIORITIES = frozenset(p.value for p in NotificationPriority)
-_RECIPIENT_MODES = frozenset({"actor", "user_id", "role"})
+_RECIPIENT_MODES = frozenset({"actor", "user_id", "role", "person"})
+# Поле события, из которого режим "person" берёт работника. Одно имя, а не
+# догадки по похожим полям: правило на событии без него отклоняется при
+# сохранении (см. _validate_notify), а не молчит в проде.
+PERSON_EVENT_FIELD = "person_id"
+# Подписи режимов получателя — общие с экраном правил
+# (frontend/src/pages/rules/rulesVocab.ts, RECIPIENT_MODE_LABELS). Сторож
+# tests/api/test_rules_engine_actions.py сверяет два списка.
+RECIPIENT_MODE_TITLES: dict[str, str] = {
+    "actor": "Автор события",
+    "person": "Работник из события",
+    "user_id": "Указать user ID",
+    "role": "По ролям",
+}
 _ASSIGNEE_MODES = frozenset({"none", "actor", "user_id"})
 _KNOWN_ROLES = frozenset(r.value for r in RoleEnum)
 MAX_DUE_IN_DAYS = 365
@@ -94,7 +109,9 @@ def _validate_create_task(idx: int, action: Mapping[str, Any]) -> None:
         )
 
 
-def _validate_notify(idx: int, action: Mapping[str, Any]) -> None:
+def _validate_notify(
+    idx: int, action: Mapping[str, Any], known_fields: frozenset[str] | None
+) -> None:
     _require_template(idx, action, "title_template")
     _require_template(idx, action, "body_template")
     mode = action.get("recipient_mode")
@@ -103,6 +120,11 @@ def _validate_notify(idx: int, action: Mapping[str, Any]) -> None:
     if mode == "user_id" and not action.get("user_id"):
         raise ActionsError(
             "invalid_action", f"action #{idx}: user_id is required for recipient_mode=user_id"
+        )
+    if mode == "person" and known_fields is not None and PERSON_EVENT_FIELD not in known_fields:
+        raise ActionsError(
+            "person_not_in_event",
+            f"action #{idx}: event has no {PERSON_EVENT_FIELD!r} field",
         )
     if mode == "role":
         roles = action.get("roles")
@@ -116,8 +138,14 @@ def _validate_notify(idx: int, action: Mapping[str, Any]) -> None:
         raise ActionsError("invalid_action", f"action #{idx}: bad priority {priority!r}")
 
 
-def validate_actions(raw: Any) -> None:
-    """422-валидация actions_json (список из <= MAX_ACTIONS известных действий)."""
+def validate_actions(raw: Any, *, known_fields: frozenset[str] | None = None) -> None:
+    """422-валидация actions_json (список из <= MAX_ACTIONS известных действий).
+
+    ``known_fields`` — поля выбранного события (``catalog.known_fields_for``).
+    Нужны режиму получателя ``person``: правило, повешенное на событие без
+    ``person_id``, никогда бы не нашло адресата, и лучше сказать об этом при
+    сохранении.
+    """
     if not isinstance(raw, list) or not raw:
         raise ActionsError("invalid_actions", "actions_json must be a non-empty list")
     if len(raw) > MAX_ACTIONS:
@@ -132,7 +160,7 @@ def validate_actions(raw: Any) -> None:
         if a_type == "create_task":
             _validate_create_task(idx, action)
         elif a_type == "notify":
-            _validate_notify(idx, action)
+            _validate_notify(idx, action, known_fields)
         # webhook: параметров нет
 
 
@@ -207,7 +235,9 @@ def describe_action(action: Mapping[str, Any]) -> str:
     if a_type == "create_task":
         return f"создать задачу «{action.get('title_template', '')}»"
     if a_type == "notify":
-        return f"уведомление ({action.get('recipient_mode')}) «{action.get('title_template', '')}»"
+        mode = str(action.get("recipient_mode"))
+        who = RECIPIENT_MODE_TITLES.get(mode, mode)
+        return f"уведомление ({who}) «{action.get('title_template', '')}»"
     if a_type == "webhook":
         return "отправить webhook rule.triggered"
     return str(a_type)
@@ -228,8 +258,44 @@ async def was_already_triggered(
     return (await session.execute(stmt)).scalar_one_or_none() is not None
 
 
+async def _resolve_person_user(
+    session: AsyncSession, *, tenant_id: str, person_id: str
+) -> list[str]:
+    """Учётная запись работника из события.
+
+    Связь «работник — вход в систему» в продукте одна: совпадение почты
+    (прецедент ``services/employee_card._build_roles_and_assignments``),
+    отдельной ссылки у ``User`` нет. Уволенного не уведомляем — общее правило
+    ``person_scope`` (срез-89): его сроки больше не его обязательства.
+    """
+    person = await session.scalar(
+        select(Person).where(
+            Person.id == person_id,
+            Person.tenant_id == tenant_id,
+            *employed_person_where(),
+        )
+    )
+    if person is None or not person.email:
+        return []
+    user_id = await session.scalar(
+        select(User.id)
+        .where(
+            User.tenant_id == tenant_id,
+            func.lower(User.email) == person.email.lower(),
+            User.deleted_at.is_(None),
+        )
+        .limit(1)
+    )
+    return [str(user_id)] if user_id else []
+
+
 async def _resolve_recipients(
-    session: AsyncSession, *, tenant_id: str, action: Mapping[str, Any], actor_id: str | None
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    action: Mapping[str, Any],
+    actor_id: str | None,
+    payload: Mapping[str, Any],
 ) -> list[str]:
     mode = action.get("recipient_mode")
     if mode == "actor":
@@ -243,6 +309,11 @@ async def _resolve_recipients(
         if not await _user_in_tenant(session, tenant_id=tenant_id, user_id=str(user_id)):
             return []
         return [str(user_id)]
+    if mode == "person":
+        person_id = payload.get(PERSON_EVENT_FIELD)
+        if not person_id:
+            return []
+        return await _resolve_person_user(session, tenant_id=tenant_id, person_id=str(person_id))
     if mode == "role":
         # Прецедент: _resolve_rule_recipients в app/tasks/notification_jobs.py —
         # lowercase-значения RoleEnum сравниваются напрямую через .in_().
@@ -331,9 +402,16 @@ async def _execute_notify(
         tenant_id=tenant_id,
         action=action,
         actor_id=str(raw_actor) if raw_actor else None,
+        payload=payload,
     )
     if not recipients:
-        return ActionOutcome(type="notify", outcome="suppressed", detail="no recipients")
+        detail = "no recipients"
+        if action.get("recipient_mode") == "person":
+            # Разные причины пустоты (нет person_id, уволен, нет почты, нет входа)
+            # намеренно сведены в один текст: подробность здесь рассказала бы о
+            # человеке больше, чем видно на экране правил.
+            detail = "no active user account for person from event"
+        return ActionOutcome(type="notify", outcome="suppressed", detail=detail)
     title = render_template(str(action.get("title_template", "")), payload, limit=255)
     body = render_template(str(action.get("body_template", "")), payload, limit=2000)
     created: list[str] = []

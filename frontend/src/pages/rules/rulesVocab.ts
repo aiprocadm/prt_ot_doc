@@ -23,6 +23,22 @@ export const ACTION_LABELS: Record<RuleActionType, string> = {
   webhook: "Webhook",
 };
 
+/**
+ * Кому уходит уведомление. Тот же список — в бэкенде
+ * (`app/modules/rules_engine/actions.py`, RECIPIENT_MODE_TITLES); их сверяет
+ * сторож `tests/api/test_rules_engine_actions.py`, чтобы описание правила в
+ * пробном прогоне и подпись в форме не разъехались.
+ *
+ * `person` — сам работник из события (по его почте ищется вход в систему);
+ * доступен только у событий, где есть поле `person_id`.
+ */
+export const RECIPIENT_MODE_LABELS: Record<string, string> = {
+  actor: "Автор события",
+  person: "Работник из события",
+  user_id: "Указать user ID",
+  role: "По ролям",
+};
+
 export const STATUS_LABELS: Record<TriggerStatus, string> = {
   success: "Успех",
   partial: "Частично",

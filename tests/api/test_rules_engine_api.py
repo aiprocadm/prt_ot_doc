@@ -374,3 +374,39 @@ async def test_triggers_journal(async_client, make_auth_headers, sessionmaker, d
     empty = await async_client.get(f"{BASE}/triggers?rule_id={uuid4()}", headers=headers)
     assert empty.status_code == status.HTTP_200_OK
     assert empty.json()["total"] == 0
+
+
+@pytest.mark.asyncio
+async def test_person_recipient_mode_gated_by_event(
+    async_client, make_auth_headers, sessionmaker, data_factory
+):
+    """Срез-118: получатель «работник из события» доступен только там, где работник есть."""
+    await _enable_flag(sessionmaker, data_factory)
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    person_action = {
+        "type": "notify",
+        "recipient_mode": "person",
+        "title_template": "Замена СИЗ",
+        "body_template": "Срок по {item_name}",
+    }
+
+    denied = await async_client.post(
+        BASE,
+        json={**RULE, "name": "Работник из инцидента", "actions_json": [person_action]},
+        headers=headers,
+    )
+    assert denied.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY, denied.text
+    assert "person_not_in_event" in denied.text
+
+    allowed = await async_client.post(
+        BASE,
+        json={
+            **RULE,
+            "name": "Работник из события СИЗ",
+            "event_type": "PPEReplacementDue",
+            "conditions_json": {"match": "all", "conditions": []},
+            "actions_json": [person_action],
+        },
+        headers=headers,
+    )
+    assert allowed.status_code == status.HTTP_201_CREATED, allowed.text
