@@ -50,8 +50,16 @@ class TestRegistry:
         }
 
     def test_объявлены_права_экранов(self) -> None:
+        """Срез-119: у контура появилось право ВЕСТИ записи, а не только смотреть.
+
+        До него запись охранял список ролей на сервере, а экран проверял своё
+        право `fire_safety.view` — и две стороны разошлись: инженеру ПБ экран
+        показывали, а запись сервер отклонял.
+        """
+
         assert set(_module().permissions) == {
             "fire_safety.view",
+            "fire_safety.manage",
             "fire_training.view",
             "fire_inspections.view",
         }

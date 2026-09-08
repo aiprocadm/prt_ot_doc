@@ -29,10 +29,10 @@ from app.models.tenanting import Tenant
 from app.modules.files import s3
 from app.modules.imports.parsers import MAX_ASYNC_IMPORT_ROWS, ImportFileError
 from app.modules.imports.quality import run_quality_check_for_batch
-from app.services.client_change_signals import record_client_changes_for_batch
 from app.modules.imports.registry import get_target
 from app.modules.imports.service import ImportMappingError, ImportService
 from app.modules.imports.stream import run_streaming
+from app.services.client_change_signals import record_client_changes_for_batch
 
 __all__ = [
     "IMPORT_SOURCE_PREFIX",

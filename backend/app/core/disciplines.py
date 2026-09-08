@@ -57,6 +57,9 @@ __all__ = [
     "UNMAPPED_PERMIT_WORK_TYPES",
     "discipline_of_permit",
     "DISCIPLINE_TITLES",
+    "DISCIPLINE_SPECIALIST_ROLE",
+    "DISCIPLINE_WRITE_ROLES_BASE",
+    "discipline_write_roles",
     "MEASURED_DISCIPLINES",
     "PERSON_SCOPED_SOURCES",
     "SOURCE_DISCIPLINE",
@@ -78,6 +81,45 @@ class Discipline(str, enum.Enum):
     ECOLOGY = "ecology"
     CIVIL_DEFENSE = "civil_defense"
     ROAD_SAFETY = "road_safety"
+
+
+#: Кто вправе ВЕСТИ записи контура дисциплины — общая часть для всех пяти
+#: собственных контуров (ПБ, ПромБез, Экология, ГО-ЧС, БДД).
+#:
+#: До среза-119 этот список был написан пять раз — по копии в каждом модуле.
+#: Пять одинаковых копий держатся вместе ровно до первой правки: расширили
+#: право на одном экране, забыли на соседнем — и «специалист по охране труда»
+#: означает разное в двух местах одного продукта. Та же причина, по которой
+#: сюда переехал словарь дисциплин.
+DISCIPLINE_WRITE_ROLES_BASE: tuple[str, ...] = (
+    "admin",
+    "owner",
+    "ot_pb_lead",
+    "ot_specialist",
+)
+
+#: Профильная роль дисциплины — сверх общей части. Роль существует ради своей
+#: дисциплины, и не пускать её к записям своего же контура значит завести роль,
+#: которой нечего делать. Названы только те, для кого роль в продукте есть:
+#: у ПромБеза, ГО-ЧС и БДД отдельной роли нет, и выдумывать её здесь нельзя.
+DISCIPLINE_SPECIALIST_ROLE: dict[Discipline, str] = {
+    Discipline.ECOLOGY: "ecologist",
+    Discipline.FIRE_SAFETY: "pb_engineer",
+}
+
+
+def discipline_write_roles(discipline: Discipline) -> tuple[str, ...]:
+    """Роли, которым разрешена запись в контур дисциплины.
+
+    Порядок устойчивый: сначала общая часть, потом профильная роль. Список
+    сверяется с правами экрана сторожем
+    ``backend/tests/test_discipline_write_roles.py`` — иначе интерфейс и сервер
+    снова разойдутся (до среза-119 сервер пускал специалиста по охране труда
+    писать в пять контуров, а экраны этих контуров ему не показывались вовсе).
+    """
+
+    specialist = DISCIPLINE_SPECIALIST_ROLE.get(discipline)
+    return DISCIPLINE_WRITE_ROLES_BASE + ((specialist,) if specialist else ())
 
 
 DISCIPLINE_TITLES: dict[Discipline, str] = {
