@@ -488,3 +488,228 @@ def test_render_template_substitution_and_limit() -> None:
     payload = {"severity": "high", "before": {"level": "low"}}
     assert render_template("{severity}/{missing}/{before.level}", payload, limit=100) == "high//low"
     assert render_template("{severity}", payload, limit=2) == "hi"
+
+
+@pytest.mark.asyncio
+async def test_notify_person_mode_reaches_worker_account(
+    sessionmaker, data_factory: TestDataFactory
+) -> None:
+    """Срез-118: получатель «работник из события» — сам сотрудник, а не роль.
+
+    Связь «работник — вход в систему» одна на продукт: совпадение почты
+    (прецедент карточки сотрудника). Регистр почты не должен мешать.
+    """
+    from app.models.models import RoleEnum
+    from app.models.notifications import Notification
+    from app.modules.rules_engine.actions import execute_action
+
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        worker_user = await data_factory.create_user(
+            tenant=tenant,
+            email="worker-118@example.com",
+            role=RoleEnum.EMPLOYEE,
+            session=session,
+        )
+        person = await data_factory.create_person(
+            tenant=tenant,
+            first_name="Пётр",
+            last_name="Петров",
+            email="Worker-118@Example.com",
+            session=session,
+        )
+        rule = await _make_rule(session, str(tenant.id), name="Скоро замена СИЗ")
+
+        outcome = await execute_action(
+            session,
+            tenant_id=str(tenant.id),
+            rule=rule,
+            action={
+                "type": "notify",
+                "title_template": "Замена СИЗ",
+                "body_template": "Срок по {item_name}",
+                "recipient_mode": "person",
+            },
+            event_key="ppe:118",
+            payload={"person_id": str(person.id), "item_name": "каска"},
+            already_triggered=False,
+        )
+
+        assert outcome.outcome == "created"
+        recipients = (
+            (
+                await session.execute(
+                    select(Notification.user_id).where(Notification.id.in_(outcome.entity_ids))
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert [str(r) for r in recipients] == [str(worker_user.id)]
+
+
+@pytest.mark.asyncio
+async def test_notify_person_mode_skips_terminated_worker(
+    sessionmaker, data_factory: TestDataFactory
+) -> None:
+    """Уволенному уведомления не уходят — общее правило person_scope (срез-89)."""
+    from app.models.master_data import EmploymentStatus
+    from app.models.models import RoleEnum
+    from app.modules.rules_engine.actions import execute_action
+
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        await data_factory.create_user(
+            tenant=tenant,
+            email="fired-118@example.com",
+            role=RoleEnum.EMPLOYEE,
+            session=session,
+        )
+        person = await data_factory.create_person(
+            tenant=tenant,
+            first_name="Иван",
+            last_name="Уволенный",
+            email="fired-118@example.com",
+            employment_status=EmploymentStatus.TERMINATED,
+            session=session,
+        )
+        rule = await _make_rule(session, str(tenant.id), name="Медосмотр просрочен")
+
+        outcome = await execute_action(
+            session,
+            tenant_id=str(tenant.id),
+            rule=rule,
+            action={
+                "type": "notify",
+                "title_template": "Медосмотр",
+                "body_template": "Просрочен",
+                "recipient_mode": "person",
+            },
+            event_key="med:118",
+            payload={"person_id": str(person.id)},
+            already_triggered=False,
+        )
+
+        assert outcome.outcome == "suppressed"
+        assert outcome.entity_ids == []
+
+
+@pytest.mark.asyncio
+async def test_notify_person_mode_suppressed_without_account(
+    sessionmaker, data_factory: TestDataFactory
+) -> None:
+    """У работника нет входа в систему — уведомление некому доставить."""
+    from app.modules.rules_engine.actions import execute_action
+
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        person = await data_factory.create_person(
+            tenant=tenant,
+            first_name="Без",
+            last_name="Почты",
+            session=session,
+        )
+        rule = await _make_rule(session, str(tenant.id), name="Обучение назначено")
+
+        outcome = await execute_action(
+            session,
+            tenant_id=str(tenant.id),
+            rule=rule,
+            action={
+                "type": "notify",
+                "title_template": "Обучение",
+                "body_template": "Назначено",
+                "recipient_mode": "person",
+            },
+            event_key="training:118",
+            payload={"person_id": str(person.id)},
+            already_triggered=False,
+        )
+
+        assert outcome.outcome == "suppressed"
+        assert outcome.detail == "no active user account for person from event"
+
+
+@pytest.mark.asyncio
+async def test_notify_person_mode_ignores_foreign_person(
+    sessionmaker, data_factory: TestDataFactory
+) -> None:
+    """Чужой person_id в payload не должен вытащить получателя из другого тенанта."""
+    from app.models.models import RoleEnum
+    from app.modules.rules_engine.actions import execute_action
+
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        foreign = await data_factory.ensure_tenant(slug="foreign-person-118", session=session)
+        await data_factory.create_user(
+            tenant=tenant,
+            email="foreign-118@example.com",
+            role=RoleEnum.EMPLOYEE,
+            session=session,
+        )
+        foreign_person = await data_factory.create_person(
+            tenant=foreign,
+            first_name="Чужой",
+            last_name="Работник",
+            email="foreign-118@example.com",
+            session=session,
+        )
+        rule = await _make_rule(session, str(tenant.id), name="Чужой работник")
+
+        outcome = await execute_action(
+            session,
+            tenant_id=str(tenant.id),
+            rule=rule,
+            action={
+                "type": "notify",
+                "title_template": "Не для вас",
+                "body_template": "Тело",
+                "recipient_mode": "person",
+            },
+            event_key="foreign:118",
+            payload={"person_id": str(foreign_person.id)},
+            already_triggered=False,
+        )
+
+        assert outcome.outcome == "suppressed"
+
+
+def test_person_mode_rejected_for_event_without_person() -> None:
+    """Правило на событии без person_id никогда бы не нашло адресата — 422 сразу."""
+    from app.modules.rules_engine.actions import ActionsError, validate_actions
+    from app.modules.rules_engine.catalog import known_fields_for
+
+    action = {
+        "type": "notify",
+        "title_template": "Т",
+        "body_template": "Б",
+        "recipient_mode": "person",
+    }
+    with pytest.raises(ActionsError) as exc:
+        validate_actions([action], known_fields=known_fields_for("IncidentCreated"))
+    assert exc.value.code == "person_not_in_event"
+
+    # У события с работником то же действие сохраняется.
+    validate_actions([action], known_fields=known_fields_for("PPEReplacementDue"))
+    # Без каталога (старый вызов) проверка не мешает.
+    validate_actions([action])
+
+
+def test_recipient_mode_titles_match_rules_screen() -> None:
+    """Сторож: подписи получателей на экране правил и в описании действия — один список."""
+    import re
+    from pathlib import Path
+
+    from app.modules.rules_engine.actions import _RECIPIENT_MODES, RECIPIENT_MODE_TITLES
+
+    assert set(RECIPIENT_MODE_TITLES) == set(_RECIPIENT_MODES)
+
+    source = Path("frontend/src/pages/rules/rulesVocab.ts").read_text(encoding="utf-8")
+    block = re.search(
+        r"export const RECIPIENT_MODE_LABELS: Record<string, string> = \{(.*?)\};",
+        source,
+        re.S,
+    )
+    assert block is not None, "RECIPIENT_MODE_LABELS не найден на экране правил"
+    frontend = dict(re.findall(r'(\w+): "([^"]+)"', block.group(1)))
+    assert frontend == RECIPIENT_MODE_TITLES

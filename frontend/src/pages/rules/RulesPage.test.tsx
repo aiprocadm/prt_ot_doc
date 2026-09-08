@@ -59,6 +59,13 @@ const EVENT_TYPES: EventTypeMeta[] = [
       { name: "overdue", kind: "boolean" },
     ],
   },
+  {
+    event_type: "PPEReplacementDue",
+    fields: [
+      { name: "person_id", kind: "string" },
+      { name: "item_name", kind: "string" },
+    ],
+  },
 ];
 
 const RULE: AutomationRuleRead = {
@@ -476,6 +483,77 @@ describe("RulesPage", () => {
       (await screen.findAllByText("Критичные инциденты")).length,
     ).toBeGreaterThan(0);
     expect(screen.queryByTestId("rule-library")).not.toBeInTheDocument();
+  });
+
+  it("получатель «работник из события» есть только у событий с работником", async () => {
+    // Срез-118: у события без person_id такое правило никогда бы не нашло
+    // адресата — вариант не показываем, а выбранный ранее сбрасываем.
+    vi.mocked(rulesApi.create).mockResolvedValue({
+      ...RULE,
+      id: "r5",
+      name: "Работнику",
+    });
+    renderPage();
+    await screen.findAllByText("Критичные инциденты");
+
+    fireEvent.click(screen.getByRole("button", { name: "Новое правило" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText("Имя"), {
+      target: { value: "Работнику" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Событие"), {
+      target: { value: "IncidentCreated" },
+    });
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Добавить действие" }),
+    );
+    const actionCard = within(dialog).getByTestId("action-card-0");
+    fireEvent.change(within(actionCard).getByLabelText("Тип действия"), {
+      target: { value: "notify" },
+    });
+    const recipient = within(actionCard).getByLabelText(
+      "Получатель",
+    ) as HTMLSelectElement;
+    expect(
+      within(recipient).queryByRole("option", { name: "Работник из события" }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.change(within(dialog).getByLabelText("Событие"), {
+      target: { value: "PPEReplacementDue" },
+    });
+    expect(
+      within(recipient).getByRole("option", { name: "Работник из события" }),
+    ).toBeInTheDocument();
+    fireEvent.change(recipient, { target: { value: "person" } });
+    expect(recipient.value).toBe("person");
+
+    // Возврат на событие без работника не должен оставить непроходной режим.
+    fireEvent.change(within(dialog).getByLabelText("Событие"), {
+      target: { value: "IncidentCreated" },
+    });
+    expect(recipient.value).toBe("actor");
+
+    fireEvent.change(within(dialog).getByLabelText("Событие"), {
+      target: { value: "PPEReplacementDue" },
+    });
+    fireEvent.change(recipient, { target: { value: "person" } });
+    fireEvent.change(
+      within(actionCard).getByLabelText("Заголовок уведомления"),
+      { target: { value: "Замена СИЗ" } },
+    );
+    fireEvent.change(within(actionCard).getByLabelText("Текст уведомления"), {
+      target: { value: "Срок по {item_name}" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(rulesApi.create).toHaveBeenCalled());
+    const [payload] = vi.mocked(rulesApi.create).mock.calls[0];
+    expect(payload.event_type).toBe("PPEReplacementDue");
+    expect(payload.actions_json[0]).toMatchObject({
+      type: "notify",
+      recipient_mode: "person",
+      title_template: "Замена СИЗ",
+    });
   });
 
   it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {

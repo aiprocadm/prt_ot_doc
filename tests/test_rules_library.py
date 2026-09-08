@@ -48,7 +48,15 @@ class TestДвижокПриметКаждоеПравило:
 
     @pytest.mark.parametrize("rule", LIBRARY_RULES, ids=lambda r: r.name)
     def test_действия_проходят_разбор_движка(self, rule) -> None:
-        actions_mod.validate_actions(rule.actions)
+        """Действия сверяются с payload ИМЕННО ЭТОГО события (срез-118).
+
+        Получатель «работник из события» работает только там, где у события
+        есть ``person_id``: без сверки в библиотеку попало бы правило, которое
+        сохраняется, но никогда никого не находит.
+        """
+
+        fields = frozenset(_PAYLOADS[_EVENTS[rule.event_type]].model_fields)
+        actions_mod.validate_actions(rule.actions, known_fields=fields)
 
     @pytest.mark.parametrize("rule", LIBRARY_RULES, ids=lambda r: r.name)
     def test_у_правила_есть_действие(self, rule) -> None:

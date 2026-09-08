@@ -94,10 +94,9 @@ class RulesEngineService:
     ) -> None:
         if event_type not in catalog.known_event_types():
             raise RulesConfigError("unknown_event_type", f"unknown event type {event_type!r}")
-        conditions_mod.validate_conditions(
-            conditions_json, known_fields=catalog.known_fields_for(event_type)
-        )
-        actions_mod.validate_actions(actions_json)
+        known_fields = catalog.known_fields_for(event_type)
+        conditions_mod.validate_conditions(conditions_json, known_fields=known_fields)
+        actions_mod.validate_actions(actions_json, known_fields=known_fields)
         await actions_mod.validate_action_user_ids(
             self.session, tenant_id=self.tenant_id, actions=actions_json
         )

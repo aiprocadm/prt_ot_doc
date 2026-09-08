@@ -18,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   ACTION_LABELS,
   OP_LABELS,
+  RECIPIENT_MODE_LABELS,
   eventLabel,
   kindLabel,
 } from "@/pages/rules/rulesVocab";
@@ -49,7 +50,7 @@ type ActionRow = {
   priority: string;
   due_in_days: string;
   assignee_mode: "none" | "actor" | "user_id";
-  recipient_mode: "actor" | "user_id" | "role";
+  recipient_mode: "actor" | "person" | "user_id" | "role";
   user_id: string;
   roles: string[];
   body_template: string;
@@ -68,6 +69,17 @@ const ROLE_OPTIONS: Array<[string, string]> = [
   ["ot_specialist", "Специалист по ОТ"],
   ["line_manager", "Линейный руководитель"],
   ["hr", "HR"],
+];
+
+/** Поле события, по которому доступен получатель «работник из события». */
+const PERSON_EVENT_FIELD = "person_id";
+
+/** Порядок режимов в селекте; подписи — общий словарь с бэкендом. */
+const RECIPIENT_MODES: Array<ActionRow["recipient_mode"]> = [
+  "actor",
+  "person",
+  "user_id",
+  "role",
 ];
 
 /** Для boolean-полей осмысленны только eq/ne/exists — сравнения и списки скрываем. */
@@ -167,10 +179,25 @@ export const RuleFormDialog = ({
   const fieldKind = (fieldName: string): string =>
     selectedEvent?.fields.find((f) => f.name === fieldName)?.kind ?? "string";
 
+  const hasPersonField = Boolean(
+    selectedEvent?.fields.some((f) => f.name === PERSON_EVENT_FIELD),
+  );
+
   const onEventChange = (next: string) => {
     setEventType(next);
     // Поля условий привязаны к каталогу события — при смене события условия сбрасываются.
     setConditions([]);
+    // У нового события может не быть работника — иначе сохранение упало бы 422.
+    const nextEvent = eventTypes.find((e) => e.event_type === next);
+    if (!nextEvent?.fields.some((f) => f.name === PERSON_EVENT_FIELD)) {
+      setActions((prev) =>
+        prev.map((row) =>
+          row.recipient_mode === "person"
+            ? { ...row, recipient_mode: "actor" }
+            : row,
+        ),
+      );
+    }
   };
 
   const setCondition = (idx: number, patch: Partial<ConditionRow>) =>
@@ -682,10 +709,23 @@ export const RuleFormDialog = ({
                           })
                         }
                       >
-                        <option value="actor">Автор события</option>
-                        <option value="user_id">Указать user ID</option>
-                        <option value="role">По ролям</option>
+                        {RECIPIENT_MODES.filter(
+                          (mode) =>
+                            mode !== "person" ||
+                            hasPersonField ||
+                            row.recipient_mode === "person",
+                        ).map((mode) => (
+                          <option key={mode} value={mode}>
+                            {RECIPIENT_MODE_LABELS[mode]}
+                          </option>
+                        ))}
                       </select>
+                      {row.recipient_mode === "person" ? (
+                        <p className="text-xs text-muted-foreground">
+                          Уведомление уйдёт самому работнику из события — если у
+                          него есть вход в систему и он не уволен.
+                        </p>
+                      ) : null}
                     </div>
                     {row.recipient_mode === "user_id" ? (
                       <div className="space-y-1">
