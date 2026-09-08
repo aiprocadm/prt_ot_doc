@@ -7,6 +7,12 @@ address yields ``SKIPPED`` (not a false ``SENT``).
 BIZ-52 срез-10 (Доп. №1 разд. 52.2): письмо подписывается брендом арендатора —
 именем отправителя, `Reply-To` на почту поддержки партнёра и подписью в теле.
 Адрес отправителя остаётся платформенным: он держит SPF и DKIM.
+
+BIZ-54-57 срез-122: письмо уходит в двух видах сразу
+(``multipart/alternative``) — прежним текстом и его же HTML-оформлением.
+HTML не пишется отдельно, он ВЫВОДИТСЯ из текста (``services/mail_html``),
+поэтому двух редакций одного письма не бывает, а клиент без HTML видит текст
+слово в слово.
 """
 
 from __future__ import annotations
@@ -26,6 +32,7 @@ from app.services.app_branding import (
     apply_signature,
     mail_identity_for_tenant_id,
 )
+from app.services.mail_html import render_plain_as_html
 
 
 class EmailProvider:
@@ -69,7 +76,13 @@ class EmailProvider:
         if identity.reply_to:
             msg["Reply-To"] = identity.reply_to
         msg["To"] = to_addr
-        msg.set_content(apply_signature(notification.body, identity.signature))
+        body = apply_signature(notification.body, identity.signature)
+        msg.set_content(body)
+        # Порядок частей в multipart/alternative значим: последняя —
+        # предпочтительная. Текст остаётся первым и полным (см. mail_html).
+        html = render_plain_as_html(body)
+        if html:
+            msg.add_alternative(f"<html><body>{html}</body></html>", subtype="html")
         with smtplib.SMTP(s.smtp_host, int(s.smtp_port), timeout=10) as server:
             if getattr(s, "smtp_use_tls", True):
                 server.starttls()

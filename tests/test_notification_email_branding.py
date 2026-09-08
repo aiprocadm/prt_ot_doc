@@ -123,8 +123,21 @@ def test_без_почты_поддержки_заголовка_ответа_н
     assert _send(_brand(support_email=None))["Reply-To"] is None
 
 
+def _plain(msg: EmailMessage) -> str:
+    """Текстовая часть письма (срез-122: письмо стало multipart/alternative)."""
+
+    part = msg.get_body(preferencelist=("plain",))
+    assert part is not None, "текстовая часть обязана быть всегда"
+    return part.get_content()
+
+
+def _html(msg: EmailMessage) -> str | None:
+    part = msg.get_body(preferencelist=("html",))
+    return part.get_content() if part is not None else None
+
+
 def test_тело_подписано_брендом():
-    body = _send(_brand()).get_content()
+    body = _plain(_send(_brand()))
 
     assert "— Охрана труда «Партнёр»" in body
     assert "Поддержка: help@partner.example" in body
@@ -167,3 +180,58 @@ async def test_сбой_чтения_бренда_не_отменяет_пись
 
     assert result.delivered
     assert PLATFORM_BRAND.app_name in str(_FakeSMTP.sent[-1]["From"])
+
+
+def test_письмо_уходит_в_двух_видах():
+    """Срез-122: HTML — вторая часть письма, а не замена текста.
+
+    Клиент без HTML (и почтовый архив) обязан видеть прежний текст слово в
+    слово, иначе оформление стоило бы содержания.
+    """
+
+    msg = _send(_brand())
+
+    assert msg.get_content_type() == "multipart/alternative"
+    assert "Срок обучения истекает." in _plain(msg)
+    assert "<p" in (_html(msg) or "")
+
+
+def test_html_говорит_то_же_что_и_текст():
+    """HTML выводится ИЗ текста, поэтому разойтись им не на чем."""
+
+    import re
+
+    msg = _send(_brand(), _notification("Первая строка.\n\nВторая строка."))
+    html = _html(msg) or ""
+
+    без_разметки = re.sub(r"<[^>]+>", " ", html)
+    for кусок in ("Первая строка.", "Вторая строка.", "Охрана труда «Партнёр»"):
+        assert кусок in без_разметки
+
+
+def test_разметка_из_данных_не_попадает_в_письмо_как_разметка():
+    """В тело идут данные арендатора: название, сводка, пункты «что сделать».
+
+    Без экранирования угловая скобка сломала бы вёрстку, а вставленный тег
+    показался бы получателю частью письма.
+    """
+
+    msg = _send(_brand(), _notification("Отчёт <b>жирный</b> и 5 < 7."))
+    html = _html(msg) or ""
+
+    assert "<b>" not in html
+    assert "&lt;b&gt;" in html
+    assert "5 &lt; 7" in html
+
+
+def test_пункты_списка_становятся_списком():
+    msg = _send(
+        _brand(),
+        _notification("Что нужно сделать:\n— Продлить медосмотр\n— Выдать СИЗ"),
+    )
+    html = _html(msg) or ""
+
+    assert "<ul" in html
+    assert html.count("<li>") == 2
+    # Тире съедено разметкой — в тексте оно остаётся.
+    assert "— Продлить медосмотр" in _plain(msg)

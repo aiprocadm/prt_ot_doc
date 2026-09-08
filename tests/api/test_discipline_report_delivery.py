@@ -332,7 +332,15 @@ async def test_письмо_отправляет_доставщик_и_без_sm
         msg = _FakeSMTP.sent[-1]
         assert msg["To"] == "owner-dr@example.com"
         assert msg["Subject"] == owner_letter.title
-        assert outcome.report.summary in msg.get_content()
+        # Срез-122: письмо стало multipart/alternative — сводка обязана быть
+        # в ОБЕИХ частях: текстовую читает архив и клиент без HTML, HTML —
+        # директор в почтовом клиенте.
+        assert msg.get_content_type() == "multipart/alternative"
+        текст = msg.get_body(preferencelist=("plain",))
+        оформленный = msg.get_body(preferencelist=("html",))
+        assert текст is not None and оформленный is not None
+        assert outcome.report.summary in текст.get_content()
+        assert outcome.report.summary in оформленный.get_content()
 
         # почта не настроена: не «отправлено», а «пропущено» с причиной
         result = await deliver_notification(
