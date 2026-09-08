@@ -12,6 +12,7 @@ from app.models.models import BriefingEntry, BriefingSignature, BriefingTemplate
 from app.services.events import EventType
 from app.services.outbox import OutboxService
 from app.services.pep_signing import PepSigningService
+from app.services.person_scope import employed_record_where
 
 
 class BriefingSignatureConflict(Exception):
@@ -224,6 +225,20 @@ class BriefingEntryService:
     async def list_overdue(
         self, session: AsyncSession, *, tenant_id: str, now: datetime | None = None
     ) -> list[BriefingEntry]:
+        """Просроченные инструктажи — список и рассылка «что горит».
+
+        «Уволенный не в счёт» (срез-115): просроченный инструктаж уволенного —
+        не разрыв с эталоном, а история; напоминать по нему некому. Условие —
+        общее (``person_scope``), как у сводок, календаря и напоминаний СИЗ;
+        запись без человека (инструктаж по подразделению) остаётся видимой:
+        увольнять там некого.
+
+        Отсюда же берёт данные кнопка «напомнить о просроченных»
+        (``POST /briefings/entries/remind-overdue``): рассылка обязана считать
+        по тому же множеству людей, что и список на экране, иначе письма уйдут
+        по тем, кого в списке нет.
+        """
+
         resolved_now = now or datetime.now(timezone.utc)
         stmt = select(BriefingEntry).where(
             BriefingEntry.tenant_id == tenant_id,
@@ -231,6 +246,7 @@ class BriefingEntryService:
             BriefingEntry.valid_until.is_not(None),
             BriefingEntry.valid_until < resolved_now,
             BriefingEntry.status != "completed",
+            employed_record_where(BriefingEntry, tenant_id),
         )
         return list(
             (await session.execute(stmt.order_by(BriefingEntry.valid_until.asc()))).scalars().all()
