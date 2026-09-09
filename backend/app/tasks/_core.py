@@ -78,6 +78,7 @@ from app.tasks.domain_ticks import (  # noqa: E402, F401
     _permits_expiry_tick,
     _ppe_expiry_tick,
     _prescriptions_escalate_tick,
+    _search_reindex_tick,
     analytics_projections_tick,
     api_deprecation_notify_tick,
     compliance_deadlines_tick,
@@ -88,6 +89,7 @@ from app.tasks.domain_ticks import (  # noqa: E402, F401
     permits_expiry_tick,
     ppe_expiry_tick,
     prescriptions_escalate_tick,
+    search_reindex_tick,
     workflow_sla_tick,
     workflow_timers_tick,
 )

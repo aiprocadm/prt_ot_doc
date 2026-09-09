@@ -90,6 +90,15 @@ celery_app.conf.beat_schedule = {
         "task": "compliance.deadlines.tick",
         "schedule": crontab(hour=3, minute=30),
     },
+    # BIZ-54-57 срез-128: поисковый снимок пересобирается ночью, а не только
+    # ручкой ``POST /search/reindex``. Общий поиск и CMD+K читают ТОЛЬКО его:
+    # пока ручку никто не нажал, поиск отвечал «ничего не найдено» по живым
+    # данным. Отдельной строкой, а не в полосе read model'ов: снимок сводит
+    # одиннадцать таблиц и стоит заметно дороже соседей.
+    "search-reindex-daily": {
+        "task": "search.reindex.tick",
+        "schedule": crontab(hour=3, minute=50),
+    },
     # BIZ-51 срез-7: еженедельная сверка «что изменилось, что просрочено,
     # что нужно сделать» — как в ТЗ (разд. 51.3, «напр. еженедельно»).
     "managed-clients-audit-weekly": {
