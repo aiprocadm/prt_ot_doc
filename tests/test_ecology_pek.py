@@ -389,6 +389,7 @@ class TestЗамерыИСравнениеСНормативом:
         headers = await make_auth_headers()
         source_id = await _setup(async_client, headers, sessionmaker, "0013")
         due = date.today() + timedelta(days=5)
+        measured_on = date.today()
         plan_id = await _plan_item(async_client, headers, source_id, next_due_on=due)
         response = await async_client.post(
             f"{_API}/emission-measurements",
@@ -396,7 +397,10 @@ class TestЗамерыИСравнениеСНормативом:
                 "plan_id": plan_id,
                 "source_id": source_id,
                 "substance": "Азота диоксид",
-                "measured_on": str(date.today()),
+                # Дата берётся ОДИН раз: сравнивать ответ с `date.today()`,
+                # посчитанным заново, значит ломаться, если прогон пересёк
+                # полночь (полный набор идёт почти три часа).
+                "measured_on": str(measured_on),
                 "value_grams_per_second": "0.010000",
             },
             headers=headers,
@@ -405,7 +409,7 @@ class TestЗамерыИСравнениеСНормативом:
         listed = await async_client.get(f"{_API}/monitoring-plan", headers=headers)
         item = listed.json()["items"][0]
         assert date.fromisoformat(item["next_due_on"]) > due
-        assert item["last_measured_on"] == str(date.today())
+        assert item["last_measured_on"] == str(measured_on)
 
     async def test_опоздавший_замер_не_ставит_срок_в_прошлое(
         self, async_client, make_auth_headers, sessionmaker

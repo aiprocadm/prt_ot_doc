@@ -308,9 +308,12 @@ class TestСоставФормирования:
             headers=headers,
         )
         member_id = added.json()["id"]
+        # Дата берётся ОДИН раз: сравнивать ответ с `date.today()`, посчитанным
+        # заново, значит ломаться, если прогон пересёк полночь.
+        released_on = date.today()
         released = await async_client.patch(
             f"{_API}/formations/{formation['id']}/members/{member_id}",
-            json={"released_on": str(date.today())},
+            json={"released_on": str(released_on)},
             headers=headers,
         )
         assert released.status_code == 200, released.text
@@ -320,7 +323,7 @@ class TestСоставФормирования:
         items = listed.json()["items"]
         # Строка не исчезла — история цела, но статус назван словами.
         assert len(items) == 1
-        assert items[0]["released_on"] == str(date.today())
+        assert items[0]["released_on"] == str(released_on)
         assert items[0]["status_label"] == "Выведен из состава"
 
     async def test_повторное_включение_сбрасывает_дату_вывода(

@@ -146,7 +146,11 @@ async def test_новый_отчёт_уходит_ответственным_и_
     admin_headers = await make_auth_headers(RoleEnum.ADMIN)
     owner_headers = await make_auth_headers(RoleEnum.OWNER, email="owner-dr@example.com")
 
+    # Дата — до и после запроса: полный набор идёт почти три часа и может
+    # пересечь полночь, тогда «сегодня» у сервера и у проверки — разные дни.
+    before = date.today()
     resp = await async_client.post(RUN, headers=admin_headers)
+    after = date.today()
 
     assert resp.status_code == status.HTTP_200_OK, resp.text
     body = resp.json()
@@ -170,7 +174,10 @@ async def test_новый_отчёт_уходит_ответственным_и_
     for n in sent:
         assert n.channel == NotificationChannel.INAPP
         assert n.priority == NotificationPriority.MEDIUM, "первый отчёт — сравнивать не с чем"
-        assert n.title == f"Отчёт о состоянии по дисциплинам за {date.today().strftime('%d.%m.%Y')}"
+        assert n.title in {
+            f"Отчёт о состоянии по дисциплинам за {day.strftime('%d.%m.%Y')}"
+            for day in (before, after)
+        }
         # текст — сводка отчёта, а не второй пересказ
         assert n.body == report["summary"]
         assert n.payload["deeplink"] == REPORT_DEEPLINK

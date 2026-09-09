@@ -252,11 +252,14 @@ class TestУчётОбъёмов:
         headers = await make_auth_headers()
         facility_id = await _setup(async_client, headers, sessionmaker, "0008")
         point_id = await _point(async_client, headers, facility_id)
+        # Год берётся ОДИН раз: посчитанный заново, он разошёлся бы с
+        # отправленным, если прогон пересёк новогоднюю полночь.
+        period_year = date.today().year
         created = await async_client.post(
             f"{_API}/water-records",
             json={
                 "point_id": point_id,
-                "period_year": date.today().year,
+                "period_year": period_year,
                 "period_month": 3,
                 "volume_cubic_meters": "845.500",
                 "basis": "meter",
@@ -267,7 +270,7 @@ class TestУчётОбъёмов:
         assert created.status_code == 201, created.text
         body = created.json()
         assert body["basis_label"] == "Прибор учёта"
-        assert body["period_label"] == f"март {date.today().year}"
+        assert body["period_label"] == f"март {period_year}"
 
     async def test_неизвестное_основание_отвергается(
         self, async_client, make_auth_headers, sessionmaker
