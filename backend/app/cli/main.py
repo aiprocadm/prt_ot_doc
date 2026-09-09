@@ -8,6 +8,7 @@ from typing import Any, Optional
 
 import typer
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.tracing import get_trace_id
@@ -22,6 +23,10 @@ EXIT_VALIDATION = 2
 EXIT_RESOURCES = 3
 EXIT_EXTERNAL = 4
 EXIT_INTERNAL = 5
+#: Срез-130: команда есть в списке, но работы за ней нет. Отдельный код, а не
+#: 0: скрипт, который проверяет только код возврата, обязан узнать, что ничего
+#: не произошло. Печатать «queued» и выходить с нулём — значит врать оператору.
+EXIT_NOT_IMPLEMENTED = 6
 
 cli = typer.Typer(help="ptd CLI utilities")
 
@@ -215,13 +220,56 @@ def pipeline(
     _emit({"run_id": run_id, "task_id": task.id, "status": "enqueued"}, as_json=json_out)
 
 
+def _rebuild_or_explain(operation: str, coro_factory, *, json_out: bool) -> None:
+    """Пересобрать — или сказать, почему нельзя, вместо стека вызовов.
+
+    Срез-130: команда ходит в базу. Если база не поднята или не мигрирована,
+    оператор получал сырой ``OperationalError`` — из него не видно, что делать.
+    Код возврата ``3`` (resources) отличает «нечем работать» от «работа
+    сделана» и от «работы за командой нет» (``6``).
+    """
+
+    try:
+        rebuilt = asyncio.run(coro_factory())
+    except SQLAlchemyError as exc:
+        _emit(
+            {
+                "operation": operation,
+                "status": "unavailable",
+                "reason": f"база недоступна или не мигрирована: {exc.__class__.__name__}",
+            },
+            as_json=json_out,
+        )
+        raise typer.Exit(code=EXIT_RESOURCES) from exc
+    _emit({"operation": operation, "rebuilt": rebuilt, "status": "ok"}, as_json=json_out)
+
+
+def _not_implemented(operation: str, *, reason: str, json_out: bool) -> None:
+    """Сказать «работы за этой командой нет» — и не притвориться, что она сделана.
+
+    До среза-130 пять команд печатали ``status: queued`` и выходили с нулём,
+    не поставив в очередь НИЧЕГО. Оператор, собравший на них ночной скрипт,
+    получал бы зелёный отчёт о резервных копиях, которых не существует.
+    """
+
+    _emit({"operation": operation, "status": "not_implemented", "reason": reason}, as_json=json_out)
+    raise typer.Exit(code=EXIT_NOT_IMPLEMENTED)
+
+
 @cli.command()
 def export(
     tenant: str = typer.Option(..., "--tenant"), json_out: bool = typer.Option(False, "--json")
 ) -> None:
-    """Stub export orchestration command (admin/internal)."""
+    """Экспорт данных арендатора: в CLI работы нет (срез-130)."""
 
-    _emit({"tenant": tenant, "operation": "export", "status": "scheduled"}, as_json=json_out)
+    _not_implemented(
+        "export",
+        reason=(
+            f"Выгрузками занимается центр экспорта в API (арендатор {tenant!r}); "
+            "команда CLI ничего не запускала и не запускает"
+        ),
+        json_out=json_out,
+    )
 
 
 @cli.command()
@@ -229,10 +277,15 @@ def backup(
     triggered_by: str = typer.Option("manual", "--triggered-by"),
     json_out: bool = typer.Option(False, "--json"),
 ) -> None:
-    """Register backup run execution."""
+    """Резервное копирование: в продукте его нет (срез-130)."""
 
-    _emit(
-        {"operation": "backup", "triggered_by": triggered_by, "status": "queued"}, as_json=json_out
+    _not_implemented(
+        "backup",
+        reason=(
+            f"Резервным копированием продукт не управляет (запуск {triggered_by!r}); "
+            "это дело окружения — снимки базы и хранилища делает тот, кто их держит"
+        ),
+        json_out=json_out,
     )
 
 
@@ -240,9 +293,16 @@ def backup(
 def restore(
     mode: str = typer.Option("test", "--mode"), json_out: bool = typer.Option(False, "--json")
 ) -> None:
-    """Run restore test flow."""
+    """Восстановление: в продукте его нет, учение живёт отдельно (срез-130)."""
 
-    _emit({"operation": "restore", "mode": mode, "status": "queued"}, as_json=json_out)
+    _not_implemented(
+        "restore",
+        reason=(
+            f"Восстановлением продукт не управляет (режим {mode!r}); учение "
+            "проверяется скриптом scripts/restore_drill.py"
+        ),
+        json_out=json_out,
+    )
 
 
 @cli.command()
@@ -250,9 +310,17 @@ def reindex(
     tenant: Optional[str] = typer.Option(None, "--tenant"),
     json_out: bool = typer.Option(False, "--json"),
 ) -> None:
-    """Schedule search reindexing."""
+    """Пересобрать поисковый снимок — ту же работу делает ночной тик.
 
-    _emit({"operation": "reindex", "tenant": tenant, "status": "queued"}, as_json=json_out)
+    Срез-130: раньше команда печатала ``queued``, не пересобирая ничего.
+    Пересборка идёт ЗДЕСЬ И СЕЙЧАС, а не ставится в очередь: очередь требует
+    брокера, а оператору нужен ответ «сколько записей в снимке», а не
+    «принято». Обход арендаторов общий с тиком.
+    """
+
+    from app.tasks.domain_ticks import rebuild_search_snapshot
+
+    _rebuild_or_explain("reindex", lambda: rebuild_search_snapshot(tenant), json_out=json_out)
 
 
 projections_app = typer.Typer(help="Projection maintenance commands")
@@ -263,10 +331,12 @@ def projections_rebuild(
     tenant: Optional[str] = typer.Option(None, "--tenant"),
     json_out: bool = typer.Option(False, "--json"),
 ) -> None:
-    """Rebuild read model projections."""
+    """Пересобрать read model'ы — ту же работу делает ночной тик (срез-130)."""
 
-    _emit(
-        {"operation": "projections.rebuild", "tenant": tenant, "status": "queued"}, as_json=json_out
+    from app.tasks.domain_ticks import rebuild_read_model_snapshots
+
+    _rebuild_or_explain(
+        "projections.rebuild", lambda: rebuild_read_model_snapshots(tenant), json_out=json_out
     )
 
 
