@@ -3678,13 +3678,11 @@
           },
           "probability": {
             "type": "integer",
-            "maximum": 5.0,
             "minimum": 1.0,
             "title": "Probability"
           },
           "severity": {
             "type": "integer",
-            "maximum": 5.0,
             "minimum": 1.0,
             "title": "Severity"
           },
