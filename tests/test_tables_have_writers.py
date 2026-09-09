@@ -30,8 +30,10 @@ from __future__ import annotations
 import ast
 import pathlib
 
+import importlib
+import pkgutil
+
 import app.models  # noqa: F401  — регистрирует модели в реестре ORM
-import app.modules.projections.models  # noqa: F401
 from app.db.session import SharedBase, TenantBase
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
@@ -43,42 +45,28 @@ SKIP_PREFIXES = ("migrations/", "models/", "schemas/")
 #: Таблицы без записи — с вердиктом. Вердикт обязан отвечать на вопрос
 #: «почему это не дефект прямо сейчас» и, если дефект, — куда он записан.
 WITHOUT_WRITERS: dict[str, str] = {
-    # --- пусто и снаружи, и внутри: ни одного упоминания в backend/app ---
-    "CorrectiveActionAttachment": "мёртвая: вложения корректирующих действий ведёт файловый контур",
-    "IncidentAttachment": "мёртвая: вложения происшествия ведёт файловый контур",
-    "InspectionAttachment": "мёртвая: вложения проверки ведёт файловый контур",
-    "IncidentCase": "мёртвая с среза-117: живой контур происшествий — Incident",
-    "IncidentInvestigation": "мёртвая с среза-117: расследование ведёт сам Incident",
-    "InspectionChecklist": "мёртвая: чек-листы проверок ведёт контур safety_ops",
-    "InspectionChecklistItem": "мёртвая: пункты чек-листа — см. InspectionChecklist",
-    "InspectionPlan": "мёртвая: план проверок не заводит ни одна ручка",
-    "InspectionPlanItem": "мёртвая: строки плана проверок — см. InspectionPlan",
-    "InspectionRun": "мёртвая: прогон проверки не заводит ни одна ручка",
-    "InspectionRunItem": "мёртвая: строки прогона проверки — см. InspectionRun",
-    "OpsInspection": "мёртвая: живой контур проверок — Inspection",
-    "PrescriptionItem": "мёртвая: строки предписания не заводит ни одна ручка",
+    # Срез-135: 24 модели с вердиктом «мёртвая» удалены из кода. Таблицы в
+    # базе ОСТАЛИСЬ (список — в docs/CLEANUP_CANDIDATES.md): удалять данные
+    # без владельца нельзя, а без модели они уже никому не видны.
     "PipelinePackageProfile": (
         "читает оркестратор конвейера при выборе профиля; профили пакетов не "
         "заводит ни одна ручка — ветка недостижима"
     ),
     # --- мёртвые: не пишет и не читает никто (кандидаты на удаление) ---
-    "Asset": "мёртвая: ни записи, ни чтения; учёт имущества ведёт контур ОПО",
-    "Equipment": "мёртвая: ни записи, ни чтения; средства ПБ живут в FireSafetyEquipment",
-    "DocumentGenerationJob": "мёртвая: работу документов ведёт PipelineRun",
-    "EdoReceipt": "мёртвая: квитанции ЭДО ведёт контур approval_runtime",
-    "HazardBinding": "мёртвая: связи опасностей ведёт контур рисков (RiskAssessment)",
-    "HazardMeasure": "мёртвая: меры ведёт контур рисков",
-    "ReminderRule": "мёртвая с среза-114: правила напоминаний заменены тиками",
-    "TenantRateLimit": "мёртвая: ограничение частоты живёт в настройках, а не в базе",
-    "TrainingProtocolItem": "мёртвая: строки протокола обучения ведёт TrainingProtocol",
+    # Срез-135: эти две нашлись только после того, как сторож стал загружать
+    # ВСЕ модули с моделями. До этого они не попадали в реестр ORM вовсе —
+    # то есть были невидимы даже описи.
+    "Checklist": (
+        "мёртвая: чек-листы проверок ведёт контур safety_ops (Finding), "
+        "а эту таблицу не читает и не пишет ни одна ручка"
+    ),
+    "Violation": (
+        "мёртвая: нарушения ведёт контур происшествий и предписаний; "
+        "эту таблицу не читает и не пишет ни одна ручка"
+    ),
     # --- читают, но не пишет никто: экран показывает пустоту всегда ---
     # (срез-133 убрал отсюда журнал задания и таймлайн прогона пакета —
     # в обе таблицы теперь пишет тот, кто эти события и производит)
-    "Risk": (
-        "мёртвая с среза-132: последний читатель (GET /risk/risks через "
-        "RiskService.list_by_site) переведён на живые оценки; таблица осталась "
-        "в схеме до волны удаления мёртвых таблиц"
-    ),
     "RiskMeasure": "читает платформенная сводка и risk_enterprise; меры ведёт контур рисков",
     "Hazard": "читает платформенная сводка; справочник опасностей — RiskHazard",
     "NPA": "читает поисковый снимок; живой контур НПА — NpaAct/NpaRevision",
@@ -102,9 +90,34 @@ WITHOUT_WRITERS: dict[str, str] = {
 }
 
 
+def _import_all_model_modules() -> None:
+    """Загрузить ВСЕ модули с моделями — иначе опись зависит от случая.
+
+    Срез-135: реестр ORM наполняется по мере импорта. Пока сторож полагался на
+    то, что успело импортироваться, его итог зависел от СОСТАВА прогона: в
+    одиночку он видел 238 моделей, а рядом с тестами, поднимающими приложение,
+    — 248, и две таблицы (``checks``, ``violations``) появлялись в сиротах
+    только во втором случае. Сторож, отвечающий по-разному на один и тот же
+    вопрос, не сторож.
+    """
+
+    packages = [app.models]
+    try:
+        import app.modules as modules_pkg
+
+        packages.append(modules_pkg)
+    except ImportError:  # pragma: no cover — модуль есть всегда
+        pass
+    for package in packages:
+        for module in pkgutil.walk_packages(package.__path__, package.__name__ + "."):
+            if module.name.endswith(("models", "model")) or ".models." in module.name:
+                importlib.import_module(module.name)
+
+
 def _model_names() -> dict[str, str]:
     """Имя класса → имя таблицы. Список — из реестра ORM, а не из памяти."""
 
+    _import_all_model_modules()
     found: dict[str, str] = {}
     for base in (TenantBase, SharedBase):
         for mapper in base.registry.mappers:
@@ -220,9 +233,16 @@ def test_сторож_тесты_не_засевают_мёртвые_табли
                 tree = ast.parse(path.read_text(encoding="utf-8"))
             except SyntaxError:  # pragma: no cover
                 continue
+            # Считаем только имена, ВЗЯТЫЕ ИЗ МОДЕЛЕЙ продукта: у тестов
+            # бывают свои классы с теми же именами (`Violation` — помощник
+            # проверки миграций), и по одному имени их не отличить.
+            from_models: set[str] = set()
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("app."):
+                    from_models.update(alias.asname or alias.name for alias in node.names)
             for node in ast.walk(tree):
                 if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
-                    if node.func.id in dead:
+                    if node.func.id in dead and node.func.id in from_models:
                         offenders.append(f"{rel}:{node.lineno} {node.func.id}")
     assert offenders == [], (
         "тест заводит строки таблицы, в которую продукт не пишет никогда — "

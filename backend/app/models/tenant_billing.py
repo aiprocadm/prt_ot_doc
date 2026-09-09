@@ -325,20 +325,6 @@ class BillingEvent(SharedModel):
     )
 
 
-class TenantRateLimit(SharedModel):
-    __tablename__ = "tenant_rate_limits"
-
-    tenant_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("tenant.id"), nullable=False, unique=True
-    )
-    concurrency_limit: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    burst: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
-    rps: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
-    queues: Mapped[dict[str, Any]] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=False, default=dict
-    )
-
-
 class ApiToken(SharedModel, SoftDeleteMixin):
     __tablename__ = "api_tokens"
 

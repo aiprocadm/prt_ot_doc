@@ -392,22 +392,6 @@ class TrainingProtocol(TenantBaseModel, SoftDeleteMixin):
     __table_args__ = (UniqueConstraint("tenant_id", "code", name="uq_training_protocols_code"),)
 
 
-class TrainingProtocolItem(TenantBaseModel):
-    __tablename__ = "training_protocol_items"
-
-    training_protocol_id: Mapped[str] = mapped_column(
-        ForeignKey("training_protocols.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    person_id: Mapped[str | None] = mapped_column(
-        ForeignKey("person.id", ondelete="SET NULL"), nullable=True
-    )
-    fio_text: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    result: Mapped[str] = mapped_column(String(32), nullable=False)
-    score: Mapped[float | None] = mapped_column(Numeric(8, 2), nullable=True)
-    enrollment_id: Mapped[str | None] = mapped_column(
-        ForeignKey("training_enrollments.id", ondelete="SET NULL"), nullable=True
-    )
-
 #: Состояние стажировки — ЗАКРЫТЫЙ словарь. Отмена меняет СОСТОЯНИЕ, а не
 #: удаляет запись: несостоявшаяся стажировка это факт, который иногда важнее
 #: состоявшейся.

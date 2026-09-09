@@ -6,16 +6,16 @@ import enum
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.mutable import MutableDict
-from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym, validates
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from sqlalchemy.types import JSON
 
 from app.models.base import TenantBaseModel, native_enum
 from app.models.file import File
 from app.models.finance import Contract, Department, Invoice, Order
-from app.models.models import Company, DocumentPack, Person, Template, TemplateVersion, User
+from app.models.models import Company, Template, TemplateVersion, User
 
 JSONBType = JSONB().with_variant(JSON(), "sqlite")
 
@@ -83,10 +83,6 @@ class Document(TenantBaseModel):
         default=lambda: datetime.now(tz=timezone.utc),
         nullable=False,
     )
-    job_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("documentgenerationjob.id", ondelete="SET NULL"), nullable=True
-    )
-
     company = relationship("Company", backref="documents")
     person = relationship("Person", backref="documents")
     site = relationship("Site", backref="documents")
@@ -103,23 +99,12 @@ class Document(TenantBaseModel):
     signed_file: Mapped[File | None] = relationship(
         File, foreign_keys=[signed_file_id], lazy="selectin", backref="signed_documents"
     )
-    job = relationship(
-        "DocumentGenerationJob",
-        back_populates="source_documents",
-        foreign_keys=[job_id],
-    )
     versions = relationship(
         "DocumentVersion",
         back_populates="document",
         cascade="all, delete-orphan",
         order_by="DocumentVersion.created_at",
         lazy="selectin",
-    )
-    generation_jobs = relationship(
-        "DocumentGenerationJob",
-        back_populates="document",
-        cascade="all, delete-orphan",
-        foreign_keys="DocumentGenerationJob.document_id",
     )
 
     __table_args__ = (
@@ -128,7 +113,6 @@ class Document(TenantBaseModel):
         Index("ix_document_status", "status"),
         Index("ix_document_template_version", "tenant_id", "template_version_id"),
         Index("ix_document_site", "tenant_id", "site_id"),
-        Index("ix_document_job", "tenant_id", "job_id"),
     )
 
 
@@ -272,72 +256,6 @@ class DocumentJobStatus(str, enum.Enum):
     PROCESSING = "processing"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
-
-
-class DocumentGenerationJob(TenantBaseModel):
-    """Tracks document generation requests for idempotency and auditing."""
-
-    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
-    task_id: Mapped[str] = mapped_column(String(128), nullable=False)
-    template_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("template.id", ondelete="RESTRICT"), nullable=False
-    )
-    template_code: Mapped[str] = mapped_column(String(255), nullable=False)
-    company_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("company.id", ondelete="RESTRICT"), nullable=False
-    )
-    person_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("person.id", ondelete="SET NULL"), nullable=True
-    )
-    payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    payload: Mapped[dict[str, Any]] = mapped_column(
-        MutableDict.as_mutable(JSONBType), nullable=False, default=dict
-    )
-    pack_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("document_pack.id", ondelete="SET NULL"), nullable=True
-    )
-    status: Mapped[DocumentJobStatus] = mapped_column(
-        Enum(DocumentJobStatus, name="documentjobstatus"),
-        default=DocumentJobStatus.QUEUED,
-        nullable=False,
-    )
-    document_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("document.id", ondelete="SET NULL"), nullable=True
-    )
-    initiated_by: Mapped[str] = mapped_column(
-        String(36), ForeignKey("user.id", ondelete="RESTRICT"), nullable=False
-    )
-    last_error: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    queued_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(tz=timezone.utc), nullable=False
-    )
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-
-    document = relationship(
-        "Document",
-        back_populates="generation_jobs",
-        foreign_keys=[document_id],
-    )
-    template = relationship(Template)
-    company = relationship(Company)
-    person = relationship(Person)
-    initiator = relationship(User)
-    pack: Mapped[DocumentPack | None] = relationship(DocumentPack)
-    source_documents: Mapped[list["Document"]] = relationship(
-        "Document", back_populates="job", foreign_keys=[Document.job_id]
-    )
-    requested_by = synonym("initiated_by")
-
-    __table_args__ = (
-        UniqueConstraint(
-            "tenant_id",
-            "idempotency_key",
-            name="uq_document_job_tenant_idempotency",
-        ),
-        Index("ix_document_job_task_id", "task_id"),
-        Index("ix_document_job_pack_id", "tenant_id", "pack_id"),
-    )
 
 
 class DocumentBatchStatus(str, enum.Enum):

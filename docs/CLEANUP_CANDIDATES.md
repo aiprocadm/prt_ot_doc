@@ -9,6 +9,33 @@
 3. Обновить ссылки в README если необходимо
 4. Выполнить удаление в отдельном коммите с понятным сообщением
 
+## Таблицы без модели (срез-135, 2026-09-09)
+
+Опись среза-131 нашла таблицы, в которые не пишет никто. У 24 из них вердикт
+был «мёртвая» — их не читал и не писал ни один экран. **Код моделей удалён,
+таблицы в базе ОСТАВЛЕНЫ.**
+
+Почему так: удаление таблицы уничтожает данные безвозвратно, а решение об этом
+принимает владелец. Прецедент — срез-117, который так же удалил слой
+жизненного цикла происшествий и оставил таблицы. Без модели данные всё равно
+никому не видны, а решение можно принять позже, ничего не потеряв.
+
+**Удалить отдельной миграцией по решению владельца** (проверив, что у
+арендаторов там пусто):
+
+`incident_cases`, `incident_persons`, `incident_investigations`,
+`incident_attachments`, `inspection_plans`, `inspection_plan_items`,
+`ops_inspections`, `inspection_checklists`, `inspection_checklist_items`,
+`inspection_runs`, `inspection_run_items`, `inspection_attachments`,
+`prescription_items`, `corrective_action_attachments`, `asset`, `equipment`,
+`documentgenerationjob`, `edo_receipts`, `hazard_bindings`, `hazard_measures`,
+`reminder_rules`, `tenant_rate_limits`, `training_protocol_items`, `risk`.
+
+Вместе с ними в базе остались два столбца живых таблиц, ссылавшиеся на
+мёртвые: `document.job_id` и `inspection_prep_packages.source_inspection_id`
+(в коде их больше нет — их не читала и не писала ни одна ручка).
+
+
 ## Candidates for Deletion (Pilot/Testing Artifacts)
 
 Эти документы явно относятся к пилотным фазам разработки и не используются в текущем потоке разработки.

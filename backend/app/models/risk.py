@@ -29,7 +29,6 @@ if TYPE_CHECKING:  # pragma: no cover - imported for typing only
     from app.models.models import DocumentPack, Position, Workplace
 
 __all__ = [
-    "Risk",
     "RiskAssessment",
     "RiskAssessmentItem",
     "RiskCard",
@@ -223,25 +222,6 @@ class RiskAssessment(TenantBase):
             name="uq_risk_assessment_version",
         ),
     )
-
-
-class Risk(TenantBaseModel):
-    """Risk register entry scoped to a tenant."""
-
-    __tablename__ = "risk"
-
-    company_id: Mapped[str] = mapped_column(ForeignKey("company.id"), nullable=False, index=True)
-    site_id: Mapped[str | None] = mapped_column(ForeignKey("site.id"), nullable=True, index=True)
-    hazard: Mapped[str] = mapped_column(String(512), nullable=False)
-    probability: Mapped[int] = mapped_column(Integer, nullable=False)
-    severity: Mapped[int] = mapped_column(Integer, nullable=False)
-    level: Mapped[int] = mapped_column(Integer, nullable=False)
-    controls: Mapped[str | None] = mapped_column(Text, nullable=True)
-
-    company: Mapped[Company] = relationship(backref="risks")
-    site: Mapped[Site | None] = relationship(backref="risks")
-
-    __table_args__ = (Index("ix_risk_tenant_site", "tenant_id", "site_id"),)
 
 
 class RiskAssessmentItem(TenantBaseModel):

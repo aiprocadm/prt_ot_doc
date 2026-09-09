@@ -35,7 +35,6 @@ from app.models.approval_workflow import (
     EdoDirection,
     EdoMessage,
     EdoMessageStatus,
-    EdoReceipt,
     EdoStatus,
     EdoStatusHistory,
     SignatureProviderStatus,
@@ -43,12 +42,6 @@ from app.models.approval_workflow import (
 )
 
 # ARCH-2: re-export assets models moved to app.models.assets.
-from app.models.assets import (
-    Asset,
-    Equipment,
-    EquipmentStatus,
-)
-
 # ARCH-2: re-export audit_log-domain models moved to app.models.audit_log.
 from app.models.audit_log import (
     AuditExportJob,
@@ -317,7 +310,6 @@ from app.models.tenant_billing import (
     TenantLimitOverride,
     TenantQuota,
     TenantQuotaCounter,
-    TenantRateLimit,
     TenantSettings,
     WebhookSubscription,
 )
@@ -337,7 +329,6 @@ from app.models.training import (
     TrainingPlan,
     TrainingProgram,
     TrainingProtocol,
-    TrainingProtocolItem,
     TrainingSession,
     TrainingSessionStatus,
     TrainingStatus,
@@ -358,7 +349,6 @@ __all__ = [
     "PipelineRunStatus",
     "IdempotencyKey",
     "IdempotencyStatus",
-    "Equipment",
     "Incident",
     "IncidentLog",
     "IncidentPerson",
@@ -430,7 +420,6 @@ __all__ = [
     "BillingEvent",
     "BillingEventType",
     "ApiToken",
-    "TenantRateLimit",
     "TenantLimitOverride",
     "Template",
     "TemplateStatus",
@@ -452,7 +441,6 @@ __all__ = [
     "TrainingEnrollment",
     "TrainingAttempt",
     "TrainingProtocol",
-    "TrainingProtocolItem",
     "User",
     "RefreshSession",
     "UserRole",
@@ -480,7 +468,6 @@ __all__ = [
     "ApprovalDecisionType",
     "SignatureType",
     "EdoMessage",
-    "EdoReceipt",
     "EdoStatusHistory",
     "EdoDirection",
     "EdoStatus",
@@ -504,7 +491,6 @@ __all__ += [
     "BillingInvoice",
     "BillingEventType",
     "BillingEvent",
-    "TenantRateLimit",
     "ApiToken",
     "TenantLimitOverride",
     "WebhookSubscription",
@@ -563,9 +549,6 @@ __all__ += [
     "NPA",
     "NpaBindingTarget",
     "NPABinding",
-    "Asset",
-    "EquipmentStatus",
-    "Equipment",
 ]
 
 # ARCH-2 batch 2 re-exports (kept in __all__ so ruff F401 keeps the imports).
