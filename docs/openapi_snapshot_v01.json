@@ -1541,6 +1541,78 @@
           }
         }
       }
+    },
+    "/api/v1/inspection-prep/packages/{package_id}/items/{item_id}": {
+      "patch": {
+        "tags": [
+          "safety-ops",
+          "safety-ops"
+        ],
+        "summary": "Update Prep Item",
+        "description": "Отметить позицию состава собранной (срез-136).\n\nБез этой ручки состав был бы декоративным: позиции появлялись бы в\nсостоянии «требуется» и оставались в нём навсегда, а готовность пакета\nпоказывала бы ноль при полностью собранных документах.",
+        "operationId": "update_prep_item_api_v1_inspection_prep_packages__package_id__items__item_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "package_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Package Id"
+            }
+          },
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrepItemStatusIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Update Prep Item Api V1 Inspection Prep Packages  Package Id  Items  Item Id  Patch"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4015,6 +4087,37 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "PrepItemStatusIn": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "required",
+              "present",
+              "replaced",
+              "missing"
+            ],
+            "title": "Status"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "PrepItemStatusIn",
+        "description": "Состояние позиции состава.\n\nСловарь закрыт: «готово» и «заменено» считаются собранными (так их и\nсчитает готовность пакета), «требуется» и «отсутствует» — нет. Свободная\nстрока сделала бы готовность невычислимой."
       }
     },
     "securitySchemes": {

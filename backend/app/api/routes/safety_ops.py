@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field
@@ -561,6 +561,22 @@ async def create_prep_package(
     )
     session.add(rec)
     await session.flush()
+    # Срез-136: состав пакета создаётся ВМЕСТЕ с пакетом. Список обязательного
+    # (`collect_required_items`) был написан и не позван никем: строк состава не
+    # появлялось никогда, поэтому и список позиций, и готовность пакета были
+    # пусты и нулевые при любой работе. Пустой пакет подготовки к проверке
+    # читается как «готовиться не к чему» — худшее, что может показать такой
+    # экран накануне проверки.
+    for required in InspectionPrepPackageService.collect_required_items():
+        session.add(
+            InspectionPrepItem(
+                tenant_id=str(tenant.id),
+                package_id=rec.id,
+                item_type=required["item_type"],
+                title=required["title"],
+                status=required["status"],
+            )
+        )
     await _audit_event(
         request,
         session,
@@ -653,6 +669,64 @@ async def package_items(
         {"id": row.id, "item_type": row.item_type, "title": row.title, "status": row.status}
         for row in rows
     ]
+
+
+class PrepItemStatusIn(BaseModel):
+    """Состояние позиции состава.
+
+    Словарь закрыт: «готово» и «заменено» считаются собранными (так их и
+    считает готовность пакета), «требуется» и «отсутствует» — нет. Свободная
+    строка сделала бы готовность невычислимой.
+    """
+
+    status: Literal["required", "present", "replaced", "missing"]
+    notes: str | None = None
+
+
+@router.patch("/inspection-prep/packages/{package_id}/items/{item_id}")
+async def update_prep_item(
+    package_id: str,
+    item_id: str,
+    payload: PrepItemStatusIn,
+    request: Request,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> dict[str, str]:
+    """Отметить позицию состава собранной (срез-136).
+
+    Без этой ручки состав был бы декоративным: позиции появлялись бы в
+    состоянии «требуется» и оставались в нём навсегда, а готовность пакета
+    показывала бы ноль при полностью собранных документах.
+    """
+
+    pack = await _get_package(session, str(tenant.id), package_id)
+    item = (
+        await session.execute(
+            select(InspectionPrepItem).where(
+                InspectionPrepItem.id == item_id,
+                InspectionPrepItem.package_id == pack.id,
+                InspectionPrepItem.tenant_id == str(tenant.id),
+            )
+        )
+    ).scalar_one_or_none()
+    if item is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "item not found")
+    item.status = payload.status
+    if payload.notes is not None:
+        item.notes = payload.notes
+    await _audit_event(
+        request,
+        session,
+        tenant_id=str(tenant.id),
+        action="update",
+        object_type="inspection_prep_item",
+        object_id=item.id,
+        user_id=getattr(access.user, "id", None),
+        details={"status": item.status},
+    )
+    await session.commit()
+    return {"id": item.id, "status": item.status}
 
 
 @router.get("/inspection-prep/packages/{package_id}/gaps")
