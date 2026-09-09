@@ -52,7 +52,7 @@ from app.models.models import (
     TrainingProgram,
 )
 from app.models.obligations import Task, TaskStatus
-from app.models.risk import Risk
+from app.models.risk import RiskAssessment, RiskAssessmentItem, RiskHazard
 from tests.utils.factories import TestDataFactory
 
 API_PREFIX = "/api/v1"
@@ -157,19 +157,57 @@ async def _seed_high_risk(
     *,
     company_id: str,
     level: int = 18,
-) -> Risk:
-    """Seed one risk register entry with composite level ≥ 15 → ``HIGH_RISK`` HIGH alert."""
-    risk = Risk(
+) -> RiskAssessment:
+    """Одна высокая оценка риска → сигнал ``HIGH_RISK`` в Командном центре.
+
+    Срез-134: раньше здесь заводили строку реестра ``risk`` — таблицы, в
+    которую продукт не пишет никогда. Проверка была зелёной, а Командный центр
+    в бою молчал при любых рисках (это нашёл срез-131). Сеять надо тем же
+    способом, каким данные создаёт продукт.
+    """
+
+    hazard = RiskHazard(
         tenant_id=tenant_id,
-        company_id=company_id,
-        hazard="High-voltage operation under load",
-        probability=3,
-        severity=5,
-        level=level,
+        code="HZ-HV",
+        title="High-voltage operation under load",
+        module="ot",
+        recommended_measures=[],
     )
-    session.add(risk)
+    session.add(hazard)
     await session.flush()
-    return risk
+    assessment = RiskAssessment(
+        tenant_id=tenant_id,
+        assessment_key="high-voltage",
+        assessment_version=1,
+        methodology_version=1,
+        company_id=company_id,
+        hazard_id=hazard.id,
+        severity_before=5,
+        likelihood_before=3,
+        score_before=level,
+        band_before="high",
+        severity_after=5,
+        likelihood_after=3,
+        score_after=level,
+        band_after="high",
+    )
+    session.add(assessment)
+    await session.flush()
+    # Сигнал считает СТРОКИ оценки (срез-131) — общая формула с KPI и разрезом.
+    session.add(
+        RiskAssessmentItem(
+            tenant_id=tenant_id,
+            assessment_id=assessment.id,
+            hazard_id=hazard.id,
+            probability=3,
+            severity=5,
+            score=level,
+            level="high",
+            methodology_version=1,
+        )
+    )
+    await session.flush()
+    return assessment
 
 
 # =============================================================================

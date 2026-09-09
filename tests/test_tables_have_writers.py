@@ -72,7 +72,6 @@ WITHOUT_WRITERS: dict[str, str] = {
     "EdoReceipt": "мёртвая: квитанции ЭДО ведёт контур approval_runtime",
     "HazardBinding": "мёртвая: связи опасностей ведёт контур рисков (RiskAssessment)",
     "HazardMeasure": "мёртвая: меры ведёт контур рисков",
-    "NpaClause": "мёртвая: пункты НПА не заводит ни одна ручка",
     "ReminderRule": "мёртвая с среза-114: правила напоминаний заменены тиками",
     "TenantRateLimit": "мёртвая: ограничение частоты живёт в настройках, а не в базе",
     "TrainingProtocolItem": "мёртвая: строки протокола обучения ведёт TrainingProtocol",
@@ -89,6 +88,10 @@ WITHOUT_WRITERS: dict[str, str] = {
     "NPA": "читает поисковый снимок; живой контур НПА — NpaAct/NpaRevision",
     "NPABinding": "читают разбор документов и оценка влияния НПА; связей никто не заводит",
     "NpaAct": "читает GET /npa; акты не заводит ни одна ручка — реестр пуст всегда",
+    "NpaClause": (
+        "читается ЧЕРЕЗ СВЯЗЬ у NpaAct (ручка отдаёт акт вместе с пунктами), "
+        "поэтому не мёртвая; пункты не заводит ни одна ручка — как и акты"
+    ),
     "NpaRevision": "читает оценка влияния НПА; редакции не заводит никто",
     "BillingPlan": "читают биллинг и GET /billing; тарифы заводятся вне продукта",
     "BillingInvoice": "читает биллинг; счета выставляются вне продукта",
@@ -181,3 +184,51 @@ def test_у_каждого_вердикта_есть_объяснение() -> N
 
     short = sorted(name for name, why in WITHOUT_WRITERS.items() if len(why.strip()) < 30)
     assert short == [], f"вердикт ничего не объясняет: {short}"
+
+
+def _dead_table_names() -> set[str]:
+    """Таблицы с вердиктом «мёртвая»: их не пишет и не читает ни один экран."""
+
+    return {name for name, why in WITHOUT_WRITERS.items() if why.lstrip().startswith("мёртвая")}
+
+
+#: Тесты, которые заводят строки МЁРТВОЙ таблицы осознанно. Пусто: такой тест
+#: проверяет собственную подготовку данных, а не продукт.
+TESTS_SEEDING_DEAD_TABLES: dict[str, str] = {}
+
+
+def test_сторож_тесты_не_засевают_мёртвые_таблицы() -> None:
+    """Тест, который сам создаёт то, чего продукт не создаёт, — зелёный впустую.
+
+    Срез-134: так вышло ЧЕТЫРЕЖДЫ подряд. Проверки разреза аналитики,
+    Командного центра, конструктора отчётов и ручки рисков заводили строки
+    реестра ``risk`` — таблицы, в которую продукт не пишет никогда. Все они
+    были зелёными, пока экраны в бою показывали ноль; и они же покраснели,
+    когда экраны наконец перевели на живые данные.
+
+    Признак один: тест готовит данные тем способом, которым продукт их не
+    создаёт. Тогда проверка держит собственную подготовку, а не поведение.
+    """
+
+    dead = _dead_table_names()
+    offenders: list[str] = []
+    for root in ("tests", "backend/tests", "integration_tests"):
+        base = REPO / root
+        if not base.exists():
+            continue
+        for path in sorted(base.rglob("*.py")):
+            rel = path.relative_to(REPO).as_posix()
+            if rel in TESTS_SEEDING_DEAD_TABLES:
+                continue
+            try:
+                tree = ast.parse(path.read_text(encoding="utf-8"))
+            except SyntaxError:  # pragma: no cover
+                continue
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                    if node.func.id in dead:
+                        offenders.append(f"{rel}:{node.lineno} {node.func.id}")
+    assert offenders == [], (
+        "тест заводит строки таблицы, в которую продукт не пишет никогда — "
+        "сейте тем же способом, каким данные создаёт продукт: " + str(sorted(set(offenders)))
+    )

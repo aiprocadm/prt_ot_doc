@@ -268,7 +268,10 @@ async def test_in_filter_on_enum(sessionmaker, data_factory: TestDataFactory):
 
 @pytest.mark.asyncio
 async def test_sum_aggregate_success(sessionmaker, data_factory: TestDataFactory):
-    from app.models.risk import Risk
+    # Срез-134: набор строк «риски» строился по реестру `risk` — таблице, в
+    # которую продукт не пишет никогда (срез-131 перевёл его на живые оценки).
+    # Сеять надо тем же способом, каким данные создаёт продукт.
+    from app.models.risk import RiskAssessment, RiskHazard
     from app.modules.report_builder.engine import run_report
 
     async with sessionmaker() as session:
@@ -277,26 +280,42 @@ async def test_sum_aggregate_success(sessionmaker, data_factory: TestDataFactory
         company = Company(tenant_id=tid, name="ООО Вектор")
         session.add(company)
         await session.flush()
-        session.add_all(
-            [
-                Risk(
+
+        def assessment(code: str, title: str, probability: int, severity: int, score: int):
+            hazard = RiskHazard(
+                tenant_id=tid,
+                code=code,
+                title=title,
+                module="ot",
+                recommended_measures=[],
+            )
+            session.add(hazard)
+            return hazard, score, probability, severity
+
+        prepared = [
+            assessment("HZ-N", "Шум", 2, 3, 6),
+            assessment("HZ-V", "Вибрация", 3, 3, 9),
+        ]
+        await session.flush()
+        for hazard, score, probability, severity in prepared:
+            session.add(
+                RiskAssessment(
                     tenant_id=tid,
+                    assessment_key=hazard.code,
+                    assessment_version=1,
+                    methodology_version=1,
                     company_id=company.id,
-                    hazard="Шум",
-                    probability=2,
-                    severity=3,
-                    level=6,
-                ),
-                Risk(
-                    tenant_id=tid,
-                    company_id=company.id,
-                    hazard="Вибрация",
-                    probability=3,
-                    severity=3,
-                    level=9,
-                ),
-            ]
-        )
+                    hazard_id=hazard.id,
+                    severity_before=severity,
+                    likelihood_before=probability,
+                    score_before=score,
+                    band_before="medium",
+                    severity_after=severity,
+                    likelihood_after=probability,
+                    score_after=score,
+                    band_after="medium",
+                )
+            )
         await session.commit()
         result = await run_report(
             session,
