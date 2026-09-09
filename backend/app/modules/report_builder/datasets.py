@@ -41,7 +41,10 @@ from app.models.models import (
     Training,
     TrainingStatus,
 )
-from app.models.risk import Risk  # не ре-экспортирован в app.models.models
+from app.models.risk import (  # не ре-экспортированы в app.models.models
+    RiskAssessment,
+    RiskHazard,
+)
 
 OPS_BY_KIND: dict[str, tuple[str, ...]] = {
     "string": ("eq", "neq", "contains"),
@@ -127,21 +130,35 @@ def _incidents_stmt(tenant_id: str, now: datetime) -> Select:
 
 
 def _risks_stmt(tenant_id: str, now: datetime) -> Select:
+    """Строки об оценках рисков.
+
+    Срез-131: набор строился по таблице ``risk``, в которую не пишет никто, —
+    отчёт «риски» был пустым всегда, и пустота читалась как «рисков нет».
+    Живые данные — оценки рисков; названия столбцов сохранены, чтобы не
+    сломать уже собранные отчёты.
+
+    Опасность берётся из справочника (``risk_hazards.title``): в мёртвой
+    таблице она была свободной строкой, в живой — ссылкой на справочник.
+    Числа берутся ПОСЛЕ мер (``*_after``): вопрос отчёта — «что осталось», а
+    не «что было до того, как мы вмешались».
+    """
+
     _ = now
     return (
         select(
-            Risk.hazard.label("hazard"),
-            Risk.probability.label("probability"),
-            Risk.severity.label("severity"),
-            Risk.level.label("level"),
-            Risk.controls.label("controls"),
+            RiskHazard.title.label("hazard"),
+            RiskAssessment.likelihood_after.label("probability"),
+            RiskAssessment.severity_after.label("severity"),
+            RiskAssessment.score_after.label("level"),
+            RiskAssessment.controls.label("controls"),
             Company.name.label("company_name"),
             Site.name.label("site_name"),
         )
-        .select_from(Risk)
-        .join(Company, Company.id == Risk.company_id)
-        .outerjoin(Site, Site.id == Risk.site_id)
-        .where(Risk.tenant_id == tenant_id)
+        .select_from(RiskAssessment)
+        .join(RiskHazard, RiskHazard.id == RiskAssessment.hazard_id)
+        .outerjoin(Company, Company.id == RiskAssessment.company_id)
+        .outerjoin(Site, Site.id == RiskAssessment.place_id)
+        .where(RiskAssessment.tenant_id == tenant_id)
     )
 
 

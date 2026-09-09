@@ -22,6 +22,7 @@ from app.models.models import (
 )
 from app.models.risk import RiskAssessmentItem
 from app.services.discipline_incidents import open_incidents_where
+from app.services.discipline_risks import high_risk_item_where
 from app.services.person_scope import employed_record_where
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -58,13 +59,13 @@ async def get_kpi(
 
     today = date.today()
 
+    # Формула «высокий риск» одна на продукт (срез-131): её же берут разрез
+    # аналитики и Командный центр — раньше каждый считал по-своему, и один из
+    # них по мёртвой таблице.
     risks_high_stmt = (
         select(func.count())
         .select_from(RiskAssessmentItem)
-        .where(
-            RiskAssessmentItem.tenant_id == tenant.id,
-            RiskAssessmentItem.level.in_(["high", "crit"]),
-        )
+        .where(*high_risk_item_where(str(tenant.id)))
     )
     # «Уволенный не в счёт» (срез-127) — тот же счётчик, что на сводке и в
     # аналитике (срез-96); KPI обязан совпадать с ними число в число.
