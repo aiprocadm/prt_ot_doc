@@ -206,19 +206,18 @@ class OperationalDashboardService:
         alerts: list[AlertItem] = []
 
         try:
-            from sqlalchemy import and_, func, select
+            from sqlalchemy import func, select
 
-            from app.models.risk import Risk
+            from app.models.risk import RiskAssessmentItem
+            from app.services.discipline_risks import high_risk_item_where
         except ImportError:
             return alerts
 
         try:
-            stmt = select(func.count(Risk.id)).where(
-                and_(
-                    Risk.tenant_id == tenant_id,
-                    Risk.level >= 15,
-                )
-            )
+            # Срез-131: сигнал считался по таблице `risk`, в которую не пишет
+            # никто, — Командный центр молчал о рисках всегда. Формула «высокий
+            # риск» одна с KPI отчётов и разрезом аналитики.
+            stmt = select(func.count(RiskAssessmentItem.id)).where(*high_risk_item_where(tenant_id))
             result = await db.execute(stmt)
             count = int(result.scalar_one_or_none() or 0)
 

@@ -19,7 +19,8 @@ Discipline-разрез (Доп. №1 разд. 57.4, «директорский
 происшествие случилось независимо от того, что куплено; скрытое названо в
 ``not_applicable`` одной фразой.
 
-None-bucket (site-разрез): ``Risk.site_id`` и ``Inspection.site_id`` nullable —
+None-bucket (site-разрез): ``RiskAssessment.place_id`` и ``Inspection.site_id``
+nullable —
 high-риски и просроченные предписания без привязки к объекту не должны тихо
 исчезать из site-разреза (иначе итоги не сойдутся с executive-дашбордом).
 Их счётчики собираются в синтетическую строку ``{"id": "", "name": "— без
@@ -46,7 +47,7 @@ from app.models.models import (
     Prescription,
     TrainingPlan,
 )
-from app.models.risk import Risk
+from app.models.risk import RiskAssessment, RiskAssessmentItem
 from app.modules.contractors.models import ContractorRegistry
 from app.modules.projections.models import ContractorReadinessReadModel
 from app.services.discipline_applicability import collect_applicability, describe_hidden
@@ -56,15 +57,11 @@ from app.services.discipline_attention import (
     overdue_by_discipline,
 )
 from app.services.discipline_incidents import open_incidents_where
+from app.services.discipline_risks import high_risk_item_where
 from app.services.person_scope import employed_person_where, employed_record_where
 
 BREAKDOWN_DIMENSIONS = ("company", "site", "contractor", "discipline")
 BREAKDOWN_ROW_CAP = 200
-
-# Порог «высокого» риска — как в operational_dashboard/service.py:211
-# (Risk.level >= 15). Шкала modules/risk/calc.py: high = 10-16, crit >= 17 —
-# т.е. это top-slice high-диапазона плюс все критические.
-HIGH_RISK_LEVEL_THRESHOLD = 15
 
 NO_SITE_BUCKET_ID = ""
 NO_SITE_BUCKET_NAME = "— без объекта"
@@ -103,11 +100,14 @@ async def compute_breakdown(
     today = date.today()
     if dimension == "company":
         dim_incidents = Incident.company_id
-        dim_risks = Risk.company_id
+        # Срез-131: разрез по рискам считался по таблице `risk`, в которую не
+        # пишет никто, — то есть был нулём всегда. Живые данные лежат в
+        # оценках рисков; площадка у оценки называется `place_id`.
+        dim_risks = RiskAssessment.company_id
         dim_prescriptions = Inspection.company_id
     else:  # site
         dim_incidents = Incident.site_id
-        dim_risks = Risk.site_id
+        dim_risks = RiskAssessment.place_id
         dim_prescriptions = Inspection.site_id
 
     incidents_stmt = (
@@ -122,9 +122,13 @@ async def compute_breakdown(
     if date_to is not None:
         incidents_stmt = incidents_stmt.where(func.date(Incident.occurred_at) <= date_to)
 
+    # Формула «высокий риск» одна с KPI отчётов (срез-131): считаются СТРОКИ
+    # оценки, а не оценки целиком — одна оценка описывает много опасностей.
     risks_stmt = (
         select(dim_risks, func.count())
-        .where(Risk.tenant_id == tenant_id, Risk.level >= HIGH_RISK_LEVEL_THRESHOLD)
+        .select_from(RiskAssessmentItem)
+        .join(RiskAssessment, RiskAssessment.id == RiskAssessmentItem.assessment_id)
+        .where(*high_risk_item_where(tenant_id))
         .group_by(dim_risks)
     )
 
