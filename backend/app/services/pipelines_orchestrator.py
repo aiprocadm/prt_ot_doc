@@ -17,6 +17,7 @@ from app.db.tenant_row_guard import assert_tenant_row_matches_session
 from app.models.job_engine import (
     DocumentArtifact,
     DocumentJob,
+    DocumentJobLog,
     DocumentJobStatus,
     DocumentJobStep,
     JobStepStatus,
@@ -714,6 +715,29 @@ class PipelineOrchestrator:
         message: str,
         meta: dict[str, Any] | None,
     ) -> None:
+        """Записать событие шага: строкой в журнал и файлом в хранилище.
+
+        Срез-133: до него событие уходило ТОЛЬКО файлом в хранилище, а ручка
+        ``GET /jobs/{id}`` читает таблицу ``job_logs`` — и показывала пустой
+        журнал всегда. Файл остаётся: в нём полная выкладка шага, включая
+        вложенные данные. В таблице — то, что видно на экране: время, шаг,
+        уровень, сообщение.
+
+        Обе записи делаются ЗДЕСЬ, потому что это единственная воронка
+        событий шага (четыре вызова: старт, успех, повтор, отказ). Вторая
+        точка записи разошлась бы с первой на первом же новом событии.
+        """
+
+        self.session.add(
+            DocumentJobLog(
+                tenant_id=str(job.tenant_id),
+                job_id=job.id,
+                step_code=step.step_key or step.step_code,
+                level=level,
+                message=message,
+                meta_json=_sanitize_log_payload(meta or {}),
+            )
+        )
         row = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "level": level,
