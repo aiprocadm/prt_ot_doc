@@ -435,19 +435,41 @@ def analytics_projections_tick() -> int:
     return _run_coroutine(_analytics_projections_tick())
 
 
+async def _active_tenants(tenant_slug: str | None = None) -> list[Tenant]:
+    """Активные арендаторы — все или один названный (срез-130).
+
+    Названный, но отключённый или несуществующий арендатор даёт ПУСТОЙ список,
+    а не тихую пересборку всех: оператор, ошибшийся в слаге, должен увидеть
+    «пересобрано 0», а не молча запустить работу по всему серверу.
+    """
+
+    async with AsyncSessionLocal(tenant=settings.default_tenant_slug) as session:
+        stmt = select(Tenant).where(Tenant.is_active.is_(True))
+        if tenant_slug:
+            stmt = stmt.where(Tenant.slug == tenant_slug)
+        return list((await session.execute(stmt)).scalars().all())
+
+
 async def _analytics_projections_tick() -> int:
+    return await rebuild_read_model_snapshots()
+
+
+async def rebuild_read_model_snapshots(tenant_slug: str | None = None) -> int:
+    """Пересобрать read model'ы: ночью — по всем арендаторам, из CLI — по одному.
+
+    Срез-130: раньше эту работу умел звать только тик, а команда
+    ``ptd projections rebuild`` печатала ``status: queued``, ничего не делая.
+    Вторая копия обхода арендаторов в CLI разошлась бы с ночной при первой же
+    правке, поэтому обход один и живёт здесь.
+    """
+
     # Read model'ы аналитики (пакеты, соответствие по людям, площадки) до
     # среза-97 пересобирались только Celery-задачами, которые никто не звал:
     # `overdue_compliance_items` и тренды на дашбордах жили по последней ручной
     # пересборке. Подрядчиков так же ночью пересобирает contractors.readiness.tick.
     from app.modules.projections.services import ProjectionOrchestrator
 
-    async with AsyncSessionLocal(tenant=settings.default_tenant_slug) as session:
-        tenants = list(
-            (await session.execute(select(Tenant).where(Tenant.is_active.is_(True))))
-            .scalars()
-            .all()
-        )
+    tenants = await _active_tenants(tenant_slug)
     total = 0
     # Изоляция арендаторов — как у _medical_contingent_tick: падение одного
     # прерывает прогон, autoretry перезапустит; пересборка — upsert, повтор безопасен.
@@ -483,6 +505,12 @@ def search_reindex_tick() -> int:
 
 
 async def _search_reindex_tick() -> int:
+    return await rebuild_search_snapshot()
+
+
+async def rebuild_search_snapshot(tenant_slug: str | None = None) -> int:
+    """Пересобрать поисковый снимок: ночью — по всем арендаторам, из CLI — по одному."""
+
     # Общий поиск и командная строка (CMD+K) читают ТОЛЬКО снимок
     # ``search_index_entries`` — живого запроса к таблицам у них нет. А снимок
     # пересобирала лишь ручка ``POST /search/reindex``: пока её никто не нажал,
@@ -497,12 +525,7 @@ async def _search_reindex_tick() -> int:
     # «добавить новое» оставило бы в нём удалённые записи навсегда.
     from app.modules.projections.services import ProjectionOrchestrator
 
-    async with AsyncSessionLocal(tenant=settings.default_tenant_slug) as session:
-        tenants = list(
-            (await session.execute(select(Tenant).where(Tenant.is_active.is_(True))))
-            .scalars()
-            .all()
-        )
+    tenants = await _active_tenants(tenant_slug)
     total = 0
     # Изоляция арендаторов — как у соседних тиков: падение одного прерывает
     # прогон, autoretry перезапустит; пересборка идёт «переписать заново»,
