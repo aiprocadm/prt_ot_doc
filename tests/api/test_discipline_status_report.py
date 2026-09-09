@@ -125,7 +125,13 @@ async def test_собрать_сейчас_снимок_равен_разрез�
     await _seed(sessionmaker, data_factory)
     headers = await make_auth_headers(RoleEnum.ADMIN)
 
+    # Дата берётся ДО и ПОСЛЕ запроса: если прогон пересечёт полночь (полный
+    # набор идёт почти три часа), «сегодня» у сервера и у проверки окажутся
+    # разными днями. Проверка от этого не слабеет — она по-прежнему требует,
+    # чтобы отчёт был собран за сегодняшний день, а не за какой попало.
+    before = date.today()
     resp = await async_client.post(f"{BASE}/run", headers=headers)
+    after = date.today()
     breakdown = {
         row["id"]: row
         for row in (await async_client.get(BREAKDOWN, headers=headers)).json()["items"]
@@ -135,7 +141,7 @@ async def test_собрать_сейчас_снимок_равен_разрез�
     body = resp.json()
     assert body["created"] is True
     report = body["report"]
-    assert report["period_end"] == date.today().isoformat()
+    assert report["period_end"] in {before.isoformat(), after.isoformat()}
     rows = _rows(report)
     # строка на КАЖДУЮ дисциплину словаря, словами словаря — и те же числа,
     # что видит директор в разрезе (одна формула, а не второй расчёт)

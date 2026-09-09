@@ -95,6 +95,7 @@ from app.schemas.road_safety import (
 )
 from app.services.audit import AuditService, field_level_diff
 from app.services.discipline_incidents import open_incidents_count
+from app.services.discipline_road_safety import admitted_driver_where, is_admitted
 from app.services.person_scope import employed_record_where
 
 router = APIRouter(prefix="/road-safety", tags=["road-safety"])
@@ -541,9 +542,11 @@ async def road_safety_readiness(
         (
             await session.execute(
                 select(Driver).where(
-                    Driver.tenant_id == tenant.id,
-                    Driver.deleted_at.is_(None),
-                    Driver.status == "admitted",
+                    # Срез-129: условие «допущен» бралось здесь своей копией —
+                    # ровно то, что запретил срез-88 и что сторож формулы ловил
+                    # красным на `main`. Формула одна с календарём, цифрами
+                    # дисциплины и сводкой портфеля.
+                    *admitted_driver_where(str(tenant.id)),
                     employed_record_where(Driver, tenant.id),
                 )
             )
@@ -1452,7 +1455,7 @@ async def _resolve_driver_for_trip(
     """
 
     driver = await _get_driver_or_404(session, tenant, driver_id)
-    if driver.status != "admitted":
+    if not is_admitted(driver):
         raise _unprocessable(
             f"Водитель в состоянии {DRIVER_STATUSES.get(driver.status, driver.status)!r}: "
             "путевой лист выписывается только допущенному"
