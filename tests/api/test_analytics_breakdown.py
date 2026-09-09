@@ -16,11 +16,64 @@ from app.models.models import (
     Site,
     TrainingPlan,
 )
-from app.models.risk import Risk
+from app.models.risk import RiskAssessment, RiskAssessmentItem, RiskHazard
 from tests.utils.factories import TestDataFactory
 
 NOW = datetime.now(tz=timezone.utc)
 BASE = "/api/v1/analytics/dashboard/breakdown"
+
+
+async def _add_high_risk(session, tenant_id: str, *, company_id: str, site_id: str | None) -> None:
+    """Высокая оценка риска — ЖИВЫМИ таблицами (срез-134).
+
+    Раньше тесты заводили строку реестра ``risk`` — таблицы, в которую продукт
+    не пишет никогда. Проверка была зелёной, а разрез в бою показывал ноль
+    (это и нашёл срез-131). Сеять надо тем же способом, каким данные создаёт
+    продукт, иначе тест держит собственную подготовку, а не поведение.
+    """
+
+    hazard = RiskHazard(
+        tenant_id=tenant_id,
+        code=f"HZ-{site_id or 'none'}",
+        title="Высота",
+        module="ot",
+        recommended_measures=[],
+    )
+    session.add(hazard)
+    await session.flush()
+    assessment = RiskAssessment(
+        tenant_id=tenant_id,
+        assessment_key=f"as-{site_id or 'none'}",
+        assessment_version=1,
+        methodology_version=1,
+        company_id=company_id,
+        place_id=site_id,
+        hazard_id=hazard.id,
+        severity_before=4,
+        likelihood_before=4,
+        score_before=16,
+        band_before="high",
+        severity_after=4,
+        likelihood_after=4,
+        score_after=16,
+        band_after="high",
+    )
+    session.add(assessment)
+    await session.flush()
+    # Счёт идёт по СТРОКАМ оценки (срез-131): одна оценка описывает много
+    # опасностей, и каждая высокая — отдельный повод вмешаться.
+    session.add(
+        RiskAssessmentItem(
+            tenant_id=tenant_id,
+            assessment_id=assessment.id,
+            hazard_id=hazard.id,
+            probability=4,
+            severity=4,
+            score=16,
+            level="high",
+            methodology_version=1,
+        )
+    )
 
 
 async def _seed(sessionmaker, data_factory: TestDataFactory) -> dict[str, str]:
@@ -60,17 +113,9 @@ async def _seed(sessionmaker, data_factory: TestDataFactory) -> dict[str, str]:
                     occurred_at=NOW - timedelta(days=1),
                     status=IncidentStatus.CLOSED,
                 ),
-                Risk(
-                    tenant_id=tid,
-                    company_id=company.id,
-                    site_id=s1.id,
-                    hazard="Высота",
-                    probability=4,
-                    severity=4,
-                    level=16,
-                ),
             ]
         )
+        await _add_high_risk(session, tid, company_id=company.id, site_id=s1.id)
         course = TrainingCourse(tenant_id=tid, title="ОТ-101")
         session.add(course)
         await session.flush()
@@ -120,17 +165,7 @@ async def test_site_breakdown_null_site_bucket(
         company = Company(tenant_id=tid, name="ООО Безобъектная")
         session.add(company)
         await session.flush()
-        session.add(
-            Risk(
-                tenant_id=tid,
-                company_id=company.id,
-                site_id=None,
-                hazard="Общий",
-                probability=4,
-                severity=4,
-                level=16,
-            )
-        )
+        await _add_high_risk(session, tid, company_id=company.id, site_id=None)
         await session.commit()
     headers = await make_auth_headers(RoleEnum.ADMIN)
     resp = await async_client.get(f"{BASE}?dimension=site", headers=headers)
