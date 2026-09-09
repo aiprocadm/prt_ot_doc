@@ -7,7 +7,7 @@ from sqlalchemy import select
 
 from app.models.models import Company, Site, Tenant
 from app.models.npa import NpaAct, NpaClause
-from app.models.risk import Risk
+from app.models.risk import RiskAssessment, RiskHazard
 from app.services.risk import RiskLevelError, RiskService
 
 
@@ -63,6 +63,14 @@ async def test_risk_service_calculation_bounds() -> None:
 
 @pytest.mark.anyio
 async def test_risk_endpoint_returns_report(async_client, sessionmaker, make_auth_headers):
+    """Срез-132: ручка отвечает по ЖИВЫМ оценкам рисков.
+
+    Раньше этот тест сам засевал реестр ``risk`` — таблицу, в которую в
+    продукте не пишет никто. Тест был зелёным, а ручка в бою отвечала пустым
+    списком всегда: проверка держала не поведение продукта, а собственную
+    подготовку данных.
+    """
+
     headers = await make_auth_headers()
     async with sessionmaker() as session:
         tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
@@ -83,38 +91,48 @@ async def test_risk_endpoint_returns_report(async_client, sessionmaker, make_aut
         session.add(other_site)
         await session.flush()
 
+        def hazard(code: str, title: str) -> RiskHazard:
+            row = RiskHazard(
+                tenant_id=tenant.id,
+                code=code,
+                title=title,
+                module="ot",
+                recommended_measures=[],
+            )
+            session.add(row)
+            return row
+
+        machinery = hazard("HZ-1", "Unshielded machinery")
+        chemical = hazard("HZ-2", "Chemical exposure")
+        floors = hazard("HZ-3", "Slippery floors")
+        await session.flush()
+
+        def assessment(hazard_row: RiskHazard, place, probability: int, severity: int, controls):
+            score = RiskService.calculate(probability, severity)
+            return RiskAssessment(
+                tenant_id=tenant.id,
+                assessment_key=hazard_row.code,
+                assessment_version=1,
+                methodology_version=1,
+                company_id=company.id,
+                place_id=place.id,
+                hazard_id=hazard_row.id,
+                severity_before=severity,
+                likelihood_before=probability,
+                score_before=score,
+                band_before="high",
+                severity_after=severity,
+                likelihood_after=probability,
+                score_after=score,
+                band_after="high",
+                controls=controls,
+            )
+
         session.add_all(
             [
-                Risk(
-                    tenant_id=tenant.id,
-                    company_id=company.id,
-                    site_id=site.id,
-                    hazard="Unshielded machinery",
-                    probability=3,
-                    severity=4,
-                    level=RiskService.calculate(3, 4),
-                    controls="Install guards",
-                ),
-                Risk(
-                    tenant_id=tenant.id,
-                    company_id=company.id,
-                    site_id=site.id,
-                    hazard="Chemical exposure",
-                    probability=2,
-                    severity=5,
-                    level=RiskService.calculate(2, 5),
-                    controls="Provide PPE",
-                ),
-                Risk(
-                    tenant_id=tenant.id,
-                    company_id=company.id,
-                    site_id=other_site.id,
-                    hazard="Slippery floors",
-                    probability=1,
-                    severity=2,
-                    level=RiskService.calculate(1, 2),
-                    controls="Improve cleaning",
-                ),
+                assessment(machinery, site, 3, 4, "Install guards"),
+                assessment(chemical, site, 2, 5, "Provide PPE"),
+                assessment(floors, other_site, 1, 2, "Improve cleaning"),
             ]
         )
 

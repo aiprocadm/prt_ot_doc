@@ -30,12 +30,11 @@ from app.models.models import (
     Site,
 )
 from app.models.risk import (
-    Risk,
     RiskActionPlan,
     RiskCard,
 )
 from app.schemas.risk import RiskListResponse
-from app.services.risk import RiskService
+from app.services.risk import RiskRow, RiskService
 
 
 @engine_router.get("/cards", response_model=list[RiskCardOut])
@@ -221,7 +220,7 @@ async def list_risks(
             minimum, maximum = _risk_level_filter(risk_level)
         except ValueError as exc:
             raise _risk_unprocessable(str(exc)) from exc
-        filtered: list[Risk] = []
+        filtered: list[RiskRow] = []
         for risk in risks:
             if minimum is not None and risk.level < minimum:
                 continue

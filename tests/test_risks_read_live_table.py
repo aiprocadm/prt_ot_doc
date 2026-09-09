@@ -170,3 +170,124 @@ async def test_kpi_отчётов_считает_ту_же_единицу(
 
     assert response.status_code == 200, response.text
     assert response.json()["risks_high"] == 1
+
+
+async def test_шкалу_задаёт_методология_а_не_ручка(
+    async_client, make_auth_headers, sessionmaker, data_factory
+) -> None:
+    """Срез-132: оценка по Fine-Kinney в старый предел не влезала.
+
+    Схема ответа держала ``probability``/``severity`` в 1..5 — шкалу мёртвого
+    реестра. У Fine-Kinney вероятность идёт до 10, последствия до 100: такая
+    оценка ломала бы ручку на живых данных. Урезать чужую шкалу нельзя, а
+    пересчитывать в 5×5 — значит показать число, которого нет ни в одном
+    документе арендатора. Поэтому верхней границы нет, нижняя осталась.
+    """
+
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        company = await data_factory.create_company(
+            tenant=tenant, name="ООО Файн-Кинни", session=session
+        )
+        hazard = RiskHazard(
+            tenant_id=str(tenant.id),
+            code="FK-1",
+            title="Работа на высоте",
+            module="ot",
+            recommended_measures=[],
+        )
+        session.add(hazard)
+        await session.flush()
+        session.add(
+            RiskAssessment(
+                tenant_id=str(tenant.id),
+                assessment_key="fine-kinney",
+                assessment_version=1,
+                methodology_version=1,
+                company_id=company.id,
+                hazard_id=hazard.id,
+                severity_before=40,
+                likelihood_before=6,
+                score_before=1440,
+                band_before="crit",
+                severity_after=40,
+                likelihood_after=6,
+                score_after=1440,
+                band_after="crit",
+            )
+        )
+        await session.commit()
+
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    response = await async_client.get("/api/v1/risks", headers=headers)
+
+    assert response.status_code == 200, response.text
+    item = response.json()["items"][0]
+    assert item["severity"] == 40, "последствия по Fine-Kinney не влезали в прежний предел"
+    assert item["probability"] == 6
+    assert item["level"] == 1440
+    assert item["hazard"] == "Работа на высоте"
+
+
+async def test_организация_берётся_по_связям_а_пустота_называется(
+    async_client, make_auth_headers, sessionmaker, data_factory
+) -> None:
+    """Срез-132: у оценки организация необязательна, а договор ручки её требует.
+
+    Сделать поле пустым нельзя — смена типа в опубликованном ответе ломающая
+    (docs/API_VERSIONING.md), ей место в новой мажорной версии. Поэтому
+    организация берётся по связям (площадка, рабочее место), а когда её нет ни
+    по одной — пустой строкой: строку теряют молча, а пустоту называют.
+    """
+
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        company = await data_factory.create_company(
+            tenant=tenant, name="ООО Связи", session=session
+        )
+        site = await data_factory.create_site(tenant=tenant, company=company, session=session)
+        hazard = RiskHazard(
+            tenant_id=str(tenant.id),
+            code="HZ-132",
+            title="Опасность без организации",
+            module="ot",
+            recommended_measures=[],
+        )
+        session.add(hazard)
+        await session.flush()
+
+        def assessment(key: str, *, place_id: str | None) -> RiskAssessment:
+            return RiskAssessment(
+                tenant_id=str(tenant.id),
+                assessment_key=key,
+                assessment_version=1,
+                methodology_version=1,
+                company_id=None,
+                place_id=place_id,
+                hazard_id=hazard.id,
+                severity_before=2,
+                likelihood_before=2,
+                score_before=4,
+                band_before="medium",
+                severity_after=2,
+                likelihood_after=2,
+                score_after=4,
+                band_after="medium",
+            )
+
+        session.add_all(
+            [
+                assessment("by-site", place_id=site.id),
+                assessment("no-links", place_id=None),
+            ]
+        )
+        await session.commit()
+        company_id, site_id = str(company.id), str(site.id)
+
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    response = await async_client.get("/api/v1/risks", headers=headers)
+
+    assert response.status_code == 200, response.text
+    items = {item["site_id"]: item for item in response.json()["items"]}
+    assert items[site_id]["company_id"] == company_id, "организация есть у площадки"
+    assert items[None]["company_id"] == "", "организации нет ни по одной связи — пустота названа"
