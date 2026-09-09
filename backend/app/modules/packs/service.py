@@ -22,10 +22,12 @@ from app.models.models import (
     PackagePresetConfig,
     PackagePresetItem,
     PackageProfileConfig,
+    PackLogLevel,
     PackRun,
     PackRunItem,
     PackRunItemStatus,
     PackRunLifecycleStatus,
+    PackRunLog,
     TemplateUsage,
     TemplateVersion,
     TemplateVersionStatus,
@@ -366,6 +368,28 @@ class PackRunService:
         )
         self.session.add(run)
         await self.session.flush()
+        # Срез-133: таймлайн прогона (`GET /packs/pack-runs/{id}/timeline`)
+        # читает `pack_run_logs`, куда не писал никто, — экран был пуст всегда.
+        # Записи делаются здесь, где события и происходят: другой точки, в
+        # которой известны и отобранные строки, и итог, попросту нет.
+        self._log(
+            run,
+            PackLogLevel.INFO,
+            step="run_started",
+            message=f"Прогон начат: строк в источнике {len(rows)}, отобрано {len(valid_selected)}",
+            payload={"source_rows": len(rows), "selected_rows": len(valid_selected)},
+        )
+        skipped = len(selected_rows) - len(valid_selected)
+        if skipped:
+            # Отброшенные строки названы вслух: молча уменьшенный отбор
+            # читается как «столько и просили».
+            self._log(
+                run,
+                PackLogLevel.WARNING,
+                step="rows_dropped",
+                message=f"Отброшено строк вне диапазона источника: {skipped}",
+                payload={"dropped_rows": skipped},
+            )
         used_filenames: set[str] = set()
         for row_no in valid_selected:
             mapped = self.mapping.apply(preset.mapping_json or {}, rows[row_no - 1])
@@ -384,7 +408,36 @@ class PackRunService:
                     filename=filename,
                 )
             )
+        self._log(
+            run,
+            PackLogLevel.INFO,
+            step="run_finished",
+            message=f"Прогон завершён: документов {len(valid_selected)}",
+            payload={"documents": len(valid_selected)},
+        )
         return run
+
+    def _log(
+        self,
+        run: PackRun,
+        level: PackLogLevel,
+        *,
+        step: str,
+        message: str,
+        payload: dict[str, Any] | None = None,
+    ) -> None:
+        """Строка таймлайна прогона (срез-133)."""
+
+        self.session.add(
+            PackRunLog(
+                tenant_id=run.tenant_id,
+                pack_run_id=run.id,
+                level=level,
+                step=step,
+                message=message,
+                payload=payload,
+            )
+        )
 
 
 async def ensure_template_version_deletable(
