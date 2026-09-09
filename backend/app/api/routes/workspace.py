@@ -491,6 +491,10 @@ async def workspace_attention(
                     ComplianceDeadline.tenant_id == tenant.id,
                     # Формула одна с календарём (срез-73): по времени, а не по статусу.
                     overdue_compliance_deadline_where(now),
+                    # И уволенный не в счёт (срез-127) — как у обучения и СИЗ
+                    # выше по этому же файлу. Без этого счётчик горел там, где
+                    # календарь того же арендатора уже молчал.
+                    employed_record_where(ComplianceDeadline, tenant.id),
                 )
             )
         ).scalar_one()
@@ -898,6 +902,10 @@ async def role_workspace_summary(
                     ComplianceDeadline.tenant_id == tenant.id,
                     # Формула одна с календарём (срез-73): по времени, а не по статусу.
                     overdue_compliance_deadline_where(now),
+                    # И уволенный не в счёт (срез-127) — как у обучения и СИЗ
+                    # выше по этому же файлу. Без этого счётчик горел там, где
+                    # календарь того же арендатора уже молчал.
+                    employed_record_where(ComplianceDeadline, tenant.id),
                 )
             )
         ).scalar_one()
