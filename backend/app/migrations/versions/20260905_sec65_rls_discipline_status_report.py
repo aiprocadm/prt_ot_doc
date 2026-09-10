@@ -1,12 +1,20 @@
 """SEC-65 хвост: RLS для таблицы отчётов директору по дисциплинам (создана в dr01).
 
-Таблицу завёл срез-53 (Доп. №1 разд. 57.4) без RLS-миграции; полный прогон
-бэкенда поймал это сторожем ``tests/test_rls_coverage.py`` уже после
-вливания. Новые арендаторские таблицы обязаны быть вооружены на уровне БАЗЫ,
-а не только tenant-фильтром в запросах: изоляция, которую держит лишь
-прикладной код, теряется при первой же забытой ``where(tenant_id == ...)``.
-Исключением (``RLS_EXEMPT_TABLES``) отчёт быть не может — это сводка по
-данным заказчика.
+Таблицу завёл срез-53 (Доп. №1 разд. 57.4); сторож ``tests/test_rls_coverage.py``
+потребовал RLS-миграцию, и эта миграция появилась. Но dr01 УЖЕ вооружил
+таблицу (ENABLE + FORCE + policy ``tenant_isolation``, см.
+``20260904_dr01_discipline_status_report.py``) — сторож ругался на реестр
+``RLS_ENABLED_TABLES``, а не на базу. Повторный ``CREATE POLICY`` с тем же
+именем падает: ``DuplicateObjectError: policy "tenant_isolation" ... already
+exists`` — и с 05.09.2026 ``alembic upgrade heads`` на свежем PostgreSQL не
+доходил до конца (PG-сторож ``backend/tests/test_alembic_postgres_upgrade.py``
+пропускается без ``TEST_PG_ADMIN_URL``, поэтому полный прогон этого не видел;
+нашлось 10.09.2026 при съёмке миграции среза-142).
+
+Теперь миграция вооружает таблицу только если политики ещё нет — то есть
+для баз, где dr01 отработал, она пустая, а для баз без dr01 (таких быть не
+должно — dr01 идёт раньше в цепочке) по-прежнему защищает. Откат — пустой:
+политику завёл dr01, он её и снимает.
 
 Паттерн — как в cd_drill: ENABLE + FORCE + policy tenant_isolation
 (PG-only, SQLite не умеет RLS).
@@ -18,6 +26,7 @@ Create Date: 2026-09-05
 
 from __future__ import annotations
 
+import sqlalchemy as sa
 from alembic import op
 
 revision = "20260905_sec65_rls_discipline_status_report"
@@ -33,12 +42,22 @@ _PREDICATE = (
 )
 
 
+def _policy_exists(bind, table: str) -> bool:
+    row = bind.execute(
+        sa.text("SELECT 1 FROM pg_policies WHERE tablename = :table AND policyname = :policy"),
+        {"table": table, "policy": _POLICY},
+    ).first()
+    return row is not None
+
+
 def upgrade() -> None:
     bind = op.get_bind()
     if bind.dialect.name != "postgresql":
         return
     op.execute("SET LOCAL lock_timeout = '5s'")
     for table in _TABLES:
+        if _policy_exists(bind, table):
+            continue  # dr01 уже вооружил таблицу — повторный CREATE POLICY упал бы
         op.execute(f'ALTER TABLE "{table}" ENABLE ROW LEVEL SECURITY')
         op.execute(f'ALTER TABLE "{table}" FORCE ROW LEVEL SECURITY')
         op.execute(
@@ -48,10 +67,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    bind = op.get_bind()
-    if bind.dialect.name != "postgresql":
-        return
-    for table in _TABLES:
-        op.execute(f'DROP POLICY IF EXISTS "{_POLICY}" ON "{table}"')
-        op.execute(f'ALTER TABLE "{table}" NO FORCE ROW LEVEL SECURITY')
-        op.execute(f'ALTER TABLE "{table}" DISABLE ROW LEVEL SECURITY')
+    # Политику завёл dr01 — он её и снимает при своём откате.
+    return None
