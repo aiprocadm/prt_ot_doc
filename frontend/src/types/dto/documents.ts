@@ -1,7 +1,7 @@
 import type { BaseEntityDto, FileLinkDto } from "./common";
 import type { CompanyDto } from "./companies";
 
-export type DocumentStatus = "draft" | "generating" | "ready" | "error";
+export type DocumentStatus = "draft" | "ready" | "error";
 
 export interface DocumentVersionDto extends BaseEntityDto {
   document_id: string;

@@ -1232,7 +1232,8 @@ async def copy_documents(
                 # Прямой ключ хранилища — legacy-поле рядом с file_id; у копии
                 # ключ другой, и дублировать его второй раз незачем.
                 storage_key=None,
-                # Задание генерации — рантайм аутсорсера.
+                # Наследие: столбец задания генерации всегда NULL (контур
+                # DocumentGenerationJob удалён срезом-139, столбец — в контракте).
                 job_id=None,
                 created_by=owner_user_id,
                 created_at=row.created_at,

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from app.models.document import Document, DocumentJobStatus, DocumentStatus, DocumentVersion
+from app.models.document import Document, DocumentStatus, DocumentVersion
 from app.models.models import TemplateVersionStatus
 from app.modules.pipelines.document_core_profile import (
     DOCUMENT_CORE_PIPELINE_STEPS,
@@ -84,18 +84,12 @@ def compute_document_readiness(document: Document) -> DocumentReadinessSnapshot:
     else:
         blockers.append("Не указана организация-владелец")
 
-    job = document.job
-    if job is not None:
-        if job.status == DocumentJobStatus.FAILED:
-            blockers.append("Фоновая генерация завершилась с ошибкой")
-            actions.append("Проверьте задачу генерации и выполните повторный запуск")
-        elif job.status in (DocumentJobStatus.QUEUED, DocumentJobStatus.PROCESSING):
-            actions.append("Ожидайте завершения фоновой генерации")
-            score += 10
-        else:
-            score += 20
-    else:
-        score += 15
+    # Фонового задания у строки документа не бывает: живая генерация создаёт
+    # Document только по завершении, упавший прогон строки не создаёт. Прежние
+    # ветки «ожидайте генерации»/«генерация с ошибкой» читали
+    # DocumentGenerationJob — таблицу без единой записи — и не срабатывали
+    # никогда; оставлена ровно та ветка, по которой шёл каждый документ (срез-139).
+    score += 15
 
     latest = _latest_version(document)
     has_file = bool(
@@ -163,11 +157,6 @@ def compute_document_readiness(document: Document) -> DocumentReadinessSnapshot:
         pdf_hint = ".pdf" in document.storage_key.lower()
 
     replace_ok = latest is not None and bool((latest.data_json or {}))
-    job_ok = job is None or job.status not in (
-        DocumentJobStatus.FAILED,
-        DocumentJobStatus.QUEUED,
-        DocumentJobStatus.PROCESSING,
-    )
 
     def _signature_ok() -> bool:
         if latest is None:
@@ -201,15 +190,8 @@ def compute_document_readiness(document: Document) -> DocumentReadinessSnapshot:
             if not complete:
                 detail = "Нужна рабочая версия шаблона"
         elif sid == "render_docx":
-            complete = has_file and job_ok
-            if job is not None and job.status == DocumentJobStatus.FAILED:
-                detail = "Ошибка генерации"
-            elif job is not None and job.status in (
-                DocumentJobStatus.QUEUED,
-                DocumentJobStatus.PROCESSING,
-            ):
-                detail = "Ожидайте завершения фоновой генерации"
-            elif not has_file:
+            complete = has_file
+            if not has_file:
                 detail = "Нет файла результата"
         elif sid == "apply_headers":
             complete = has_file
