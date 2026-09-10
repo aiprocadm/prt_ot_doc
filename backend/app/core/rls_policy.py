@@ -390,7 +390,7 @@ RLS_EXEMPT_TABLES: frozenset[str] = frozenset(
 # what lets the metadata guard treat them as legitimate registry entries instead of stale
 # names. Whether the duplicates should exist at all is a data-model cleanup of its own.
 #
-# Вторая группа — таблицы, у которых модель УДАЛЕНА срезом-135 (вердикт «мёртвая»:
+# Вторая группа — таблицы, у которых модель УДАЛЕНА срезом-135/139 (вердикт «мёртвая»:
 # ни записи, ни чтения ни одной ручкой), а сама таблица в базе оставлена: удаление
 # данных — решение владельца (прецедент среза-117). RLS на них по-прежнему вооружён
 # миграциями sec65, поэтому они обязаны оставаться в ``RLS_ENABLED_TABLES`` — иначе
@@ -410,6 +410,7 @@ RLS_MODEL_LESS_TABLES: frozenset[str] = frozenset(
         # --- модель удалена срезом-135, таблица ждёт решения владельца ---
         "asset",
         "corrective_action_attachments",
+        "documentgenerationjob",  # срез-139: связь с документами снята, модель удалена
         "edo_receipts",
         "equipment",
         "hazard_bindings",

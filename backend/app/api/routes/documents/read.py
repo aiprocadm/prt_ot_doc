@@ -12,7 +12,7 @@ from fastapi import (
     Response,
     status,
 )
-from sqlalchemy import func, or_, select
+from sqlalchemy import false, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -37,7 +37,6 @@ from app.core.errors import api_problem_detail
 from app.core.security import AccessContext
 from app.models.document import (
     Document,
-    DocumentJobStatus,
     DocumentStatus,
     DocumentVersion,
     DocumentVersionStatus,
@@ -76,13 +75,12 @@ logger = logging.getLogger(__name__)
 
 
 def _map_document_status(document: Document) -> str:
-    if document.job and document.job.status in {
-        DocumentJobStatus.QUEUED,
-        DocumentJobStatus.PROCESSING,
-    }:
-        return "generating"
-    if document.job and document.job.status == DocumentJobStatus.FAILED:
-        return "error"
+    # Состояния «генерируется» у строки документа НЕ БЫВАЕТ: живая генерация
+    # (PipelineRun, app.tasks.document_jobs) создаёт Document только по
+    # завершении, уже как GENERATED, а упавший прогон строки не создаёт вовсе.
+    # Прежняя ветка читала DocumentGenerationJob — таблицу, в которую никто не
+    # пишет, — и не срабатывала никогда (срез-139). Ход генерации виден в
+    # контуре заданий, а не в списке документов.
     if document.status in {
         DocumentStatus.GENERATED,
         DocumentStatus.APPROVED,
@@ -224,7 +222,6 @@ def _document_read_query(tenant_id: str):
             selectinload(Document.template),
             selectinload(Document.template_version),
             selectinload(Document.file),
-            selectinload(Document.job),
             selectinload(Document.versions).selectinload(DocumentVersion.file),
         )
     )
@@ -290,12 +287,10 @@ async def list_documents(
             Document.template.has(or_(Template.domain == type_value, Template.code == type_value))
         )
     if status_value == "generating":
-        stmt = stmt.where(
-            or_(
-                Document.job.has(status=DocumentJobStatus.QUEUED),
-                Document.job.has(status=DocumentJobStatus.PROCESSING),
-            )
-        )
+        # См. _map_document_status: такого состояния у документа нет. Список
+        # честно пуст, а не «все документы» (как было бы для неизвестного
+        # значения) и не 200 с выдумкой из мёртвой таблицы.
+        stmt = stmt.where(false())
     elif status_value == "ready":
         stmt = stmt.where(
             Document.status.in_(
@@ -310,12 +305,7 @@ async def list_documents(
     elif status_value == "draft":
         stmt = stmt.where(Document.status.in_([DocumentStatus.DRAFT, DocumentStatus.REVIEW]))
     elif status_value == "error":
-        stmt = stmt.where(
-            or_(
-                Document.status == DocumentStatus.REVOKED,
-                Document.job.has(status=DocumentJobStatus.FAILED),
-            )
-        )
+        stmt = stmt.where(Document.status == DocumentStatus.REVOKED)
 
     total = int(await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
     rows = list(

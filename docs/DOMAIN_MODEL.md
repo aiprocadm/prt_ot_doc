@@ -324,24 +324,12 @@
 
 ## Documents & generation
 
-### DocumentGenerationJob (`documentgenerationjob`)
-| Поле | Тип | Null | Примечание |
-| --- | --- | --- | --- |
-| Техполя TenantBaseModel | — | — | |
-| `idempotency_key` | varchar(128) | NO | `uq_document_job_tenant_idempotency`. |
-| `task_id` | varchar(128) | NO | Celery task. |
-| `template_id` | UUID FK→template | NO | Базовый шаблон. |
-| `template_code` | varchar(255) | NO | Семантическое имя. |
-| `company_id` | UUID FK→company | NO | Компания-заказчик. |
-| `person_id` | UUID FK→person | YES | Целевой сотрудник. |
-| `payload_hash` | char(64) | NO | Контроль полезной нагрузки. |
-| `payload` | json | NO, default `{}` | Полные данные для генерации. |
-| `pack_id` | UUID FK→document_pack | YES | Источник пакета. |
-| `status` | enum(`queued`,`processing`,`succeeded`,`failed`) | NO | Статус. |
-| `document_id` | UUID FK→document | YES | Итоговый документ. |
-| `initiated_by` | UUID FK→user | NO | Инициатор. |
-| `last_error` | varchar(255) | YES | Последняя ошибка. |
-| `queued_at` / `started_at` / `finished_at` | timestamptz | частично NO | Таймстемпы выполнения. |
+### DocumentGenerationJob (`documentgenerationjob`) — модели больше нет
+Класс удалён срезом-139 (до этого срез-135 удалил его, а срез-138 вернул — модель
+читали ручки документов; срез-139 сначала снял чтения, потом модель). Таблица в
+базе осталась и ждёт решения владельца о сносе — см. `docs/CLEANUP_CANDIDATES.md`.
+Живая генерация документов ведётся через `DocumentJob` (`models/job_engine.py`) и
+`PipelineRun` (ниже): строка `Document` создаётся только по завершении прогона.
 
 ### Document (`document`)
 | Поле | Тип | Null | Примечание |
@@ -358,7 +346,7 @@
 | `content_sha256` | char(64) | YES | Контрольная сумма. |
 | `created_by` | UUID FK→user | NO | Автор. |
 | `created_at` | timestamptz | NO | Время создания. |
-| `job_id` | UUID FK→documentgenerationjob | YES | Задача-источник. |
+| `job_id` | varchar(36) | YES | Наследие: всегда NULL; связи в ORM нет с среза-139, столбец оставлен ради контракта `DocumentRead.job_id` (внешний ключ в базе уйдёт вместе с таблицей `documentgenerationjob`). |
 
 ### DocumentVersion (`documentversion`)
 | `document_id`, `template_version` (text), `template_version_id`, `data_json`, `file_key`, `file_id`, `version_number`, `status` (`draft`,`locked`,`published`,`archived`), `created_at`.
@@ -421,8 +409,8 @@ Shared-like tenant таблица (см. `backend/app/models/risk.py`): `code`, 
 ### RiskAssessment (`risk_assessments`)
 | `company_id`, `place_id` (FK→site), `job_title`, `hazard_id`, поля `severity_before/after`, `likelihood_before/after`, `score_before/after`, `band_before/after`, `controls`, `created_by`.
 
-### Risk (`risk`)
-| `company_id`, `site_id`, `hazard`, `probability`, `severity`, `level`, `controls`.
+### Risk (`risk`) — модели больше нет
+Класс удалён срезом-135: в реестр никто не писал, живые оценки — `RiskAssessment`. Таблица в базе осталась — см. `docs/CLEANUP_CANDIDATES.md`.
 
 ## Operations & auditing
 
@@ -432,9 +420,8 @@ Shared-like tenant таблица (см. `backend/app/models/risk.py`): `code`, 
 ### Incident (`incident`)
 | `title`, `description`, `occurred_at`, `severity` (`low`,`medium`,`high`), `status` (string). Привязан к аренде, но не к компании.
 
-### Asset (`asset`) и Equipment (`equipment`)
-- `Asset`: `name`, `category` (optional).
-- `Equipment`: `asset_id`, `serial_number`, `status` (`active`,`in_service`,`decommissioned`).
+### Asset (`asset`) и Equipment (`equipment`) — моделей больше нет
+Классы удалены срезом-135: в таблицы не писал и не читал никто. Таблицы в базе остались — см. `docs/CLEANUP_CANDIDATES.md`.
 
 ### WarehousePPE (`warehouseppe`)
 Справочник складских остатков (см. выше в People-блоке).

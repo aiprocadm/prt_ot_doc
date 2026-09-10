@@ -16,10 +16,11 @@ interface DocumentTableProps {
   onSelect: (document: DocumentDto) => void;
 }
 
+// «Генерация» здесь не бывает: строка документа появляется только по
+// завершении генерации, ход самой генерации виден в заданиях (срез-139).
 const STATUS_OPTIONS = [
   { value: "", label: "Все статусы" },
   { value: "draft", label: "Черновик" },
-  { value: "generating", label: "Генерация" },
   { value: "ready", label: "Готов" },
   { value: "error", label: "Ошибка" },
 ];
