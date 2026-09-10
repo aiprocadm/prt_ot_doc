@@ -889,7 +889,9 @@
     "POST /api/v1/medical/suspensions/{suspension_id}/lift",
     "POST /api/v1/notifications/mark-read",
     "POST /api/v1/notifications/templates",
+    "POST /api/v1/npa",
     "POST /api/v1/npa/{act_id}/impact/tasks",
+    "POST /api/v1/npa/{act_id}/revisions",
     "POST /api/v1/offboarding/cancel",
     "POST /api/v1/offboarding/purge",
     "POST /api/v1/offboarding/request",
@@ -1301,6 +1303,8 @@
     "create_module_api_v1_training_programs__item_id__modules_post",
     "create_monitoring_plan_item_api_v1_ecology_monitoring_plan_post",
     "create_norm_api_v1_ppe_norms_post",
+    "create_npa_act_api_v1_npa_post",
+    "create_npa_revision_api_v1_npa__act_id__revisions_post",
     "create_npa_update_tasks_api_v1_npa__act_id__impact_tasks_post",
     "create_order_api_v1_orders_post",
     "create_pack_from_scenario_api_v1_packs_scenarios__scenario_code__post",
@@ -2764,9 +2768,13 @@
     "NotificationRead",
     "NotificationTemplateIn",
     "NotificationTemplateOut",
+    "NpaActCreate",
     "NpaActListResponse",
     "NpaActRead",
+    "NpaClauseCreate",
     "NpaClauseRead",
+    "NpaRevisionCreate",
+    "NpaRevisionRead",
     "NvosFeeLineCreate",
     "NvosFeeLinePage",
     "NvosFeeLineRead",
@@ -7351,8 +7359,17 @@
       "variables_schema": "null|object",
       "id": "string"
     },
+    "NpaActCreate": {
+      "code": "string",
+      "title": "string",
+      "edition": "string",
+      "valid_from": "null|string",
+      "valid_to": "null|string",
+      "clauses": "array"
+    },
     "NpaActListResponse": {
-      "items": "array"
+      "items": "array",
+      "can_manage": "boolean"
     },
     "NpaActRead": {
       "id": "string",
@@ -7363,10 +7380,30 @@
       "valid_to": "null|string",
       "clauses": "array"
     },
+    "NpaClauseCreate": {
+      "code": "string",
+      "text": "string"
+    },
     "NpaClauseRead": {
       "id": "string",
       "code": "string",
       "text": "string"
+    },
+    "NpaRevisionCreate": {
+      "revision_code": "string",
+      "title": "string",
+      "effective_from": "null|string",
+      "effective_to": "null|string",
+      "change_summary": "null|string"
+    },
+    "NpaRevisionRead": {
+      "id": "string",
+      "act_id": "string",
+      "revision_code": "string",
+      "title": "string",
+      "effective_from": "null|string",
+      "effective_to": "null|string",
+      "change_summary": "null|string"
     },
     "NvosFeeLineCreate": {
       "year": "integer",

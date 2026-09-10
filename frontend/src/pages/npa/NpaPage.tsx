@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { npaApi } from "@/api/npa";
@@ -9,10 +9,13 @@ import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  NpaActFormDialog,
+  NpaRevisionFormDialog,
+} from "@/features/npa/NpaFormDialogs";
 import { NpaTable } from "@/features/npa/NpaTable";
 import { ROUTES } from "@/router/routes";
 import { useNpaStore } from "@/stores/npa";
-import type { NpaStatus } from "@/types/dto/npa";
 
 type NpaDetail = {
   act: { id: string; code: string; title: string; edition: string };
@@ -30,9 +33,9 @@ type NpaDetail = {
 };
 
 const NpaPage = () => {
-  const { list, setFilters, filters, items, loading, error } = useNpaStore();
+  const { list, setFilters, filters, items, all, loading, error, canManage } =
+    useNpaStore();
   const [search, setSearch] = useState(filters.search ?? "");
-  const [status, setStatus] = useState<NpaStatus | "">(filters.status ?? "");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<NpaDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -41,22 +44,27 @@ const NpaPage = () => {
     void list();
   }, [list]);
 
+  const loadDetail = useCallback((id: string) => {
+    setDetailLoading(true);
+    void npaApi
+      .getDetail<NpaDetail>(id)
+      .then((response) => setDetail(response))
+      .catch(() => setDetail(null))
+      .finally(() => setDetailLoading(false));
+  }, []);
+
   useEffect(() => {
     if (!selectedId) {
       setDetail(null);
       return;
     }
-    setDetailLoading(true);
-    void npaApi
-      .getDetail<NpaDetail>(selectedId)
-      .then((response) => setDetail(response))
-      .catch(() => setDetail(null))
-      .finally(() => setDetailLoading(false));
-  }, [selectedId]);
+    loadDetail(selectedId);
+  }, [selectedId, loadDetail]);
 
+  // Срез-141: сервер список не фильтрует — поиск по коду и названию
+  // считается в сторе, поэтому «Применить» не ходит в сеть.
   const applyFilters = () => {
-    setFilters({ search: search || undefined, status: status || undefined });
-    void list();
+    setFilters({ search: search || undefined });
   };
 
   const createUpdateTasks = async () => {
@@ -89,25 +97,15 @@ const NpaPage = () => {
               onChange={(event) => setSearch(event.target.value)}
             />
           </div>
-          <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium" htmlFor="npa-status">
-              Статус
-            </label>
-            <select
-              id="npa-status"
-              className="h-10 rounded-md border px-3"
-              value={status}
-              onChange={(event) =>
-                setStatus(event.target.value as NpaStatus | "")
-              }
-            >
-              <option value="">Все</option>
-              <option value="active">Действует</option>
-              <option value="obsolete">Недействует</option>
-              <option value="draft">Проект</option>
-            </select>
-          </div>
-          <Button onClick={applyFilters}>Применить</Button>
+          <Button variant="outline" onClick={applyFilters}>
+            Применить
+          </Button>
+          {canManage ? (
+            <NpaActFormDialog
+              trigger={<Button className="ml-auto">Добавить акт</Button>}
+              onCreated={() => void list()}
+            />
+          ) : null}
         </CardContent>
       </Card>
       {loading && items.length === 0 ? (
@@ -116,7 +114,13 @@ const NpaPage = () => {
       {!loading && !error && items.length === 0 ? (
         <EmptyState
           title="НПА не найдены"
-          description="Добавьте или импортируйте нормативные акты, чтобы анализ влияния и задачи обновления работали на реальных данных."
+          description={
+            all.length > 0
+              ? "По запросу ничего не найдено — измените поиск."
+              : canManage
+                ? "Добавьте нормативный акт кнопкой «Добавить акт» — реестр общий для всех арендаторов."
+                : "Реестр НПА ведёт владелец платформы; пока в нём нет ни одного акта."
+          }
         />
       ) : null}
       <div className="grid gap-6 xl:grid-cols-[1.2fr,0.8fr]">
@@ -134,7 +138,7 @@ const NpaPage = () => {
                   className="mr-2 mb-2"
                   onClick={() => setSelectedId(item.id)}
                 >
-                  {item.code ?? item.title}
+                  {item.code}
                 </Button>
               ))}
             </CardContent>
@@ -163,8 +167,21 @@ const NpaPage = () => {
                   </div>
                 </div>
                 <div>
-                  <div className="text-xs font-medium uppercase text-muted-foreground">
-                    Редакции
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs font-medium uppercase text-muted-foreground">
+                      Редакции
+                    </div>
+                    {canManage && selectedId ? (
+                      <NpaRevisionFormDialog
+                        actId={selectedId}
+                        trigger={
+                          <Button variant="outline" size="sm">
+                            Добавить редакцию
+                          </Button>
+                        }
+                        onCreated={() => loadDetail(selectedId)}
+                      />
+                    ) : null}
                   </div>
                   <div className="space-y-2 mt-2">
                     {detail.revisions.map((revision) => (

@@ -25,40 +25,38 @@ vi.mock("sonner", () => ({
 import NpaPage from "@/pages/npa/NpaPage";
 import { useNpaStore } from "@/stores/npa";
 import { uxBudgetDelta } from "@/test-utils/uxBudget";
+import type { NpaDto } from "@/types/dto/npa";
 
-const npaItems = [
+// Срез-141: фикстуры списаны с ответа сервера (`backend/app/schemas/npa.py`),
+// а не с выдуманной формы с `issuer`/`status` — тест на такой форме проверял
+// бы витрину, которую сервер никогда не наполнит.
+const npaItems: NpaDto[] = [
   {
     id: "npa-1",
-    created_at: "2026-01-10T00:00:00Z",
-    updated_at: "2026-01-10T00:00:00Z",
-    title: "Приказ Минтруда № 772н об обучении по охране труда",
     code: "772н",
-    issuer: "Минтруд России",
-    status: "active",
-    effective_at: "2026-03-01",
-    link: "https://npa.example/772n",
+    title: "Приказ Минтруда № 772н об обучении по охране труда",
+    edition: "ред. от 01.03.2026",
+    valid_from: "2026-03-01",
+    valid_to: null,
+    clauses: [{ id: "c-1", code: "1", text: "Общие положения" }],
   },
   {
     id: "npa-2",
-    created_at: "2026-01-11T00:00:00Z",
-    updated_at: "2026-01-11T00:00:00Z",
-    title: "Постановление № 2464 о порядке обучения",
     code: "2464",
-    issuer: "Правительство РФ",
-    status: "active",
-    effective_at: "2026-01-01",
-    link: "https://npa.example/2464",
+    title: "Постановление № 2464 о порядке обучения",
+    edition: "ред. от 01.01.2026",
+    valid_from: "2026-01-01",
+    valid_to: null,
+    clauses: [],
   },
   {
     id: "npa-3",
-    created_at: "2026-01-12T00:00:00Z",
-    updated_at: "2026-01-12T00:00:00Z",
-    title: "Приказ № 29н о медосмотрах",
     code: "29н",
-    issuer: "Минздрав России",
-    status: "obsolete",
-    effective_at: "2025-09-01",
-    link: "https://npa.example/29n",
+    title: "Приказ № 29н о медосмотрах",
+    edition: "ред. от 01.09.2025",
+    valid_from: "2025-09-01",
+    valid_to: "2026-02-28",
+    clauses: [],
   },
 ];
 
@@ -98,21 +96,20 @@ describe("NpaPage", () => {
     apiClientMock.post.mockReset();
     useNpaStore.getState().reset();
 
+    mockRegistry(false);
+  });
+
+  const mockRegistry = (canManage: boolean, items: NpaDto[] = npaItems) => {
     apiClientMock.get.mockImplementation((url: string) => {
       if (url === "/npa") {
-        return Promise.resolve({
-          data: {
-            items: npaItems,
-            pagination: { page: 1, page_size: 10, total: npaItems.length },
-          },
-        });
+        return Promise.resolve({ data: { items, can_manage: canManage } });
       }
       if (url === "/npa/npa-1") {
         return Promise.resolve({ data: npaDetail });
       }
       throw new Error(`Unexpected GET ${url}`);
     });
-  });
+  };
 
   it("экран в UX-бюджете и со списком, и с открытым анализом влияния (BIZ-60)", async () => {
     // Наполненный реестр: таблица НПА на 5 колонок, фильтры, кнопки
@@ -155,5 +152,94 @@ describe("NpaPage", () => {
     const withDetail = uxBudgetDelta(document.body, "NpaPage");
     expect(withDetail.unexpected).toEqual([]);
     expect(withDetail.stale).toEqual([]);
+  });
+
+  it("кнопку «Добавить акт» видит только владелец платформы (срез-141)", async () => {
+    // Реестр общий; остальным ручка ответит 403 — кнопка, которая всегда
+    // кончается отказом, хуже отсутствующей. Право приходит с сервера.
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <NpaPage />
+        </MemoryRouter>,
+      );
+    });
+    expect(
+      await screen.findByText("Постановление № 2464 о порядке обучения"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Добавить акт" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("утратил силу")).toBeInTheDocument();
+  });
+
+  it("владелец платформы заводит акт, и список перечитывается (срез-141)", async () => {
+    mockRegistry(true);
+    apiClientMock.post.mockImplementation((url: string, body: unknown) => {
+      if (url === "/npa") {
+        const payload = body as { code: string; clauses: unknown[] };
+        mockRegistry(true, [
+          ...npaItems,
+          {
+            id: "npa-4",
+            code: payload.code,
+            title: "Новый акт",
+            edition: "ред. 1",
+            valid_from: null,
+            valid_to: null,
+            clauses: [],
+          },
+        ]);
+        return Promise.resolve({ data: { id: "npa-4", ...payload } });
+      }
+      throw new Error(`Unexpected POST ${url}`);
+    });
+    const user = userEvent.setup();
+
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <NpaPage />
+        </MemoryRouter>,
+      );
+    });
+    expect(
+      await screen.findByText("Постановление № 2464 о порядке обучения"),
+    ).toBeInTheDocument();
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: "Добавить акт" }));
+    });
+
+    // Открытая форма — тоже экран: полей первого уровня в ней столько,
+    // сколько разрешает бюджет; срок окончания и пункты — под «Дополнительно».
+    const withDialog = uxBudgetDelta(document.body, "NpaPage");
+    expect(withDialog.unexpected).toEqual([]);
+
+    await user.type(screen.getByLabelText("Номер"), "1/29");
+    await user.type(screen.getByLabelText("Редакция"), "ред. 1");
+    await user.type(screen.getByLabelText("Название"), "Новый акт");
+    await user.click(screen.getByText("Дополнительно"));
+    await user.type(
+      screen.getByLabelText("Пункты"),
+      "1 Общие положения{enter}2 Программы обучения",
+    );
+
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: "Добавить" }));
+    });
+
+    expect(apiClientMock.post).toHaveBeenCalledWith("/npa", {
+      code: "1/29",
+      title: "Новый акт",
+      edition: "ред. 1",
+      valid_from: null,
+      valid_to: null,
+      clauses: [
+        { code: "1", text: "Общие положения" },
+        { code: "2", text: "Программы обучения" },
+      ],
+    });
+    // И в таблице, и среди кнопок детализации — список перечитан с сервера.
+    expect(await screen.findAllByText("1/29")).toHaveLength(2);
   });
 });
