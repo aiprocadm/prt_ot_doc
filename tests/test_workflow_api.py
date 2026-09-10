@@ -1,13 +1,13 @@
 from datetime import date, datetime, timezone
+from uuid import uuid4
 
 from app.models.models import (
-    NPA,
     Incident,
     IncidentSeverity,
     IncidentStatus,
     IncidentType,
     NPABinding,
-    NPAStatus,
+    RoleEnum,
 )
 from app.models.notifications import (
     Notification,
@@ -215,17 +215,23 @@ async def test_npa_impact_detail_and_task_creation(
 
 
 async def test_search_types_alias(async_client, sessionmaker, make_auth_headers, data_factory):
+    """Срез-142: поисковый снимок берёт акты из общего реестра ``npa_act``.
+
+    Раньше тест сеял арендаторскую ``NPA`` — таблицу, в которую не писал никто,
+    кроме него самого, — и проверял только, что ответ содержит ``facets``."""
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
-        await data_factory.create_user(tenant=tenant, email="search@example.com", session=session)
-        npa = NPA(
-            tenant_id=tenant.id,
-            code="NPA-1",
-            title="Safety rule",
-            edition_date=date(2026, 1, 1),
-            status=NPAStatus.ACTIVE,
+        await data_factory.create_user(
+            tenant=tenant, email="search@example.com", role=RoleEnum.ADMIN, session=session
         )
-        await session.merge(npa)
+        session.add(
+            NpaAct(
+                code=f"NPA-{uuid4().hex[:6]}",
+                title="Safety rule",
+                edition="2026",
+                valid_from=date(2026, 1, 1),
+            )
+        )
         await session.commit()
     headers = await make_auth_headers(email="search@example.com")
 
@@ -234,6 +240,18 @@ async def test_search_types_alias(async_client, sessionmaker, make_auth_headers,
     )
     assert response.status_code == 200
     assert "facets" in response.json()
+
+    reindex = await async_client.post("/api/v1/search/reindex", headers=headers)
+    assert reindex.status_code == 200, reindex.text
+    found = await async_client.get(
+        "/api/v1/search", headers=headers, params={"q": "Safety rule", "types": "npa"}
+    )
+    assert found.status_code == 200, found.text
+    hits = [item for item in found.json()["items"] if item.get("entity_type") == "npa"]
+    assert hits, found.json()
+    assert hits[0]["subtitle"] == "Safety rule"
+    assert hits[0]["status"] == "active"
+    assert hits[0]["route"].startswith("/npa?selected=")
 
 
 async def test_search_recent_and_saved_queries(

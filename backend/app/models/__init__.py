@@ -45,7 +45,6 @@ from app.models.managed_clients import (
     ManagedClientContextSession,
 )
 from app.models.models import (
-    NPA,
     ApiKey,
     ApprovalDecision,
     ApprovalDecisionType,
@@ -199,7 +198,6 @@ __all__ = [
     "ManagedClientAccess",
     "ManagedClientContextSession",
     "MedicalExam",
-    "NPA",
     "NPABinding",
     "NpaAct",
     "NpaClause",

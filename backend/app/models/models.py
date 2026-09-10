@@ -263,10 +263,8 @@ from app.models.report_builder import ReportDefinition
 
 # ARCH-2: re-export risk_register models moved to app.models.risk_register.
 from app.models.risk_register import (
-    NPA,
     NPABinding,
     NpaBindingTarget,
-    NPAStatus,
     PositionHazardLink,
     RiskMap,
     RiskMethodology,
@@ -357,7 +355,6 @@ __all__ = [
     "IncidentType",
     "IncidentStage",
     "JournalEntry",
-    "NPA",
     "NPABinding",
     "NpaBindingTarget",
     "Inspection",
@@ -545,8 +542,6 @@ __all__ += [
     "RiskMap",
     "WorkplaceHazardLink",
     "PositionHazardLink",
-    "NPAStatus",
-    "NPA",
     "NpaBindingTarget",
     "NPABinding",
 ]

@@ -7,7 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.finance import Contract, Order
 from app.models.models import (
-    NPA,
     BriefingEntry,
     ClientPackageRun,
     Company,
@@ -21,6 +20,7 @@ from app.models.models import (
     Workplace,
 )
 from app.models.notifications import PlanTask
+from app.models.npa import NpaAct
 from app.modules.client_portal.services import SafePortalPayloadService
 from app.modules.contractors.lifecycle import ReadinessStatus as ContractorReadinessStatus
 from app.modules.contractors.models import ContractorEmployee, ContractorRegistry
@@ -66,6 +66,16 @@ def package_run_status(run: ClientPackageRun) -> str:
     """
 
     return run.status.value if hasattr(run.status, "value") else str(run.status)
+
+
+def _npa_validity(act: NpaAct, today: date) -> str:
+    """Актуальность акта по датам — те же три слова, что показывает витрина НПА."""
+
+    if act.valid_from is not None and act.valid_from > today:
+        return "pending"
+    if act.valid_to is not None and act.valid_to < today:
+        return "obsolete"
+    return "active"
 
 
 class PackageProjectionService:
@@ -548,10 +558,11 @@ class ProjectionOrchestrator:
             .scalars()
             .all()
         )
+        # Срез-142: акты живут в общем реестре (npa_act) и одинаковы для всех
+        # арендаторов; арендаторская таблица npa была пуста всегда (в неё никто
+        # не писал), модель удалена.
         npa_items = (
-            (await self.session.execute(select(NPA).where(NPA.tenant_id == self.tenant_id)))
-            .scalars()
-            .all()
+            (await self.session.execute(select(NpaAct).order_by(NpaAct.code))).scalars().all()
         )
         contracts = (
             (
@@ -786,16 +797,19 @@ class ProjectionOrchestrator:
                 },
                 search_text=prescription.description,
             )
+        today = datetime.now(tz=timezone.utc).date()
         for item in npa_items:
             await upsert_entry(
                 entity_type="npa",
                 entity_id=item.id,
                 title=item.code,
                 subtitle=item.title,
-                status=item.status.value if hasattr(item.status, "value") else str(item.status),
+                status=_npa_validity(item, today),
                 route=f"/npa?selected={item.id}",
                 preview_payload={
-                    "edition_date": item.edition_date.isoformat() if item.edition_date else None
+                    "edition": item.edition,
+                    "valid_from": item.valid_from.isoformat() if item.valid_from else None,
+                    "valid_to": item.valid_to.isoformat() if item.valid_to else None,
                 },
                 search_text=f"{item.code} {item.title}",
             )

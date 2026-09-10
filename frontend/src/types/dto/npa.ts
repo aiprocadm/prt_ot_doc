@@ -60,3 +60,26 @@ export interface NpaFiltersDto {
   /** Подстрока по коду и названию; сервер списка не фильтрует — ищем на витрине. */
   search?: string;
 }
+
+/**
+ * Срез-142: связи акта с сущностями арендатора — то, что читает оценка
+ * влияния. До среза их заводить было нечем, и «Связанные сущности» были пусты
+ * на любых данных.
+ */
+export type NpaBindingTarget = "document" | "template_version" | "pack";
+
+export interface NpaBindingDto {
+  id: string;
+  npa_id: string;
+  entity_type: NpaBindingTarget;
+  entity_id: string;
+  ref?: string | null;
+  /** Имя сущности по-человечески: «Инструкция · ООО Ромашка», «Шаблон v3», имя пакета. */
+  title: string;
+}
+
+export interface NpaBindingCreateDto {
+  entity_type: NpaBindingTarget;
+  entity_id: string;
+  ref?: string | null;
+}

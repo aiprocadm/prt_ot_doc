@@ -1,15 +1,24 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
+from app.models.document import Document
 from app.models.models import NPABinding
 from app.models.notifications import PlanTask, PlanTaskStatus
 from app.models.npa import NpaAct, NpaRevision
+from app.models.packages import DocumentPack
+from app.models.templates import TemplateVersion
+
+
+def _binding_kind(row: NPABinding) -> str:
+    entity_type = row.entity_type
+    return str(entity_type.value if hasattr(entity_type, "value") else entity_type)
 
 
 @dataclass(slots=True)
@@ -37,12 +46,15 @@ class NpaImpactService:
         selected_revision = (
             next((r for r in revisions if r.id == revision_id), None) if revision_id else None
         )
+        # «Сегодня» — по UTC, как везде в продукте (срез-140), а не по часовому
+        # поясу процесса.
+        today = datetime.now(tz=timezone.utc).date()
         active_revision = selected_revision or next(
             (
                 r
                 for r in revisions
-                if (r.effective_from is None or r.effective_from <= date.today())
-                and (r.effective_to is None or r.effective_to >= date.today())
+                if (r.effective_from is None or r.effective_from <= today)
+                and (r.effective_to is None or r.effective_to >= today)
             ),
             None,
         )
@@ -59,40 +71,13 @@ class NpaImpactService:
         )
         linked = {
             "templates": sorted(
-                {
-                    row.entity_id
-                    for row in binding_rows
-                    if str(
-                        row.entity_type.value
-                        if hasattr(row.entity_type, "value")
-                        else row.entity_type
-                    )
-                    == "template_version"
-                }
+                {row.entity_id for row in binding_rows if _binding_kind(row) == "template_version"}
             ),
             "packages": sorted(
-                {
-                    row.entity_id
-                    for row in binding_rows
-                    if str(
-                        row.entity_type.value
-                        if hasattr(row.entity_type, "value")
-                        else row.entity_type
-                    )
-                    == "pack"
-                }
+                {row.entity_id for row in binding_rows if _binding_kind(row) == "pack"}
             ),
             "documents": sorted(
-                {
-                    row.entity_id
-                    for row in binding_rows
-                    if str(
-                        row.entity_type.value
-                        if hasattr(row.entity_type, "value")
-                        else row.entity_type
-                    )
-                    == "document"
-                }
+                {row.entity_id for row in binding_rows if _binding_kind(row) == "document"}
             ),
             "risks": sorted(
                 {
@@ -131,6 +116,7 @@ class NpaImpactService:
             ),
         }
         summary = {key: len(value) for key, value in linked.items()}
+        titles = await self.binding_titles(binding_rows)
         return {
             "act": {
                 "id": act.id,
@@ -154,6 +140,19 @@ class NpaImpactService:
             "active_revision_id": active_revision.id if active_revision else None,
             "selected_revision_id": selected_revision.id if selected_revision else None,
             "bindings": linked,
+            # Срез-142: связи по одной, с человеческими именами — для витрины
+            # («Связанные сущности») и кнопки «Отвязать».
+            "binding_items": [
+                {
+                    "id": row.id,
+                    "npa_id": row.npa_id,
+                    "entity_type": _binding_kind(row),
+                    "entity_id": row.entity_id,
+                    "ref": row.ref,
+                    "title": titles.get(row.id, row.entity_id),
+                }
+                for row in sorted(binding_rows, key=lambda r: (_binding_kind(r), r.created_at))
+            ],
             "summary": summary,
             "tasks_to_create": [
                 {
@@ -164,6 +163,60 @@ class NpaImpactService:
                 for key, count in summary.items()
                 if count > 0
             ],
+        }
+
+    async def binding_titles(self, rows: list[NPABinding]) -> dict[str, str]:
+        """Имена целей связей: документ — «шаблон · организация», версия шаблона —
+        «шаблон v3», пакет — его имя. Цель, которой уже нет, подписана её id."""
+        by_kind: dict[str, set[str]] = {}
+        for row in rows:
+            by_kind.setdefault(_binding_kind(row), set()).add(row.entity_id)
+        names: dict[tuple[str, str], str] = {}
+        if by_kind.get("document"):
+            documents = (
+                await self.session.execute(
+                    select(Document)
+                    .options(selectinload(Document.template), selectinload(Document.company))
+                    .where(
+                        Document.tenant_id == self.tenant_id,
+                        Document.id.in_(by_kind["document"]),
+                    )
+                )
+            ).scalars()
+            for document in documents:
+                # Та же формула, что у списка документов (_build_document_ui_read).
+                name = (
+                    document.template.name if document.template else None
+                ) or f"Document {document.id[:8]}"
+                company = document.company.name if document.company else None
+                names[("document", document.id)] = f"{name} · {company}" if company else name
+        if by_kind.get("template_version"):
+            versions = (
+                await self.session.execute(
+                    select(TemplateVersion)
+                    .options(selectinload(TemplateVersion.template))
+                    .where(
+                        TemplateVersion.tenant_id == self.tenant_id,
+                        TemplateVersion.id.in_(by_kind["template_version"]),
+                    )
+                )
+            ).scalars()
+            for version in versions:
+                template_name = version.template.name if version.template else "Шаблон"
+                names[("template_version", version.id)] = f"{template_name} v{version.version}"
+        if by_kind.get("pack"):
+            packs = (
+                await self.session.execute(
+                    select(DocumentPack).where(
+                        DocumentPack.tenant_id == self.tenant_id,
+                        DocumentPack.id.in_(by_kind["pack"]),
+                    )
+                )
+            ).scalars()
+            for pack in packs:
+                names[("pack", pack.id)] = pack.name
+        return {
+            row.id: names.get((_binding_kind(row), row.entity_id), row.entity_id) for row in rows
         }
 
     async def create_update_tasks(

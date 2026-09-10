@@ -10,7 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.document import Document, DocumentVersion
-from app.models.models import NPA, NPABinding, NpaBindingTarget, Template, TemplateVersion
+from app.models.models import NPABinding, NpaBindingTarget, Template, TemplateVersion
+from app.models.npa import NpaAct
 
 
 def _canonical_value(value: Any) -> Any:
@@ -107,9 +108,9 @@ async def build_document_dependency_map(
 
     npa_payload: list[dict[str, Any]] = []
     for binding in npa_bindings_raw:
-        npa = await session.get(NPA, binding.npa_id)
-        if npa is not None and str(npa.tenant_id) != str(tenant_id):
-            npa = None
+        # Срез-142: связь ведёт в общий реестр актов (npa_act), у него нет
+        # арендатора — проверять принадлежность нечего и незачем.
+        npa = await session.get(NpaAct, binding.npa_id)
         npa_payload.append(
             {
                 "binding_id": binding.id,
