@@ -46,7 +46,7 @@ from app.services.discipline_report_delivery import (
     report_dedup_key,
     report_letter_dedup_key,
 )
-from tests.api.test_discipline_status_report import _seed
+from tests.api.test_discipline_status_report import _seed, server_today
 
 RUN = "/api/v1/analytics/discipline-reports/run"
 
@@ -148,9 +148,11 @@ async def test_новый_отчёт_уходит_ответственным_и_
 
     # Дата — до и после запроса: полный набор идёт почти три часа и может
     # пересечь полночь, тогда «сегодня» у сервера и у проверки — разные дни.
-    before = date.today()
+    # И теми же часами, что у сервера (UTC): `date.today()` здесь идёт по
+    # Москве, и с 21:00 до 24:00 UTC это уже другая дата (срез-140).
+    before = server_today()
     resp = await async_client.post(RUN, headers=admin_headers)
-    after = date.today()
+    after = server_today()
 
     assert resp.status_code == status.HTTP_200_OK, resp.text
     body = resp.json()

@@ -34,6 +34,15 @@ from app.services.discipline_report import (
 from tests.utils.factories import TestDataFactory
 
 NOW = datetime.now(tz=timezone.utc)
+
+
+def server_today() -> date:
+    """«Сегодня» ТЕМИ ЖЕ часами, что у контура дисциплин (UTC, см.
+    ``run_discipline_report`` и разрез ``_discipline_breakdown``)."""
+
+    return datetime.now(tz=timezone.utc).date()
+
+
 BASE = "/api/v1/analytics/discipline-reports"
 BREAKDOWN = "/api/v1/analytics/dashboard/breakdown?dimension=discipline"
 
@@ -129,9 +138,12 @@ async def test_собрать_сейчас_снимок_равен_разрез�
     # набор идёт почти три часа), «сегодня» у сервера и у проверки окажутся
     # разными днями. Проверка от этого не слабеет — она по-прежнему требует,
     # чтобы отчёт был собран за сегодняшний день, а не за какой попало.
-    before = date.today()
+    # И ТЕМИ ЖЕ ЧАСАМИ, что у сервера: контур дисциплин считает день по UTC,
+    # а `date.today()` в процессе тестов идёт по Москве (DEFAULT_TIMEZONE) —
+    # с 21:00 до 24:00 UTC это разные даты, и «до/после» не спасает (срез-140).
+    before = server_today()
     resp = await async_client.post(f"{BASE}/run", headers=headers)
-    after = date.today()
+    after = server_today()
     breakdown = {
         row["id"]: row
         for row in (await async_client.get(BREAKDOWN, headers=headers)).json()["items"]
