@@ -162,43 +162,6 @@ class RiskMeasure(TenantBaseModel, SoftDeleteMixin):
     effectiveness_score: Mapped[float | None] = mapped_column(Numeric(8, 2), nullable=True)
 
 
-class HazardMeasure(TenantBase):
-    __tablename__ = "hazard_measures"
-    __tenant_model__ = True
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    tenant_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("tenant.id"), nullable=False, index=True
-    )
-    hazard_id: Mapped[str] = mapped_column(
-        ForeignKey("hazards.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    measure_id: Mapped[str] = mapped_column(
-        ForeignKey("risk_measures.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    is_recommended: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-
-
-class HazardBinding(TenantBase):
-    __tablename__ = "hazard_bindings"
-    __tenant_model__ = True
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    tenant_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("tenant.id"), nullable=False, index=True
-    )
-    hazard_id: Mapped[str] = mapped_column(
-        ForeignKey("hazards.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    binding_type: Mapped[HazardBindingType] = mapped_column(Enum(HazardBindingType), nullable=False)
-    binding_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
-    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-
-
 class RiskMapItem(TenantBaseModel, SoftDeleteMixin):
     __tablename__ = "risk_map_items"
 

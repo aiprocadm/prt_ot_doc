@@ -389,6 +389,14 @@ RLS_EXEMPT_TABLES: frozenset[str] = frozenset(
 # ``20260317_next46_training_briefings_offline`` (training plans). Listing them here is
 # what lets the metadata guard treat them as legitimate registry entries instead of stale
 # names. Whether the duplicates should exist at all is a data-model cleanup of its own.
+#
+# Вторая группа — таблицы, у которых модель УДАЛЕНА срезом-135 (вердикт «мёртвая»:
+# ни записи, ни чтения ни одной ручкой), а сама таблица в базе оставлена: удаление
+# данных — решение владельца (прецедент среза-117). RLS на них по-прежнему вооружён
+# миграциями sec65, поэтому они обязаны оставаться в ``RLS_ENABLED_TABLES`` — иначе
+# ``-m db``-сверка с живым каталогом разойдётся. Когда владелец снесёт таблицы
+# миграцией, убрать имена из ОБОИХ множеств. Список таблиц под снос —
+# ``docs/CLEANUP_CANDIDATES.md``.
 RLS_MODEL_LESS_TABLES: frozenset[str] = frozenset(
     {
         "companies",
@@ -399,5 +407,29 @@ RLS_MODEL_LESS_TABLES: frozenset[str] = frozenset(
         "training_plan_items",
         "training_plans",
         "workplaces",
+        # --- модель удалена срезом-135, таблица ждёт решения владельца ---
+        "asset",
+        "corrective_action_attachments",
+        "edo_receipts",
+        "equipment",
+        "hazard_bindings",
+        "hazard_measures",
+        "incident_attachments",
+        "incident_cases",
+        "incident_investigations",
+        "incident_persons",
+        "inspection_attachments",
+        "inspection_checklist_items",
+        "inspection_checklists",
+        "inspection_plan_items",
+        "inspection_plans",
+        "inspection_run_items",
+        "inspection_runs",
+        "ops_inspections",
+        "prescription_items",
+        "reminder_rules",
+        "risk",
+        "tenant_rate_limits",
+        "training_protocol_items",
     }
 )

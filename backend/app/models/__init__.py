@@ -54,7 +54,6 @@ from app.models.models import (
     ApprovalRequest,
     ApprovalRequestStatus,
     ApprovalRoute,
-    Asset,
     Attestation,
     AttestationStatus,
     AuditLog,
@@ -64,10 +63,8 @@ from app.models.models import (
     DocumentPackItem,
     EdoDirection,
     EdoMessage,
-    EdoReceipt,
     EdoStatus,
     EdoStatusHistory,
-    Equipment,
     Incident,
     IncidentLog,
     IncidentPerson,
@@ -122,7 +119,6 @@ from app.models.notifications import (
     NotificationStatus,
     NotificationType,
     ReminderEntityType,
-    ReminderRule,
 )
 from app.models.notifications import (
     PlanTask as CalendarPlanTask,
@@ -133,7 +129,6 @@ from app.models.notifications import (
 from app.models.npa import NpaAct, NpaClause, NpaRevision
 from app.models.obligations import Task, TaskPriority, TaskReminderChannel, TaskStatus
 from app.models.risk import (
-    Risk,
     RiskActionPlan,
     RiskActionPlanItem,
     RiskAssessment,
@@ -147,8 +142,6 @@ from app.models.safety_core import (
     Hazard as SafetyHazard,
 )
 from app.models.safety_core import (
-    HazardBinding,
-    HazardMeasure,
     RiskMapItem,
     RiskMapItemMeasure,
     RiskMeasure,
@@ -187,7 +180,6 @@ __all__ = [
     "DocumentStatus",
     "DocumentVersion",
     "File",
-    "Asset",
     "AuditLog",
     "Attestation",
     "AttestationStatus",
@@ -199,7 +191,6 @@ __all__ = [
     "Department",
     "DocumentPack",
     "DocumentPackItem",
-    "Equipment",
     "Incident",
     "IncidentLog",
     "IncidentPerson",
@@ -235,7 +226,6 @@ __all__ = [
     "Permit",
     "Order",
     "OrderStatus",
-    "Risk",
     "RiskActionPlan",
     "RiskActionPlanItem",
     "RiskAssessment",
@@ -245,8 +235,6 @@ __all__ = [
     "RiskHazard",
     "RiskMatrixCell",
     "SafetyHazard",
-    "HazardBinding",
-    "HazardMeasure",
     "SafetyRiskMap",
     "RiskMapItem",
     "RiskMapItemMeasure",
@@ -284,7 +272,6 @@ __all__ = [
     "ApprovalDecisionType",
     "SignatureType",
     "EdoMessage",
-    "EdoReceipt",
     "EdoStatusHistory",
     "EdoDirection",
     "EdoStatus",
@@ -294,7 +281,6 @@ __all__ = [
     "NotificationStatus",
     "NotificationType",
     "ReminderEntityType",
-    "ReminderRule",
     "CalendarPlanTask",
     "CalendarPlanTaskStatus",
     "SavedCalendarView",

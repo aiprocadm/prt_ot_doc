@@ -61,14 +61,13 @@ DEFECTIVE_COLUMNS = {
     ("inspection_prescription", "status"),
     ("approval_processes", "status"),
     ("approval_tasks", "status"),
-    # notifications.py (8)
+    # notifications.py (7 — срез-135 убрал reminder_rules)
     ("notification_templates", "channel"),
     ("notification_templates", "type"),
     ("notifications", "channel"),
     ("notifications", "type"),
     ("notifications", "priority"),
     ("notifications", "status"),
-    ("reminder_rules", "entity_type"),
     ("plan_tasks", "status"),
     # approval_workflow.py (3)
     ("approval_requests", "status"),
@@ -93,10 +92,11 @@ DEFECTIVE_COLUMNS = {
 }
 
 
-def test_exactly_50_columns_pinned() -> None:
+def test_exactly_49_columns_pinned() -> None:
     # 52 по аудиту 2026-06-02, минус edo_envelopes.status и signatures.status
-    # (таблицы дропнуты ed02, ORM-классы удалены).
-    assert len(DEFECTIVE_COLUMNS) == 50
+    # (таблицы дропнуты ed02, ORM-классы удалены) и минус reminder_rules.entity_type
+    # (срез-135: ORM-класс удалён, таблица в базе осталась).
+    assert len(DEFECTIVE_COLUMNS) == 49
 
 
 def test_defective_columns_bind_enum_values_not_names() -> None:
@@ -135,6 +135,10 @@ def test_defective_columns_bind_enum_values_not_names() -> None:
 #   * values_callable снят с Group-A колонки → колонка «всплыла» здесь → верни его;
 #   * values_callable добавлен к Group-B колонке → колонка «пропала» отсюда →
 #     это и есть регресс, который ломает PG-insert: откати.
+# Срез-135: из инвентаря ушли колонки удалённых моделей (`reminder_rules`,
+# `equipment`, `hazard_bindings`) — таблицы в базе остались, но кода, который их
+# описывал, больше нет, и проверять на них нечего. `documentgenerationjob` осталась:
+# модель читают ручки документов (срез-138 вернул её после 18 падений).
 RAW_NATIVE_ENUM_COLUMNS = {
     ("approval_instance_steps", "status"),  # ApprovalInstanceStepStatus (VARCHAR)
     ("approval_instances", "status"),  # ApprovalInstanceStatus (VARCHAR)
@@ -147,10 +151,8 @@ RAW_NATIVE_ENUM_COLUMNS = {
     ("contractor_incidents", "severity"),  # IncidentSeverity (Group-B)
     ("correctiveaction", "status"),  # CorrectiveActionStatus (Group-B)
     ("documentgenerationjob", "status"),  # DocumentJobStatus (Group-B)
-    ("equipment", "status"),  # EquipmentStatus (Group-B)
     ("file", "kind"),  # FileKind (Group-B)
     ("file", "scan_status"),  # FileScanStatus (Group-B)
-    ("hazard_bindings", "binding_type"),  # HazardBindingType (VARCHAR)
     ("hazards", "source_type"),  # HazardSourceType (VARCHAR)
     ("idempotency_keys", "status"),  # IdempotencyStatus (Group-B)
     ("incident", "incident_type"),  # IncidentType (Group-B)

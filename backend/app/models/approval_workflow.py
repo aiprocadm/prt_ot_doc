@@ -237,16 +237,6 @@ class EdoMessage(TenantBaseModel):
     )
 
 
-class EdoReceipt(TenantBaseModel):
-    __tablename__ = "edo_receipts"
-
-    edo_message_id: Mapped[str] = mapped_column(
-        ForeignKey("edo_messages.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    receipt_type: Mapped[str] = mapped_column(String(64), nullable=False)
-    s3_key: Mapped[str] = mapped_column(String(512), nullable=False)
-
-
 class EdoStatusHistory(TenantBaseModel):
     __tablename__ = "edo_status_history"
 

@@ -15,6 +15,7 @@ from app.api.helpers.etag import (
     compute_list_etag,
 )
 from app.core.audit_decorator import audit_operation
+from app.core.disciplines import BRIEFING_TYPES
 from app.core.errors import api_problem_detail
 from app.core.security import rbac
 from app.models.models import (
@@ -29,7 +30,6 @@ from app.modules.briefings.services import (
     BriefingSignatureConflict,
     NoPendingCodeRequest,
 )
-from app.core.disciplines import BRIEFING_TYPES
 from app.modules.rbac_abac import require_permission
 from app.services.audit import AuditService
 from app.services.pep_signing import PepConflict

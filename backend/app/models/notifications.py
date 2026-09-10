@@ -172,45 +172,6 @@ class ReminderEntityType(str, enum.Enum):
     EDO = "edo"
 
 
-class ReminderRule(TenantBaseModel, SoftDeleteMixin):
-    """Правило напоминания по сроку — таблица без точки входа (срез-113).
-
-    Запись сюда нельзя создать: ручек API нет, сида нет, миграций с данными
-    нет. Единственный код, который её читал, — почасовой сканер
-    ``reminders.scan`` — удалён срезом-113: он всегда находил ноль правил и
-    выглядел работающим механизмом напоминаний, которого не было.
-
-    Напоминания в продукте делает другое: библиотека правил дисциплин
-    (``domains/rules_library``), события сроков
-    (``services/discipline_deadline_events``), полосы SLA общего календаря и
-    ежедневная задача ``tasks.reminders.dispatch``. Модель и таблица оставлены
-    намеренно: у них есть миграции и политики RLS, а данные арендаторов не
-    удаляют ради чистоты кода. Если механизм понадобится — возвращать его надо
-    ВМЕСТЕ с ручками создания правил, иначе история повторится.
-    """
-
-    __tablename__ = "reminder_rules"
-
-    code: Mapped[str] = mapped_column(String(128), nullable=False)
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    entity_type: Mapped[ReminderEntityType] = mapped_column(
-        native_enum(ReminderEntityType, name="reminderentitytype"), nullable=False
-    )
-    date_field: Mapped[str] = mapped_column(String(64), nullable=False)
-    schedule: Mapped[dict[str, object]] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=False, default=dict
-    )
-    recipients: Mapped[dict[str, object]] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=False, default=dict
-    )
-    action: Mapped[dict[str, object]] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=False, default=dict
-    )
-
-    __table_args__ = (UniqueConstraint("tenant_id", "code", name="uq_reminder_rules_tenant_code"),)
-
-
 class PlanTaskStatus(str, enum.Enum):
     OPEN = "open"
     IN_PROGRESS = "in_progress"
