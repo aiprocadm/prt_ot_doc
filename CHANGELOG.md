@@ -1,5 +1,38 @@
 # CHANGELOG
 
+## 2026-09-10 (fix/migrations-sec65-dsr-policy — миграции не проходили на свежем PostgreSQL с 05.09)
+
+### Зачем
+
+Съёмка миграции среза-142 на живом PostgreSQL (сторож
+`backend/tests/test_alembic_postgres_upgrade.py`, `TEST_PG_ADMIN_URL`) упала
+ДО новой миграции: `20260905_sec65_rls_discipline_status_report` повторно
+создавал политику `tenant_isolation` на `discipline_status_report`, которую
+уже завёл `20260904_dr01_discipline_status_report` (ENABLE + FORCE + policy).
+`DuplicateObjectError` — и `alembic upgrade heads` на пустой базе не доходил
+до конца пять дней. Полный прогон этого не видел: PG-сторож пропускается
+без `TEST_PG_ADMIN_URL`; стенд живёт на SQLite (схема через `create_all`),
+поэтому и он не заметил.
+
+### Сделано
+
+- Миграция sec65 вооружает таблицу только если политики ещё нет
+  (`pg_policies`); для баз, где dr01 отработал, она пустая. Откат — пустой:
+  политику завёл dr01, он её и снимает.
+
+### Проверка
+
+- PG-сторож на свежем PostgreSQL 16 (`test-postgres`): upgrade heads +
+  downgrade base + повторный upgrade — **2 passed** (до правки — 2 failed на
+  `DuplicateObjectError`).
+- Сторожа миграций (`tests/test_migrations_*`) — зелены.
+
+### Урок
+
+Сторож, который пропускается без переменной окружения, — не сторож: пять
+дней миграции были сломаны при зелёном полном прогоне. PG-сторож надо гонять
+при каждой новой миграции руками (`TEST_PG_ADMIN_URL=postgresql://testuser:testpass@localhost:5432/postgres`).
+
 ## 2026-09-10 (feat/biz54-57-slice-141 — у реестра НПА появилась точка входа)
 
 ### Зачем
