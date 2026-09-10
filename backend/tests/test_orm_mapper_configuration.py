@@ -83,7 +83,8 @@ def test_after_configured_installs_cross_base_fk_mirrors() -> None:
 # на имя нет ambiguous строкового ref.
 KNOWN_DUPLICATE_MAPPED_NAMES = {
     "CorrectiveAction",  # app.models.checks + app.models.safety_ops
-    "IncidentPerson",  # app.models.models + app.models.safety_ops
+    # "IncidentPerson" — дубль исчез срезом-135: мёртвый safety_ops.IncidentPerson
+    # удалён, остался живой app.models.incidents.IncidentPerson.
     "Inspection",  # app.models.models (regulatory_inspection) + app.models.checks
     "PlanTask",  # app.models.models + app.models.notifications
 }

@@ -136,8 +136,9 @@ def test_defective_columns_bind_enum_values_not_names() -> None:
 #   * values_callable добавлен к Group-B колонке → колонка «пропала» отсюда →
 #     это и есть регресс, который ломает PG-insert: откати.
 # Срез-135: из инвентаря ушли колонки удалённых моделей (`reminder_rules`,
-# `equipment`) — таблицы в базе остались, но кода, который их описывал, больше
-# нет, и проверять на них нечего.
+# `equipment`, `hazard_bindings`) — таблицы в базе остались, но кода, который их
+# описывал, больше нет, и проверять на них нечего. `documentgenerationjob` осталась:
+# модель читают ручки документов (срез-138 вернул её после 18 падений).
 RAW_NATIVE_ENUM_COLUMNS = {
     ("approval_instance_steps", "status"),  # ApprovalInstanceStepStatus (VARCHAR)
     ("approval_instances", "status"),  # ApprovalInstanceStatus (VARCHAR)
@@ -149,6 +150,7 @@ RAW_NATIVE_ENUM_COLUMNS = {
     ("contractor_employees", "training_status"),  # ComplianceStatus (Group-B)
     ("contractor_incidents", "severity"),  # IncidentSeverity (Group-B)
     ("correctiveaction", "status"),  # CorrectiveActionStatus (Group-B)
+    ("documentgenerationjob", "status"),  # DocumentJobStatus (Group-B)
     ("file", "kind"),  # FileKind (Group-B)
     ("file", "scan_status"),  # FileScanStatus (Group-B)
     ("hazards", "source_type"),  # HazardSourceType (VARCHAR)
