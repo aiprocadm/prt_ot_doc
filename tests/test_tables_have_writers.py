@@ -57,10 +57,6 @@ WITHOUT_WRITERS: dict[str, str] = {
     "InspectionRunItem": "мёртвая: строки прогона проверки — см. InspectionRun",
     "OpsInspection": "мёртвая: живой контур проверок — Inspection",
     "PrescriptionItem": "мёртвая: строки предписания не заводит ни одна ручка",
-    "InspectionPrepItem": (
-        "читает GET /safety-ops (подготовка к проверке); строки не пишет никто — "
-        "список пуст всегда"
-    ),
     "PipelinePackageProfile": (
         "читает оркестратор конвейера при выборе профиля; профили пакетов не "
         "заводит ни одна ручка — ветка недостижима"

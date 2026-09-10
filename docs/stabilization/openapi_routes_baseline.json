@@ -621,6 +621,7 @@
     "PATCH /api/v1/industrial-safety/facilities/{facility_id}",
     "PATCH /api/v1/industrial-safety/pc-measures/{measure_id}",
     "PATCH /api/v1/industrial-safety/pc-plans/{plan_id}",
+    "PATCH /api/v1/inspection-prep/packages/{package_id}/items/{item_id}",
     "PATCH /api/v1/inspections/{inspection_id}",
     "PATCH /api/v1/internships/{internship_id}",
     "PATCH /api/v1/invoices/{invoice_id}",
@@ -2171,6 +2172,7 @@
     "update_pc_plan_api_v1_industrial_safety_pc_plans__plan_id__patch",
     "update_permit_endpoint_api_v1_permits__permit_id__patch",
     "update_person_endpoint_api_v1_persons__person_id__patch",
+    "update_prep_item_api_v1_inspection_prep_packages__package_id__items__item_id__patch",
     "update_prescription_api_v1_prescriptions__prescription_id__patch",
     "update_profile_api_v1_civil_defense_profiles__profile_id__patch",
     "update_reimbursement_api_v1_budget_reimbursements__reimbursement_id__patch",
@@ -2955,6 +2957,7 @@
     "PositionActivitiesPage",
     "PositionActivitiesRead",
     "PpeNormSuggestion",
+    "PrepItemStatusIn",
     "PrepPackageIn",
     "PrescriptionCreate",
     "PrescriptionIn",
@@ -8819,6 +8822,10 @@
       "factor_code": "null|string",
       "measured_class": "SoutClass|null",
       "reason": "string"
+    },
+    "PrepItemStatusIn": {
+      "status": "string",
+      "notes": "null|string"
     },
     "PrepPackageIn": {
       "code": "string",
