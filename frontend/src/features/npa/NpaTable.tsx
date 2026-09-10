@@ -4,47 +4,56 @@ import { useMemo } from "react";
 import { DataTable } from "@/components/common/DataTable";
 import { useNpaStore } from "@/stores/npa";
 import type { NpaDto } from "@/types/dto/npa";
-import { formatDate } from "@/utils/datetime";
+
+/** Дата акта без времени: у `valid_from`/`valid_to` его нет. */
+const formatDay = (value?: string | null): string => {
+  if (!value) return "—";
+  const [year, month, day] = value.split("-");
+  return day && month && year ? `${day}.${month}.${year}` : value;
+};
+
+/**
+ * «Действует / утратил силу» по датам — статуса как поля у акта нет.
+ * Срок считаем по календарю пользователя: реестр справочный, а не расчётный.
+ */
+export const npaValidity = (
+  item: Pick<NpaDto, "valid_from" | "valid_to">,
+  today = new Date().toISOString().slice(0, 10),
+): "действует" | "утратил силу" | "ещё не вступил" => {
+  if (item.valid_to && item.valid_to < today) return "утратил силу";
+  if (item.valid_from && item.valid_from > today) return "ещё не вступил";
+  return "действует";
+};
 
 export const NpaTable = () => {
-  const { items, pagination, setPage, setPageSize, list, loading } =
-    useNpaStore();
+  const { items, pagination, setPage, setPageSize, loading } = useNpaStore();
 
   const columns = useMemo<ColumnDef<NpaDto>[]>(
     () => [
       {
         accessorKey: "title",
         header: "Документ",
-        cell: ({ row }) => (
-          <a
-            href={row.original.link ?? "#"}
-            className="text-primary hover:underline"
-            target="_blank"
-            rel="noreferrer"
-          >
-            {row.original.title}
-          </a>
-        ),
+        cell: ({ row }) => row.original.title,
       },
       {
         accessorKey: "code",
         header: "Номер",
-        cell: ({ row }) => row.original.code ?? "—",
+        cell: ({ row }) => row.original.code,
       },
       {
-        accessorKey: "issuer",
-        header: "Орган",
-        cell: ({ row }) => row.original.issuer ?? "—",
+        accessorKey: "edition",
+        header: "Редакция",
+        cell: ({ row }) => row.original.edition,
       },
       {
-        accessorKey: "status",
-        header: "Статус",
-        cell: ({ row }) => row.original.status,
+        accessorKey: "valid_from",
+        header: "Действует с",
+        cell: ({ row }) => formatDay(row.original.valid_from),
       },
       {
-        accessorKey: "effective_at",
-        header: "Актуально на",
-        cell: ({ row }) => formatDate(row.original.effective_at),
+        id: "validity",
+        header: "Актуальность",
+        cell: ({ row }) => npaValidity(row.original),
       },
     ],
     [],
@@ -58,14 +67,8 @@ export const NpaTable = () => {
       pageIndex={pagination.page}
       pageSize={pagination.page_size}
       total={pagination.total}
-      onPageChange={(page) => {
-        setPage(page);
-        list();
-      }}
-      onPageSizeChange={(size) => {
-        setPageSize(size);
-        list();
-      }}
+      onPageChange={setPage}
+      onPageSizeChange={setPageSize}
       caption="Реестр НПА"
     />
   );

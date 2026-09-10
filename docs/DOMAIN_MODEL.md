@@ -373,9 +373,11 @@
 ### NPABinding (`npa_binding`)
 | `npa_id`, `template_version_id` (nullable), `entity_type` (`template_version`,`document`,`pack`), `entity_id`, `context` (json), `ref` (varchar).
 
-### NpaAct (`npa_act`) и NpaClause (`npa_clause`)
+### NpaAct (`npa_act`), NpaClause (`npa_clause`) и NpaRevision (`npa_revision`)
 - Shared модели. `NpaAct` содержит `code` (уникален глобально), `title`, `edition`, `valid_from`, `valid_to`.
 - `NpaClause` хранит `act_id`, `code`, `text`; уникальность кода внутри акта.
+- `NpaRevision` — редакция акта: `act_id`, `revision_code` (уникален внутри акта), `title`, `effective_from`/`effective_to`, `change_summary`; оценка влияния берёт действующую по датам.
+- **Кто пишет (срез-141):** `POST /npa` (акт + пункты) и `POST /npa/{act_id}/revisions` — только владелец платформы (`_require_managing_admin`): реестр общий для всех арендаторов. До среза-141 писать было некому — реестр был пуст всегда.
 
 ### Checklist (`checklist`)
 | `npa_code`, `title`, `description`. Уникальность `tenant_id + npa_code + version` (использует `VersionedMixin`).
