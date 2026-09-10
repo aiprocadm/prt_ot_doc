@@ -367,11 +367,13 @@
 
 ## Compliance & legal content
 
-### NPA (`npa`)
-| `code`, `title`, `edition_date`, `status` (`active`/`obsolete`). Код уникален per tenant.
+### NPA (`npa`) — модели больше нет (срез-142)
+Арендаторские акты: `code`, `title`, `edition_date`, `status`. В таблицу не писал никто, читали только `NPABinding.npa_id` (внешним ключом) и поисковый снимок. Срез-142 перевёл обе ссылки на общий реестр `npa_act` и удалил модель; таблица в базе оставлена (`RLS_MODEL_LESS_TABLES`, см. `docs/CLEANUP_CANDIDATES.md`).
 
-### NPABinding (`npa_binding`)
-| `npa_id`, `template_version_id` (nullable), `entity_type` (`template_version`,`document`,`pack`), `entity_id`, `context` (json), `ref` (varchar).
+### NPABinding (`npabinding`)
+| `npa_id` → `npa_act.id` (общий реестр; в ORM простой столбец, внешний ключ держит PostgreSQL — миграция `20260910_b18_npabinding_npa_act`), `template_version_id` (nullable), `entity_type` (`template_version`,`document`,`pack`), `entity_id`, `context` (json), `ref` (varchar). Уникальность `tenant_id + npa_id + entity_type + entity_id`.
+- **Кто пишет (срез-142):** `POST /npa/{act_id}/bindings` / `DELETE /npa/{act_id}/bindings/{binding_id}` — роли `admin`/`owner`/`ot_specialist` (тот же круг, что ставит задачи по оценке влияния). Цель связи проверяется у своего арендатора (документ, версия шаблона, пакет). До среза-142 писать было некому, а `npa_id` ссылался на пустую арендаторскую таблицу `npa`, тогда как оценка влияния сравнивала его с `npa_act.id`.
+- **Кто читает:** `NpaImpactService` (сводка, `binding_items` с именами, задачи обновления), карта зависимостей документа (`GET /documents/{id}/dependency-map`).
 
 ### NpaAct (`npa_act`), NpaClause (`npa_clause`) и NpaRevision (`npa_revision`)
 - Shared модели. `NpaAct` содержит `code` (уникален глобально), `title`, `edition`, `valid_from`, `valid_to`.

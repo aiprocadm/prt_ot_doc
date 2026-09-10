@@ -6,12 +6,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const apiClientMock = vi.hoisted(() => ({
   get: vi.fn(),
   post: vi.fn(),
+  delete: vi.fn(),
 }));
 
 vi.mock("@/api/client", () => ({
   apiClient: {
     get: (...args: unknown[]) => apiClientMock.get(...args),
     post: (...args: unknown[]) => apiClientMock.post(...args),
+    delete: (...args: unknown[]) => apiClientMock.delete(...args),
   },
 }));
 
@@ -77,23 +79,61 @@ const npaDetail = {
       change_summary: "Обновлены программы обучения",
     },
   ],
+  // Срез-142: связи приходят по одной и с именами (`binding_items`), сводка —
+  // по ключам сервера (`documents`/`templates`/...), а не по выдуманным.
   bindings: {
-    instructions: ["ИОТ-001", "ИОТ-014"],
-    trainings: [],
+    documents: ["doc-1", "doc-2"],
+    templates: [],
+    packages: [],
   },
+  binding_items: [
+    {
+      id: "b-1",
+      npa_id: "npa-1",
+      entity_type: "document",
+      entity_id: "doc-1",
+      ref: "п. 4",
+      title: "Инструкция по ОТ · ООО Ромашка",
+    },
+    {
+      id: "b-2",
+      npa_id: "npa-1",
+      entity_type: "document",
+      entity_id: "doc-2",
+      ref: null,
+      title: "Программа обучения · ООО Ромашка",
+    },
+  ],
   summary: {
-    instructions: 2,
-    trainings: 0,
+    documents: 2,
+    templates: 0,
+    packages: 0,
   },
   tasks_to_create: [
-    { code: "update-instruction", title: "Обновить инструкции", count: 2 },
+    {
+      code: "npa-update-documents",
+      title: "Актуализировать зависимости НПА: documents",
+      count: 2,
+    },
   ],
 };
+
+const tenantDocuments = [
+  {
+    id: "doc-3",
+    name: "Положение о СУОТ",
+    type: "document",
+    company: { id: "c-1", name: "ООО Ромашка" },
+    status: "ready",
+    version: "1",
+  },
+];
 
 describe("NpaPage", () => {
   beforeEach(() => {
     apiClientMock.get.mockReset();
     apiClientMock.post.mockReset();
+    apiClientMock.delete.mockReset();
     useNpaStore.getState().reset();
 
     mockRegistry(false);
@@ -106,6 +146,9 @@ describe("NpaPage", () => {
       }
       if (url === "/npa/npa-1") {
         return Promise.resolve({ data: npaDetail });
+      }
+      if (url === "/documents") {
+        return Promise.resolve({ data: { items: tenantDocuments } });
       }
       throw new Error(`Unexpected GET ${url}`);
     });
@@ -146,8 +189,13 @@ describe("NpaPage", () => {
     });
 
     expect(await screen.findByText("772н-2026-03")).toBeInTheDocument();
-    expect(screen.getByText("ИОТ-001, ИОТ-014")).toBeInTheDocument();
-    expect(screen.getByText("Обновить инструкции · 2")).toBeInTheDocument();
+    expect(
+      screen.getByText("Инструкция по ОТ · ООО Ромашка"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Документ · п. 4")).toBeInTheDocument();
+    expect(
+      screen.getByText("Актуализировать зависимости НПА: documents · 2"),
+    ).toBeInTheDocument();
 
     const withDetail = uxBudgetDelta(document.body, "NpaPage");
     expect(withDetail.unexpected).toEqual([]);
@@ -241,5 +289,87 @@ describe("NpaPage", () => {
     });
     // И в таблице, и среди кнопок детализации — список перечитан с сервера.
     expect(await screen.findAllByText("1/29")).toHaveLength(2);
+  });
+
+  it("ссылка из поиска `/npa?selected=` открывает детализацию (срез-142)", async () => {
+    // Поисковый снимок ведёт на акт именно так; без разбора адреса ссылка
+    // открывала бы пустую правую колонку.
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={["/npa?selected=npa-1"]}>
+          <NpaPage />
+        </MemoryRouter>,
+      );
+    });
+
+    expect(await screen.findByText("772н-2026-03")).toBeInTheDocument();
+    expect(
+      screen.getByText("Программа обучения · ООО Ромашка"),
+    ).toBeInTheDocument();
+  });
+
+  it("документ привязывается из списка документов, связь снимается (срез-142)", async () => {
+    apiClientMock.post.mockImplementation((url: string, body: unknown) => {
+      if (url === "/npa/npa-1/bindings") {
+        return Promise.resolve({
+          data: {
+            id: "b-3",
+            npa_id: "npa-1",
+            title: "Положение о СУОТ",
+            ...(body as object),
+          },
+        });
+      }
+      throw new Error(`Unexpected POST ${url}`);
+    });
+    apiClientMock.delete.mockResolvedValue({ data: null });
+    const user = userEvent.setup();
+
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={["/npa?selected=npa-1"]}>
+          <NpaPage />
+        </MemoryRouter>,
+      );
+    });
+    expect(await screen.findByText("772н-2026-03")).toBeInTheDocument();
+
+    await act(async () => {
+      await user.click(
+        screen.getByRole("button", { name: "Привязать документ" }),
+      );
+    });
+    // Список документов — с той же ручки, что экран «Документы».
+    expect(
+      await screen.findByRole("option", {
+        name: "Положение о СУОТ · ООО Ромашка",
+      }),
+    ).toBeInTheDocument();
+    const withDialog = uxBudgetDelta(document.body, "NpaPage");
+    expect(withDialog.unexpected).toEqual([]);
+
+    await user.selectOptions(screen.getByLabelText("Документ"), "doc-3");
+    await user.type(screen.getByLabelText("Пункт акта"), "п. 7");
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: "Привязать" }));
+    });
+
+    expect(apiClientMock.post).toHaveBeenCalledWith("/npa/npa-1/bindings", {
+      entity_type: "document",
+      entity_id: "doc-3",
+      ref: "п. 7",
+    });
+    // После привязки детализация перечитана с сервера.
+    expect(
+      apiClientMock.get.mock.calls.filter(([url]) => url === "/npa/npa-1")
+        .length,
+    ).toBeGreaterThanOrEqual(2);
+
+    await act(async () => {
+      await user.click(screen.getAllByRole("button", { name: "Отвязать" })[0]);
+    });
+    expect(apiClientMock.delete).toHaveBeenCalledWith(
+      "/npa/npa-1/bindings/b-1",
+    );
   });
 });

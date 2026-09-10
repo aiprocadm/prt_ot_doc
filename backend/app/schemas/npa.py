@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -95,3 +96,22 @@ class NpaRevisionRead(BaseModel):
     model_config = {
         "from_attributes": True,
     }
+
+
+class NpaBindingCreate(BaseModel):
+    """Срез-142: связь акта с сущностью арендатора — то, что читает оценка влияния."""
+
+    entity_type: Literal["document", "template_version", "pack"]
+    entity_id: str = Field(min_length=1, max_length=36)
+    ref: str | None = Field(default=None, max_length=255)
+
+
+class NpaBindingRead(BaseModel):
+    id: str
+    npa_id: str
+    entity_type: str
+    entity_id: str
+    ref: str | None = None
+    #: Имя сущности для витрины — документ, шаблон или пакет по-человечески,
+    #: а не идентификатор.
+    title: str

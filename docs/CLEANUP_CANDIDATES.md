@@ -21,7 +21,7 @@
 никому не видны, а решение можно принять позже, ничего не потеряв.
 
 **Удалить отдельной миграцией по решению владельца** (проверив, что у
-арендаторов там пусто) — 24 таблицы:
+арендаторов там пусто) — 25 таблиц:
 
 `incident_cases`, `incident_persons`, `incident_investigations`,
 `incident_attachments`, `inspection_plans`, `inspection_plan_items`,
@@ -29,9 +29,12 @@
 `inspection_runs`, `inspection_run_items`, `inspection_attachments`,
 `prescription_items`, `corrective_action_attachments`, `asset`, `equipment`,
 `documentgenerationjob`, `edo_receipts`, `hazard_bindings`, `hazard_measures`,
-`reminder_rules`, `tenant_rate_limits`, `training_protocol_items`, `risk`.
+`reminder_rules`, `tenant_rate_limits`, `training_protocol_items`, `risk`,
+`npa` (срез-142: арендаторские акты; в таблицу никто не писал, а единственная
+ссылка на неё — `npabinding.npa_id` — переведена миграцией на общий реестр
+`npa_act`, куда оценка влияния и смотрела с самого начала).
 
-Все 24 по-прежнему вооружены RLS и перечислены в `RLS_MODEL_LESS_TABLES`
+Все 25 по-прежнему вооружены RLS и перечислены в `RLS_MODEL_LESS_TABLES`
 (`backend/app/core/rls_policy.py`); при сносе миграцией убрать их и из
 `RLS_ENABLED_TABLES`, и из `RLS_MODEL_LESS_TABLES`.
 

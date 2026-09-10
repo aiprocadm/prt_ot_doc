@@ -1,5 +1,10 @@
 """Реестр нормативных актов: чтение для всех, ведение — владельцу платформы.
 
+Связи акта с документами арендатора (``NPABinding``) — уже арендаторские: их
+заводит и снимает тот, кто вправе ставить задачи по оценке влияния
+(``_IMPACT_WRITE_ROLES``). До среза-142 связи заводить было нечем, и оценка
+влияния считала по пустой таблице.
+
 Реестр общий (``NpaAct`` — SharedModel, без tenant_id): один и тот же приказ
 Минтруда действует на всех арендаторов. Поэтому заводить акты и редакции
 может только владелец платформы — тот же гейт, что у кабинета арендаторов
@@ -13,7 +18,7 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -26,12 +31,17 @@ from app.core.audit_decorator import audit_operation
 from app.core.security import abac, rbac
 from app.core.tenant_validation import TenantContextValidator
 from app.domains.npa.impact import NpaImpactService
-from app.models.models import Tenant
+from app.models.document import Document
+from app.models.models import NPABinding, Tenant
 from app.models.npa import NpaAct, NpaClause, NpaRevision
+from app.models.packages import DocumentPack
+from app.models.templates import TemplateVersion
 from app.schemas.npa import (
     NpaActCreate,
     NpaActListResponse,
     NpaActRead,
+    NpaBindingCreate,
+    NpaBindingRead,
     NpaRevisionCreate,
     NpaRevisionRead,
 )
@@ -209,3 +219,137 @@ async def create_npa_update_tasks(
         "created": len(tasks),
         "items": [{"id": item.id, "title": item.title} for item in tasks],
     }
+
+
+async def _binding_target_exists(
+    session: AsyncSession, tenant_id: str, payload: NpaBindingCreate
+) -> str | None:
+    """Проверить, что цель связи существует у ЭТОГО арендатора.
+
+    Возвращает ``template_version_id`` для связи с версией шаблона (столбец
+    остался с начальной схемы, его читает ``TemplateVersion.npa_bindings``),
+    ``""`` для остальных живых целей и ``None``, если цели нет.
+    """
+    if payload.entity_type == "document":
+        row = await session.scalar(
+            select(Document.id).where(
+                Document.id == payload.entity_id, Document.tenant_id == tenant_id
+            )
+        )
+        return "" if row else None
+    if payload.entity_type == "template_version":
+        row = await session.scalar(
+            select(TemplateVersion.id).where(
+                TemplateVersion.id == payload.entity_id, TemplateVersion.tenant_id == tenant_id
+            )
+        )
+        return row
+    row = await session.scalar(
+        select(DocumentPack.id).where(
+            DocumentPack.id == payload.entity_id,
+            DocumentPack.tenant_id == tenant_id,
+            DocumentPack.deleted_at.is_(None),
+        )
+    )
+    return "" if row else None
+
+
+@router.post(
+    "/npa/{act_id}/bindings",
+    response_model=NpaBindingRead,
+    status_code=status.HTTP_201_CREATED,
+)
+@audit_operation("create", "npa_binding")
+async def create_npa_binding(
+    act_id: str,
+    payload: NpaBindingCreate,
+    session: SessionDep,
+    tenant: Tenant = Depends(get_tenant_record),
+    access=Depends(
+        abac(
+            _tenant_resource_id,
+            required_roles=_IMPACT_WRITE_ROLES,
+            action="bind npa act",
+        )
+    ),
+) -> NpaBindingRead:
+    """Привязать документ / версию шаблона / пакет арендатора к акту реестра."""
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _ = access
+    act = await session.get(NpaAct, act_id)
+    if act is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "NPA act not found")
+    template_version_id = await _binding_target_exists(session, str(tenant.id), payload)
+    if template_version_id is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Сущность для привязки не найдена")
+    duplicate = await session.scalar(
+        select(NPABinding.id).where(
+            NPABinding.tenant_id == str(tenant.id),
+            NPABinding.npa_id == act_id,
+            NPABinding.entity_type == payload.entity_type,
+            NPABinding.entity_id == payload.entity_id,
+        )
+    )
+    if duplicate is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Связь с этой сущностью уже есть")
+    binding = NPABinding(
+        tenant_id=str(tenant.id),
+        npa_id=act_id,
+        entity_type=payload.entity_type,
+        entity_id=payload.entity_id,
+        template_version_id=template_version_id or None,
+        ref=payload.ref,
+        context={},
+    )
+    session.add(binding)
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        # Гонка двух одинаковых заявок: уникальный индекс uq_npabinding_target.
+        await session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "Связь с этой сущностью уже есть") from exc
+    await session.refresh(binding)
+    titles = await NpaImpactService(session, str(tenant.id)).binding_titles([binding])
+    return NpaBindingRead(
+        id=binding.id,
+        npa_id=binding.npa_id,
+        entity_type=payload.entity_type,
+        entity_id=binding.entity_id,
+        ref=binding.ref,
+        title=titles.get(binding.id, binding.entity_id),
+    )
+
+
+@router.delete(
+    "/npa/{act_id}/bindings/{binding_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+)
+@audit_operation("delete", "npa_binding")
+async def delete_npa_binding(
+    act_id: str,
+    binding_id: str,
+    session: SessionDep,
+    tenant: Tenant = Depends(get_tenant_record),
+    access=Depends(
+        abac(
+            _tenant_resource_id,
+            required_roles=_IMPACT_WRITE_ROLES,
+            action="unbind npa act",
+        )
+    ),
+) -> Response:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _ = access
+    binding = await session.scalar(
+        select(NPABinding).where(
+            NPABinding.id == binding_id,
+            NPABinding.npa_id == act_id,
+            NPABinding.tenant_id == str(tenant.id),
+        )
+    )
+    if binding is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Связь не найдена")
+    await session.delete(binding)
+    await session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

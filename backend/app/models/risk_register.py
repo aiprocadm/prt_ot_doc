@@ -10,12 +10,11 @@ only in ``Mapped[...]`` annotations are resolved by SQLAlchemy's class registry
 from __future__ import annotations
 
 import enum
-from datetime import date, datetime
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
     JSON,
-    Date,
     DateTime,
     Enum,
     ForeignKey,
@@ -134,22 +133,6 @@ class PositionHazardLink(TenantBaseModel):
     )
 
 
-class NPAStatus(str, enum.Enum):
-    ACTIVE = "active"
-    OBSOLETE = "obsolete"
-
-
-class NPA(TenantBaseModel):
-    code: Mapped[str] = mapped_column(String(128), nullable=False)
-    title: Mapped[str] = mapped_column(String(512), nullable=False)
-    edition_date: Mapped[date] = mapped_column(Date, nullable=False)
-    status: Mapped[NPAStatus] = mapped_column(
-        Enum(NPAStatus), nullable=False, default=NPAStatus.ACTIVE
-    )
-
-    __table_args__ = (UniqueConstraint("tenant_id", "code", name="uq_npa_code"),)
-
-
 class NpaBindingTarget(str, enum.Enum):
     """Entities that can be linked to an NPA."""
 
@@ -159,10 +142,25 @@ class NpaBindingTarget(str, enum.Enum):
 
 
 class NPABinding(TenantBaseModel):
+    """Связь акта общего реестра с сущностью арендатора — то, что читает оценка влияния.
+
+    Срез-142: ``npa_id`` указывает в общий реестр ``npa_act`` (SharedModel), а не в
+    арендаторскую таблицу ``npa`` контура risk_register, как было с начальной схемы.
+    Расхождение не стреляло только потому, что связей никто не заводил: оценка
+    влияния (``NpaImpactService``) всегда сравнивала ``npa_id`` с ``npa_act.id``.
+    Модель ``NPA`` (арендаторские акты) удалена — в неё не писал и её не читал
+    никто, кроме этой связи и поискового снимка; таблица ``npa`` в базе оставлена
+    (``RLS_MODEL_LESS_TABLES``). В ORM ``npa_id`` — простой столбец без
+    ``ForeignKey``, как ``FeatureEnablement.feature_id``: ссылку из tenant-базы в
+    shared-базу SQLAlchemy не разрешает при ``create_all`` до регистрации зеркала.
+    Настоящий внешний ключ на ``npa_act.id`` держит PostgreSQL — его заводит
+    миграция ``20260910_b18_npabinding_npa_act``.
+    """
+
     template_version_id: Mapped[str | None] = mapped_column(
         ForeignKey("templateversion.id"), nullable=True, index=True
     )
-    npa_id: Mapped[str] = mapped_column(ForeignKey("npa.id"), nullable=False, index=True)
+    npa_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     ref: Mapped[str | None] = mapped_column(String(255))
     entity_type: Mapped[NpaBindingTarget] = mapped_column(
         Enum(
@@ -184,4 +182,9 @@ class NPABinding(TenantBaseModel):
     )
 
     template_version: Mapped[TemplateVersion | None] = relationship(backref="npa_bindings")
-    npa: Mapped[NPA] = relationship(backref="bindings")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "npa_id", "entity_type", "entity_id", name="uq_npabinding_target"
+        ),
+    )

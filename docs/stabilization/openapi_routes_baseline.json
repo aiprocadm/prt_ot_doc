@@ -30,6 +30,7 @@
     "DELETE /api/v1/medical/factors/{factor_id}",
     "DELETE /api/v1/medical/norms/{norm_id}",
     "DELETE /api/v1/medical/psychiatric/activity-types/{activity_id}",
+    "DELETE /api/v1/npa/{act_id}/bindings/{binding_id}",
     "DELETE /api/v1/orders/{order_id}",
     "DELETE /api/v1/package-presets/{preset_id}",
     "DELETE /api/v1/package-presets/{preset_id}/items/{item_id}",
@@ -890,6 +891,7 @@
     "POST /api/v1/notifications/mark-read",
     "POST /api/v1/notifications/templates",
     "POST /api/v1/npa",
+    "POST /api/v1/npa/{act_id}/bindings",
     "POST /api/v1/npa/{act_id}/impact/tasks",
     "POST /api/v1/npa/{act_id}/revisions",
     "POST /api/v1/offboarding/cancel",
@@ -1304,6 +1306,7 @@
     "create_monitoring_plan_item_api_v1_ecology_monitoring_plan_post",
     "create_norm_api_v1_ppe_norms_post",
     "create_npa_act_api_v1_npa_post",
+    "create_npa_binding_api_v1_npa__act_id__bindings_post",
     "create_npa_revision_api_v1_npa__act_id__revisions_post",
     "create_npa_update_tasks_api_v1_npa__act_id__impact_tasks_post",
     "create_order_api_v1_orders_post",
@@ -1410,6 +1413,7 @@
     "delete_methodology_api_v1_risk_methodologies__methodology_id__delete",
     "delete_module_api_v1_training_modules__module_id__delete",
     "delete_norm_api_v1_ppe_norms__norm_id__delete",
+    "delete_npa_binding_api_v1_npa__act_id__bindings__binding_id__delete",
     "delete_order_api_v1_orders__order_id__delete",
     "delete_person_endpoint_api_v1_persons__person_id__delete",
     "delete_preset_api_v1_package_presets__preset_id__delete",
@@ -2771,6 +2775,8 @@
     "NpaActCreate",
     "NpaActListResponse",
     "NpaActRead",
+    "NpaBindingCreate",
+    "NpaBindingRead",
     "NpaClauseCreate",
     "NpaClauseRead",
     "NpaRevisionCreate",
@@ -7379,6 +7385,19 @@
       "valid_from": "null|string",
       "valid_to": "null|string",
       "clauses": "array"
+    },
+    "NpaBindingCreate": {
+      "entity_type": "string",
+      "entity_id": "string",
+      "ref": "null|string"
+    },
+    "NpaBindingRead": {
+      "id": "string",
+      "npa_id": "string",
+      "entity_type": "string",
+      "entity_id": "string",
+      "ref": "null|string",
+      "title": "string"
     },
     "NpaClauseCreate": {
       "code": "string",

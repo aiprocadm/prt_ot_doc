@@ -1,5 +1,5 @@
 import { apiClient } from "@/api/client";
-import type { DocumentReadinessDto } from "@/types/dto/documents";
+import type { DocumentDto, DocumentReadinessDto } from "@/types/dto/documents";
 import type { QualityReport } from "@/types/dto/documentQuality";
 
 export type WizardPipelineStatus =
@@ -255,4 +255,17 @@ export const validateDocumentMapping = async (payload: {
     payload,
   );
   return response.data;
+};
+
+/**
+ * Срез-142: короткий список документов арендатора для выбора в формах
+ * (привязка к акту НПА). Та же ручка, что у экрана «Документы», — имя
+ * документа здесь и там одно и то же.
+ */
+export const listDocumentsForPicker = async (): Promise<DocumentDto[]> => {
+  const response = await apiClient.get<{ items?: DocumentDto[] }>(
+    "/documents",
+    { params: { page: 1, page_size: 200 } },
+  );
+  return response.data.items ?? [];
 };

@@ -1,6 +1,8 @@
 import { apiClient } from "@/api/client";
 import type {
   NpaActCreateDto,
+  NpaBindingCreateDto,
+  NpaBindingDto,
   NpaDto,
   NpaRevisionCreateDto,
   NpaRevisionDto,
@@ -28,5 +30,19 @@ export const npaApi = {
       payload,
     );
     return data;
+  },
+  /** Срез-142: связи акта с документами арендатора — их читает оценка влияния. */
+  createBinding: async (
+    actId: string,
+    payload: NpaBindingCreateDto,
+  ): Promise<NpaBindingDto> => {
+    const { data } = await apiClient.post<NpaBindingDto>(
+      `/npa/${actId}/bindings`,
+      payload,
+    );
+    return data;
+  },
+  deleteBinding: async (actId: string, bindingId: string): Promise<void> => {
+    await apiClient.delete(`/npa/${actId}/bindings/${bindingId}`);
   },
 };

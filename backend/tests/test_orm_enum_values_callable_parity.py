@@ -162,7 +162,6 @@ RAW_NATIVE_ENUM_COLUMNS = {
     ("incident_log", "status"),  # IncidentStatus (Group-B)
     ("incident_person", "role"),  # IncidentPersonRole (Group-B)
     ("inspection", "status"),  # InspectionStatus (Group-B)
-    ("npa", "status"),  # NPAStatus (Group-B)
     ("outbox", "status"),  # OutboxStatus (OK: имена==значения)
     ("pipeline_runs", "status"),  # PipelineRunStatus (Group-B)
     ("plantask", "status"),  # PlanTaskStatus (Group-B)

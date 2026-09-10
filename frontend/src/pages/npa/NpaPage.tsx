@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { npaApi } from "@/api/npa";
@@ -9,6 +10,7 @@ import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { NpaBindingDialog } from "@/features/npa/NpaBindingDialog";
 import {
   NpaActFormDialog,
   NpaRevisionFormDialog,
@@ -16,6 +18,7 @@ import {
 import { NpaTable } from "@/features/npa/NpaTable";
 import { ROUTES } from "@/router/routes";
 import { useNpaStore } from "@/stores/npa";
+import type { NpaBindingDto, NpaBindingTarget } from "@/types/dto/npa";
 
 type NpaDetail = {
   act: { id: string; code: string; title: string; edition: string };
@@ -28,15 +31,39 @@ type NpaDetail = {
     change_summary?: string | null;
   }>;
   bindings: Record<string, string[]>;
+  /** Срез-142: связи по одной, с именами — для списка и кнопки «Отвязать». */
+  binding_items?: NpaBindingDto[];
   summary: Record<string, number>;
   tasks_to_create: Array<{ code: string; title: string; count: number }>;
+};
+
+const BINDING_KIND_LABELS: Record<NpaBindingTarget, string> = {
+  document: "Документ",
+  template_version: "Версия шаблона",
+  pack: "Пакет",
+};
+
+const SUMMARY_LABELS: Record<string, string> = {
+  documents: "Документы",
+  templates: "Версии шаблонов",
+  packages: "Пакеты",
+  risks: "Риски",
+  checklists: "Чек-листы",
+  workflows: "Маршруты",
+  roles: "Роли",
+  sites: "Площадки",
 };
 
 const NpaPage = () => {
   const { list, setFilters, filters, items, all, loading, error, canManage } =
     useNpaStore();
   const [search, setSearch] = useState(filters.search ?? "");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Срез-142: поиск ведёт сюда ссылкой `/npa?selected=<id>` — выбранный акт
+  // берём из адреса, иначе ссылка открывала бы пустую детализацию.
+  const [searchParams] = useSearchParams();
+  const [selectedId, setSelectedId] = useState<string | null>(
+    searchParams.get("selected"),
+  );
   const [detail, setDetail] = useState<NpaDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
@@ -76,6 +103,17 @@ const NpaPage = () => {
       toast.success("Задачи обновления созданы");
     } catch {
       toast.error("Не удалось создать задачи обновления");
+    }
+  };
+
+  const unbind = async (binding: NpaBindingDto) => {
+    if (!selectedId) return;
+    try {
+      await npaApi.deleteBinding(selectedId, binding.id);
+      toast.success("Связь снята");
+      loadDetail(selectedId);
+    } catch {
+      toast.error("Не удалось снять связь");
     }
   };
 
@@ -201,25 +239,61 @@ const NpaPage = () => {
                   </div>
                 </div>
                 <div>
-                  <div className="text-xs font-medium uppercase text-muted-foreground">
-                    Связанные сущности
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs font-medium uppercase text-muted-foreground">
+                      Связанные сущности
+                    </div>
+                    {selectedId ? (
+                      <NpaBindingDialog
+                        actId={selectedId}
+                        trigger={
+                          <Button variant="outline" size="sm">
+                            Привязать документ
+                          </Button>
+                        }
+                        onCreated={() => loadDetail(selectedId)}
+                      />
+                    ) : null}
                   </div>
                   <div className="mt-2 grid gap-2 md:grid-cols-2">
-                    {Object.entries(detail.summary).map(([key, value]) => (
-                      <div key={key} className="rounded border p-3 text-sm">
-                        {key}: <span className="font-medium">{value}</span>
-                      </div>
-                    ))}
+                    {Object.entries(detail.summary)
+                      .filter(([, value]) => value > 0)
+                      .map(([key, value]) => (
+                        <div key={key} className="rounded border p-3 text-sm">
+                          {SUMMARY_LABELS[key] ?? key}:{" "}
+                          <span className="font-medium">{value}</span>
+                        </div>
+                      ))}
                   </div>
-                  <div className="mt-3 grid gap-3">
-                    {Object.entries(detail.bindings).map(([key, values]) => (
-                      <div key={key} className="rounded border bg-muted/30 p-3">
-                        <div className="text-xs font-medium uppercase text-muted-foreground">
-                          {key}
+                  <div className="mt-3 space-y-2">
+                    {(detail.binding_items ?? []).length === 0 ? (
+                      <div className="text-sm text-muted-foreground">
+                        К акту пока ничего не привязано — оценка влияния
+                        считается по связям.
+                      </div>
+                    ) : null}
+                    {(detail.binding_items ?? []).map((binding) => (
+                      <div
+                        key={binding.id}
+                        className="flex items-center justify-between gap-3 rounded border bg-muted/30 p-3"
+                      >
+                        <div>
+                          <div className="text-sm font-medium">
+                            {binding.title}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {BINDING_KIND_LABELS[binding.entity_type] ??
+                              binding.entity_type}
+                            {binding.ref ? ` · ${binding.ref}` : ""}
+                          </div>
                         </div>
-                        <div className="mt-2 text-sm">
-                          {values.length ? values.join(", ") : "—"}
-                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => void unbind(binding)}
+                        >
+                          Отвязать
+                        </Button>
                       </div>
                     ))}
                   </div>
