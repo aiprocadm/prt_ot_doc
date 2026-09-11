@@ -392,6 +392,12 @@ export const MAIN_NAV_GROUPS: NavGroup[] = [
         permission: PERMISSIONS.NPA_VIEW,
       },
       {
+        label: "Реестр требований",
+        to: "/npa/requirements",
+        icon: ClipboardCheck,
+        permission: PERMISSIONS.NPA_VIEW,
+      },
+      {
         label: "Отчёты",
         to: "/reports",
         icon: ShieldCheck,

@@ -381,6 +381,12 @@
 - `NpaRevision` — редакция акта: `act_id`, `revision_code` (уникален внутри акта), `title`, `effective_from`/`effective_to`, `change_summary`; оценка влияния берёт действующую по датам.
 - **Кто пишет (срез-141):** `POST /npa` (акт + пункты) и `POST /npa/{act_id}/revisions` — только владелец платформы (`_require_managing_admin`): реестр общий для всех арендаторов. До среза-141 писать было некому — реестр был пуст всегда.
 
+### ComplianceRequirement (`compliance_requirement`) и ComplianceRequirementEvidence (`compliance_requirement_evidence`)
+| Реестр требований арендатора — обязательное ядро B.18 разд. 19.2 (срез-145). `code` (уникален в арендаторе), `title`, `description`, `npa_id` → `npa_act.id` и `clause_id` → `npa_clause.id` (общий реестр; в ORM простые столбцы, внешние ключи держит PostgreSQL — миграция `20260911_b18_compliance_requirements`), `role_code`, `site_id` → `site.id`, `process_code`, `owner_user_id` → `user.id`, `periodicity_days` (пусто — разовое), `next_due_at`, `last_confirmed_at`, `severity` (`low`,`medium`,`high`,`critical`), `status` (`active`,`fulfilled`,`retired`), `retired_at`. Индексы `tenant_id + status`, `tenant_id + next_due_at`.
+| Доказательство исполнения: `requirement_id` (CASCADE), `document_id` → `document.id` (nullable), `note`, `confirmed_at` (дата), `confirmed_by` → `user.id`. Нужен документ или заметка.
+- **Кто пишет:** `POST /compliance/requirements`, `PATCH /compliance/requirements/{id}`, `POST …/{id}/evidence` («Исполнено»: доказательство + сдвиг `next_due_at` на `periodicity_days` от дня подтверждения, разовое → `fulfilled`), `POST …/{id}/retire` — роли `admin`/`owner`/`ot_specialist`. Читают все роли: полный круг (руководители, ОТ/ПБ, HR, эколог, бухгалтер, аудитор) — весь реестр арендатора, остальные и роли с `company_id` — только свои требования (`owner_user_id`).
+- **Кто читает:** `GET /compliance/requirements` (фильтры `npa_id`/`status`/`overdue`), оценка влияния акта (`linked.requirements`, `summary.requirements` — без автозадач), Центр внимания (`compliance_requirement`: просрочено → critical/high, срок ≤ 3 дней → medium; `summary.overdue_requirements`).
+
 ### Checklist (`checklist`)
 | `npa_code`, `title`, `description`. Уникальность `tenant_id + npa_code + version` (использует `VersionedMixin`).
 

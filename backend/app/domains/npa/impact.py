@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.domains.npa.requirements import RequirementsService
 from app.models.document import Document
 from app.models.models import NPABinding
 from app.models.notifications import PlanTask, PlanTaskStatus
@@ -148,6 +149,16 @@ class NpaImpactService:
                 }
             ),
         }
+        # Срез-145 (разд. 19.2): активные требования реестра, выведенные из
+        # акта, — тоже «зависимость», но не связь: задачи актуализации по ним
+        # не заводятся (у требования свой контроль — контрольная дата и
+        # доказательства), поэтому в ``_summary_of`` их нет.
+        linked["requirements"] = [
+            row.id
+            for row in await RequirementsService(self.session, self.tenant_id).active_for_act(
+                act_id
+            )
+        ]
         summary = {key: len(value) for key, value in linked.items()}
         titles = await self.binding_titles(binding_rows)
         # Срез-144 (разд. 19.4): задачи актуализации — только по связям, которые

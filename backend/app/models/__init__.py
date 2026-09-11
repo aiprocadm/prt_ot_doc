@@ -15,6 +15,10 @@ from app.models.committees import (
     DecisionTaskStatus,
     MeetingStatus,
 )
+from app.models.compliance_requirements import (
+    ComplianceRequirement,
+    ComplianceRequirementEvidence,
+)
 from app.models.discipline_reports import DisciplineStatusReport
 from app.models.document import (
     Document,
@@ -161,6 +165,8 @@ from app.models.work_permit import WorkPermit, WorkPermitEvent, WorkPermitMember
 __all__ = [
     "TenantBranding",
     "ClientChange",
+    "ComplianceRequirement",
+    "ComplianceRequirementEvidence",
     "DisciplineStatusReport",
     "TenantLegalAcceptance",
     "TenantLegalDocument",

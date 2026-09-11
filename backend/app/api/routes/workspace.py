@@ -21,6 +21,7 @@ from app.core.disciplines import (
 from app.core.security import AccessContext, rbac
 from app.core.tenant_validation import TenantContextValidator
 from app.domains.npa.impact import NpaImpactService
+from app.domains.npa.requirements import RequirementsService
 from app.models.finance import Contract, ContractStatus
 from app.models.models import (
     ComplianceDeadline,
@@ -63,6 +64,9 @@ class AttentionSummary(BaseModel):
     #: Связей с НПА, не пересмотренных после новой редакции (срез-144, разд.
     #: 19.4). Ноль у ролей без обзора по арендатору — им это не показывают.
     stale_npa_bindings: int = 0
+    #: Требований реестра с прошедшей контрольной датой (срез-145, разд. 19.2).
+    #: У ролей без обзора по арендатору — только их собственные.
+    overdue_requirements: int = 0
 
 
 class ReadinessBlocker(BaseModel):
@@ -663,6 +667,38 @@ async def workspace_attention(
                 )
             )
 
+    # Разд. 19.2 (срез-145): требования реестра с прошедшей или близкой
+    # контрольной датой. Роли с обзором видят все, остальные — только те, за
+    # которые отвечают сами (``owner_user_id``): рядовому сотруднику чужие
+    # обязательства ни к чему, а его собственная — как раз к чему.
+    overdue_requirements_total = 0
+    requirement_rows = await RequirementsService(session, str(tenant.id)).attention(
+        owner_user_id=None if tenant_wide else access.user.id
+    )
+    for requirement in requirement_rows:
+        if requirement.overdue:
+            overdue_requirements_total += 1
+            severity = "critical" if requirement.severity == "critical" else "high"
+            reason = "Контрольная дата прошла"
+        else:
+            severity = "medium"
+            reason = "Срок требования подходит"
+        items.append(
+            AttentionItem(
+                item_type="compliance_requirement",
+                id=requirement.requirement_id,
+                severity=severity,
+                title=f"Требование {requirement.code}: {requirement.title}",
+                status="overdue" if requirement.overdue else "due_soon",
+                due_at=datetime.combine(
+                    requirement.next_due_at, datetime.min.time(), tzinfo=timezone.utc
+                ),
+                entity_type="compliance_requirement",
+                entity_id=requirement.requirement_id,
+                reason=reason,
+            )
+        )
+
     # Приоритизация (разд. 57.2: «всё в одном месте, с приоритизацией»; срез-70).
     # До этого лента шла «сначала все задачи, потом дисциплины», и просроченная
     # ЭПБ на ОПО (critical) стояла под открытой задачей без срока (medium).
@@ -705,6 +741,8 @@ async def workspace_attention(
         recs.append("Устраните блокеры готовности перед запуском зависимых сценариев")
     if stale_npa_total > 0:
         recs.append("Пересмотрите документы по обновлённым НПА")
+    if overdue_requirements_total > 0:
+        recs.append("Закройте просроченные требования реестра — подтвердите исполнение")
     if not recs:
         recs.append("Критичных блокеров не обнаружено — продолжайте плановую работу")
 
@@ -718,6 +756,7 @@ async def workspace_attention(
             failed_sync_batches=failed_sync,
             readiness_blockers=len(blockers),
             stale_npa_bindings=stale_npa_total,
+            overdue_requirements=overdue_requirements_total,
         ),
         items=items,
         blockers=blockers,
