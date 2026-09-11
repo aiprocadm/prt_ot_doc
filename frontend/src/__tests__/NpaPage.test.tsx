@@ -372,4 +372,80 @@ describe("NpaPage", () => {
       "/npa/npa-1/bindings/b-1",
     );
   });
+
+  it("непересмотренная связь помечена, «Пересмотрено» шлёт review и перечитывает (срез-144)", async () => {
+    // Вступила ред. 772н-2026-03, а b-1 сверяли по прошлой: она «не
+    // пересмотрена». b-2 уже сверена — у неё кнопки нет.
+    const staleDetail = {
+      ...npaDetail,
+      active_revision_id: "rev-1",
+      stale_bindings: 1,
+      binding_items: [
+        {
+          ...npaDetail.binding_items[0],
+          reviewed_revision_id: "rev-0",
+          reviewed_revision_code: "772н-2025",
+          stale: true,
+        },
+        {
+          ...npaDetail.binding_items[1],
+          reviewed_revision_id: "rev-1",
+          reviewed_revision_code: "772н-2026-03",
+          stale: false,
+        },
+      ],
+    };
+    apiClientMock.get.mockImplementation((url: string) => {
+      if (url === "/npa") {
+        return Promise.resolve({
+          data: { items: npaItems, can_manage: false },
+        });
+      }
+      if (url === "/npa/npa-1") {
+        return Promise.resolve({ data: staleDetail });
+      }
+      throw new Error(`Unexpected GET ${url}`);
+    });
+    apiClientMock.post.mockImplementation((url: string) => {
+      if (url === "/npa/npa-1/bindings/b-1/review") {
+        return Promise.resolve({
+          data: { ...staleDetail.binding_items[0], stale: false },
+        });
+      }
+      throw new Error(`Unexpected POST ${url}`);
+    });
+    const user = userEvent.setup();
+
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={["/npa?selected=npa-1"]}>
+          <NpaPage />
+        </MemoryRouter>,
+      );
+    });
+    expect(await screen.findByTestId("npa-stale-summary")).toHaveTextContent(
+      "Требуют пересмотра: 1",
+    );
+    expect(screen.getAllByTestId("npa-binding-stale")).toHaveLength(1);
+    expect(screen.getByTestId("npa-binding-stale")).toHaveTextContent(
+      "сверяли по ред. 772н-2025",
+    );
+    // Кнопка — только у непересмотренной связи, и она не «главная»: бюджет
+    // экрана не растёт.
+    expect(
+      screen.getAllByRole("button", { name: "Пересмотрено" }),
+    ).toHaveLength(1);
+    expect(uxBudgetDelta(document.body, "NpaPage").unexpected).toEqual([]);
+
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: "Пересмотрено" }));
+    });
+    expect(apiClientMock.post).toHaveBeenCalledWith(
+      "/npa/npa-1/bindings/b-1/review",
+    );
+    expect(
+      apiClientMock.get.mock.calls.filter(([url]) => url === "/npa/npa-1")
+        .length,
+    ).toBeGreaterThanOrEqual(2);
+  });
 });

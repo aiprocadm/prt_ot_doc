@@ -20,6 +20,7 @@ from app.core.disciplines import (
 )
 from app.core.security import AccessContext, rbac
 from app.core.tenant_validation import TenantContextValidator
+from app.domains.npa.impact import NpaImpactService
 from app.models.finance import Contract, ContractStatus
 from app.models.models import (
     ComplianceDeadline,
@@ -59,6 +60,9 @@ class AttentionSummary(BaseModel):
     pending_sync_batches: int = 0
     failed_sync_batches: int = 0
     readiness_blockers: int = 0
+    #: Связей с НПА, не пересмотренных после новой редакции (срез-144, разд.
+    #: 19.4). Ноль у ролей без обзора по арендатору — им это не показывают.
+    stale_npa_bindings: int = 0
 
 
 class ReadinessBlocker(BaseModel):
@@ -635,6 +639,30 @@ async def workspace_attention(
             )
         )
 
+    # Разд. 19.4 (срез-144): реестр НПА обновился — арендатор узнаёт об этом
+    # здесь, а не из журнала владельца платформы. Одна запись на акт: сколько
+    # связей ещё не пересмотрено по действующей редакции. Только ролям с
+    # обзором по арендатору: работник свои документы не пересматривает.
+    stale_npa_total = 0
+    if tenant_wide:
+        for stale_act in await NpaImpactService(session, str(tenant.id)).stale_acts():
+            stale_npa_total += stale_act.stale
+            items.append(
+                AttentionItem(
+                    item_type="npa_revision",
+                    id=stale_act.act_id,
+                    severity="high",
+                    title=(
+                        f"НПА {stale_act.code}: редакция {stale_act.revision_code} — "
+                        f"не пересмотрено связей: {stale_act.stale} из {stale_act.total}"
+                    ),
+                    status="stale",
+                    entity_type="npa",
+                    entity_id=stale_act.act_id,
+                    reason="Реестр НПА обновился",
+                )
+            )
+
     # Приоритизация (разд. 57.2: «всё в одном месте, с приоритизацией»; срез-70).
     # До этого лента шла «сначала все задачи, потом дисциплины», и просроченная
     # ЭПБ на ОПО (critical) стояла под открытой задачей без срока (medium).
@@ -675,6 +703,8 @@ async def workspace_attention(
         recs.append("Проверьте неудачные пакеты offline-синхронизации перед следующей выгрузкой")
     if blockers:
         recs.append("Устраните блокеры готовности перед запуском зависимых сценариев")
+    if stale_npa_total > 0:
+        recs.append("Пересмотрите документы по обновлённым НПА")
     if not recs:
         recs.append("Критичных блокеров не обнаружено — продолжайте плановую работу")
 
@@ -687,6 +717,7 @@ async def workspace_attention(
             pending_sync_batches=pending_sync,
             failed_sync_batches=failed_sync,
             readiness_blockers=len(blockers),
+            stale_npa_bindings=stale_npa_total,
         ),
         items=items,
         blockers=blockers,

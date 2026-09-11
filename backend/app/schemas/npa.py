@@ -115,3 +115,8 @@ class NpaBindingRead(BaseModel):
     #: Имя сущности для витрины — документ, шаблон или пакет по-человечески,
     #: а не идентификатор.
     title: str
+    #: Срез-144 (разд. 19.4): по какой редакции связь сверяли в последний раз
+    #: и не разошлась ли она с действующей. ``stale`` — «не пересмотрена».
+    reviewed_revision_id: str | None = None
+    reviewed_revision_code: str | None = None
+    stale: bool = False

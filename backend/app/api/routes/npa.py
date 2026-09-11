@@ -5,6 +5,14 @@
 (``_IMPACT_WRITE_ROLES``). До среза-142 связи заводить было нечем, и оценка
 влияния считала по пустой таблице.
 
+Срез-144 (разд. 19.4, «уведомить → задачи → контроль»): связь помнит, по какой
+редакции её сверяли (``reviewed_revision_id``). Пока в реестре действует та же
+редакция — связь актуальна; вступила новая — связь «не пересмотрена»: попадает
+в Центр внимания арендатора, считается в задачи актуализации и ждёт кнопки
+«Пересмотрено» (``POST .../bindings/{id}/review``). Так владелец платформы,
+заводя редакцию в общий реестр, ничего не пишет в арендаторские таблицы —
+а арендатор всё равно узнаёт об изменении при следующем же входе.
+
 Реестр общий (``NpaAct`` — SharedModel, без tenant_id): один и тот же приказ
 Минтруда действует на всех арендаторов. Поэтому заводить акты и редакции
 может только владелец платформы — тот же гейт, что у кабинета арендаторов
@@ -292,6 +300,11 @@ async def create_npa_binding(
     )
     if duplicate is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "Связь с этой сущностью уже есть")
+    impact = NpaImpactService(session, str(tenant.id))
+    # Новую связь заводят по действующей редакции: сверять её не с чем, кроме
+    # текущего текста акта. Без редакций — None, и связь не бывает «не
+    # пересмотренной», пока владелец платформы не заведёт первую.
+    active = await impact.active_revision_for(act_id)
     binding = NPABinding(
         tenant_id=str(tenant.id),
         npa_id=act_id,
@@ -300,6 +313,7 @@ async def create_npa_binding(
         template_version_id=template_version_id or None,
         ref=payload.ref,
         context={},
+        reviewed_revision_id=active.id if active else None,
     )
     session.add(binding)
     try:
@@ -309,15 +323,69 @@ async def create_npa_binding(
         await session.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "Связь с этой сущностью уже есть") from exc
     await session.refresh(binding)
-    titles = await NpaImpactService(session, str(tenant.id)).binding_titles([binding])
+    return await _binding_read(impact, binding, active)
+
+
+async def _binding_read(
+    impact: NpaImpactService, binding: NPABinding, active: NpaRevision | None
+) -> NpaBindingRead:
+    titles = await impact.binding_titles([binding])
+    reviewed_code = None
+    if binding.reviewed_revision_id:
+        reviewed = await impact.session.get(NpaRevision, binding.reviewed_revision_id)
+        reviewed_code = reviewed.revision_code if reviewed else None
     return NpaBindingRead(
         id=binding.id,
         npa_id=binding.npa_id,
-        entity_type=payload.entity_type,
+        entity_type=str(getattr(binding.entity_type, "value", binding.entity_type)),
         entity_id=binding.entity_id,
         ref=binding.ref,
         title=titles.get(binding.id, binding.entity_id),
+        reviewed_revision_id=binding.reviewed_revision_id,
+        reviewed_revision_code=reviewed_code,
+        stale=active is not None and binding.reviewed_revision_id != active.id,
     )
+
+
+@router.post(
+    "/npa/{act_id}/bindings/{binding_id}/review",
+    response_model=NpaBindingRead,
+)
+@audit_operation("update", "npa_binding")
+async def review_npa_binding(
+    act_id: str,
+    binding_id: str,
+    session: SessionDep,
+    tenant: Tenant = Depends(get_tenant_record),
+    access=Depends(
+        abac(
+            _tenant_resource_id,
+            required_roles=_IMPACT_WRITE_ROLES,
+            action="review npa binding",
+        )
+    ),
+) -> NpaBindingRead:
+    """«Пересмотрено»: связь сверена по действующей редакции акта.
+
+    Повторный вызов безвреден — просто ещё раз запишет ту же редакцию.
+    """
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _ = access
+    binding = await session.scalar(
+        select(NPABinding).where(
+            NPABinding.id == binding_id,
+            NPABinding.npa_id == act_id,
+            NPABinding.tenant_id == str(tenant.id),
+        )
+    )
+    if binding is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Связь не найдена")
+    impact = NpaImpactService(session, str(tenant.id))
+    active = await impact.active_revision_for(act_id)
+    binding.reviewed_revision_id = active.id if active else None
+    await session.commit()
+    await session.refresh(binding)
+    return await _binding_read(impact, binding, active)
 
 
 @router.delete(

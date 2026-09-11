@@ -892,6 +892,7 @@
     "POST /api/v1/notifications/templates",
     "POST /api/v1/npa",
     "POST /api/v1/npa/{act_id}/bindings",
+    "POST /api/v1/npa/{act_id}/bindings/{binding_id}/review",
     "POST /api/v1/npa/{act_id}/impact/tasks",
     "POST /api/v1/npa/{act_id}/revisions",
     "POST /api/v1/offboarding/cancel",
@@ -2046,6 +2047,7 @@
     "retry_step_compat_api_v1_jobs__job_id__retry_step_post",
     "retry_step_run_api_v1_pipelines_runs__run_id__steps__step_run_id__retry_post",
     "return_issue_endpoint_api_v1_ppe_issues__issue_id__return_post",
+    "review_npa_binding_api_v1_npa__act_id__bindings__binding_id__review_post",
     "revoke_access_api_v1_managed_clients__mcid__access__grant_id__delete",
     "revoke_api_token_api_v1_api_tokens__token_id__delete",
     "revoke_certificate_api_v1_training_certificates__item_id__revoke_post",
@@ -3482,7 +3484,8 @@
       "overdue_deadlines": "integer",
       "pending_sync_batches": "integer",
       "failed_sync_batches": "integer",
-      "readiness_blockers": "integer"
+      "readiness_blockers": "integer",
+      "stale_npa_bindings": "integer"
     },
     "AttestationCreate": {
       "person_id": "string",
@@ -7397,7 +7400,10 @@
       "entity_type": "string",
       "entity_id": "string",
       "ref": "null|string",
-      "title": "string"
+      "title": "string",
+      "reviewed_revision_id": "null|string",
+      "reviewed_revision_code": "null|string",
+      "stale": "boolean"
     },
     "NpaClauseCreate": {
       "code": "string",

@@ -45,4 +45,14 @@ export const npaApi = {
   deleteBinding: async (actId: string, bindingId: string): Promise<void> => {
     await apiClient.delete(`/npa/${actId}/bindings/${bindingId}`);
   },
+  /** Срез-144: «Пересмотрено» — связь сверена по действующей редакции акта. */
+  reviewBinding: async (
+    actId: string,
+    bindingId: string,
+  ): Promise<NpaBindingDto> => {
+    const { data } = await apiClient.post<NpaBindingDto>(
+      `/npa/${actId}/bindings/${bindingId}/review`,
+    );
+    return data;
+  },
 };

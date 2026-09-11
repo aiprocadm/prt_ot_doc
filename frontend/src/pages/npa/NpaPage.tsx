@@ -33,6 +33,9 @@ type NpaDetail = {
   bindings: Record<string, string[]>;
   /** Срез-142: связи по одной, с именами — для списка и кнопки «Отвязать». */
   binding_items?: NpaBindingDto[];
+  /** Срез-144: сколько связей не пересмотрено после новой редакции. */
+  stale_bindings?: number;
+  active_revision_id?: string | null;
   summary: Record<string, number>;
   tasks_to_create: Array<{ code: string; title: string; count: number }>;
 };
@@ -103,6 +106,17 @@ const NpaPage = () => {
       toast.success("Задачи обновления созданы");
     } catch {
       toast.error("Не удалось создать задачи обновления");
+    }
+  };
+
+  const review = async (binding: NpaBindingDto) => {
+    if (!selectedId) return;
+    try {
+      await npaApi.reviewBinding(selectedId, binding.id);
+      toast.success("Связь пересмотрена");
+      loadDetail(selectedId);
+    } catch {
+      toast.error("Не удалось отметить связь пересмотренной");
     }
   };
 
@@ -265,6 +279,16 @@ const NpaPage = () => {
                         </div>
                       ))}
                   </div>
+                  {(detail.stale_bindings ?? 0) > 0 ? (
+                    <div
+                      className="mt-2 rounded border border-amber-300 bg-amber-50 p-3 text-sm"
+                      data-testid="npa-stale-summary"
+                    >
+                      Требуют пересмотра: {detail.stale_bindings}. В реестре
+                      вступила новая редакция — сверьте связанные документы и
+                      нажмите «Пересмотрено».
+                    </div>
+                  ) : null}
                   <div className="mt-3 space-y-2">
                     {(detail.binding_items ?? []).length === 0 ? (
                       <div className="text-sm text-muted-foreground">
@@ -286,14 +310,36 @@ const NpaPage = () => {
                               binding.entity_type}
                             {binding.ref ? ` · ${binding.ref}` : ""}
                           </div>
+                          {binding.stale ? (
+                            <div
+                              className="text-xs text-amber-700"
+                              data-testid="npa-binding-stale"
+                            >
+                              Не пересмотрена
+                              {binding.reviewed_revision_code
+                                ? ` (сверяли по ред. ${binding.reviewed_revision_code})`
+                                : ""}
+                            </div>
+                          ) : null}
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => void unbind(binding)}
-                        >
-                          Отвязать
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          {binding.stale ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => void review(binding)}
+                            >
+                              Пересмотрено
+                            </Button>
+                          ) : null}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => void unbind(binding)}
+                          >
+                            Отвязать
+                          </Button>
+                        </div>
                       </div>
                     ))}
                   </div>
