@@ -17,7 +17,11 @@ settings = get_settings()
 config.set_main_option("sqlalchemy.url", settings.alembic_database_url)
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # Срез-146: по умолчанию fileConfig ВЫКЛЮЧАЕТ все уже созданные логгеры
+    # (`disable_existing_loggers=True`). В одном процессе с тестами это гасит
+    # `app.services.webhooks` и прочие логгеры продукта после первого
+    # `alembic upgrade` на PostgreSQL — и caplog дальше ничего не ловит.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 
 target_metadata = TARGET_METADATA
