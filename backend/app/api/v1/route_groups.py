@@ -24,6 +24,7 @@ from app.api.routes import (
     committees,
     companies,
     compliance,
+    compliance_requirements,
     contractors,
     contracts,
     dashboard,
@@ -166,6 +167,7 @@ COMPLIANCE_AND_ADMIN_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
     (committees.router, {"tags": ["committees"]}),
     (sout.router, {"tags": ["sout"]}),
     (compliance.router, {}),
+    (compliance_requirements.router, {}),
     (billing.router, {}),
 )
 

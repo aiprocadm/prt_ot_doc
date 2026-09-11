@@ -87,6 +87,8 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "companies",
         "company",
         "compliance_deadlines",
+        "compliance_requirement",
+        "compliance_requirement_evidence",
         "contract",
         "contractor_document_requirement",
         "contractor_documents",

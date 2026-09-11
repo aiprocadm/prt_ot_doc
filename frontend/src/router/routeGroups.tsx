@@ -62,6 +62,7 @@ import {
   MobileIssuePage,
   NotificationsPage,
   NpaPage,
+  RequirementsPage,
   OutboxPage,
   PacksPage,
   QuickPackWizardPage,
@@ -535,7 +536,16 @@ export const buildProtectedRouteGroups = (): ReactElement[] => {
     },
     {
       permission: PERMISSIONS.NPA_VIEW,
-      routes: [<Route key="/npa" path="/npa" element={<NpaPage />} />],
+      routes: [
+        <Route key="/npa" path="/npa" element={<NpaPage />} />,
+        // Срез-145 (B.18 разд. 19.2): реестр требований — обязанности,
+        // выведенные из актов; право то же, что у реестра НПА.
+        <Route
+          key="/npa/requirements"
+          path="/npa/requirements"
+          element={<RequirementsPage />}
+        />,
+      ],
     },
     {
       permission: PERMISSIONS.AUDIT_VIEW,

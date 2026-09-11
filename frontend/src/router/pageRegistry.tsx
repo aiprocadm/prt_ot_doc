@@ -109,6 +109,9 @@ export const AdminLayoutPresetsPage = lazy(
   () => import("@/pages/AdminLayoutPresets/AdminLayoutPresetsPage"),
 );
 export const NpaPage = lazy(() => import("@/pages/npa/NpaPage"));
+export const RequirementsPage = lazy(
+  () => import("@/pages/npa/RequirementsPage"),
+);
 export const AuditPage = lazy(() => import("@/pages/audit/AuditPage"));
 export const SettingsPage = lazy(() => import("@/pages/settings/SettingsPage"));
 export const ReportsPage = lazy(() => import("@/pages/reports/ReportsPage"));

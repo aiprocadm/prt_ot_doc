@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { npaApi } from "@/api/npa";
@@ -55,6 +55,8 @@ const SUMMARY_LABELS: Record<string, string> = {
   workflows: "Маршруты",
   roles: "Роли",
   sites: "Площадки",
+  // Срез-145: активные требования реестра, выведенные из акта.
+  requirements: "Требования",
 };
 
 const NpaPage = () => {
@@ -278,6 +280,18 @@ const NpaPage = () => {
                           <span className="font-medium">{value}</span>
                         </div>
                       ))}
+                  </div>
+                  <div className="mt-2 text-sm">
+                    <Link
+                      className="underline"
+                      to={`/npa/requirements?npa_id=${detail.act.id}`}
+                      data-testid="npa-requirements-link"
+                    >
+                      Требования из акта
+                      {(detail.summary.requirements ?? 0) > 0
+                        ? ` (${detail.summary.requirements})`
+                        : ""}
+                    </Link>
                   </div>
                   {(detail.stale_bindings ?? 0) > 0 ? (
                     <div
