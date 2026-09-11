@@ -155,12 +155,21 @@ class NPABinding(TenantBaseModel):
     shared-базу SQLAlchemy не разрешает при ``create_all`` до регистрации зеркала.
     Настоящий внешний ключ на ``npa_act.id`` держит PostgreSQL — его заводит
     миграция ``20260910_b18_npabinding_npa_act``.
+
+    Срез-144 (разд. 19.4): ``reviewed_revision_id`` — редакция акта, по которой
+    арендатор в последний раз сверил цель связи. Ставится при создании связи
+    (действующая на тот момент редакция) и кнопкой «Пересмотрено». Когда
+    владелец платформы публикует новую редакцию, а здесь всё ещё старая — связь
+    «не пересмотрена»: это и есть уведомление арендатору (Центр внимания) и
+    основание для задач актуализации. Столбец тоже без ``ForeignKey`` — ссылка
+    в shared-таблицу ``npa_revision``.
     """
 
     template_version_id: Mapped[str | None] = mapped_column(
         ForeignKey("templateversion.id"), nullable=True, index=True
     )
     npa_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    reviewed_revision_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     ref: Mapped[str | None] = mapped_column(String(255))
     entity_type: Mapped[NpaBindingTarget] = mapped_column(
         Enum(

@@ -76,6 +76,13 @@ export interface NpaBindingDto {
   ref?: string | null;
   /** Имя сущности по-человечески: «Инструкция · ООО Ромашка», «Шаблон v3», имя пакета. */
   title: string;
+  /**
+   * Срез-144 (разд. 19.4): по какой редакции связь сверяли в последний раз и
+   * не разошлась ли она с действующей. `stale` — «не пересмотрена».
+   */
+  reviewed_revision_id?: string | null;
+  reviewed_revision_code?: string | null;
+  stale?: boolean;
 }
 
 export interface NpaBindingCreateDto {

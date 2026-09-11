@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 
 from sqlalchemy import select
@@ -19,6 +19,50 @@ from app.models.templates import TemplateVersion
 def _binding_kind(row: NPABinding) -> str:
     entity_type = row.entity_type
     return str(entity_type.value if hasattr(entity_type, "value") else entity_type)
+
+
+def _today() -> date:
+    # «Сегодня» — по UTC, как везде в продукте (срез-140), а не по часовому
+    # поясу процесса.
+    return datetime.now(tz=timezone.utc).date()
+
+
+def _active_revision(revisions: list[NpaRevision], today: date) -> NpaRevision | None:
+    """Действующая редакция: первая по свежести, чей срок покрывает ``today``.
+
+    Редакция с датой вступления в будущем ещё не действует — это и есть
+    «черновик → публикация» из разд. 19.4: владелец платформы заводит её
+    заранее, а арендаторы узнают о ней в день вступления в силу.
+    """
+    return next(
+        (
+            r
+            for r in revisions
+            if (r.effective_from is None or r.effective_from <= today)
+            and (r.effective_to is None or r.effective_to >= today)
+        ),
+        None,
+    )
+
+
+def _is_stale(row: NPABinding, reference: NpaRevision | None) -> bool:
+    """Связь не пересмотрена: сверяли не по той редакции, что действует.
+
+    Без действующей редакции пересматривать нечего — связь актуальна.
+    """
+    return reference is not None and row.reviewed_revision_id != reference.id
+
+
+@dataclass(slots=True)
+class StaleAct:
+    """Акт, у которого есть непересмотренные связи арендатора — для Центра внимания."""
+
+    act_id: str
+    code: str
+    title: str
+    revision_code: str
+    stale: int
+    total: int
 
 
 @dataclass(slots=True)
@@ -46,18 +90,7 @@ class NpaImpactService:
         selected_revision = (
             next((r for r in revisions if r.id == revision_id), None) if revision_id else None
         )
-        # «Сегодня» — по UTC, как везде в продукте (срез-140), а не по часовому
-        # поясу процесса.
-        today = datetime.now(tz=timezone.utc).date()
-        active_revision = selected_revision or next(
-            (
-                r
-                for r in revisions
-                if (r.effective_from is None or r.effective_from <= today)
-                and (r.effective_to is None or r.effective_to >= today)
-            ),
-            None,
-        )
+        active_revision = selected_revision or _active_revision(revisions, _today())
         binding_rows = (
             (
                 await self.session.execute(
@@ -117,6 +150,14 @@ class NpaImpactService:
         }
         summary = {key: len(value) for key, value in linked.items()}
         titles = await self.binding_titles(binding_rows)
+        # Срез-144 (разд. 19.4): задачи актуализации — только по связям, которые
+        # не пересматривали после действующей (или выбранной) редакции. Без
+        # редакций у акта считается всё, как раньше: сверять не с чем, а
+        # зависимости назвать надо.
+        stale_rows = [row for row in binding_rows if _is_stale(row, active_revision)]
+        task_rows = stale_rows if active_revision is not None else binding_rows
+        task_summary = self._summary_of(task_rows)
+        revision_codes = {r.id: r.revision_code for r in revisions}
         return {
             "act": {
                 "id": act.id,
@@ -150,20 +191,125 @@ class NpaImpactService:
                     "entity_id": row.entity_id,
                     "ref": row.ref,
                     "title": titles.get(row.id, row.entity_id),
+                    "reviewed_revision_id": row.reviewed_revision_id,
+                    "reviewed_revision_code": revision_codes.get(row.reviewed_revision_id or ""),
+                    "stale": _is_stale(row, active_revision),
                 }
                 for row in sorted(binding_rows, key=lambda r: (_binding_kind(r), r.created_at))
             ],
             "summary": summary,
+            "stale_bindings": len(stale_rows),
             "tasks_to_create": [
                 {
                     "code": f"npa-update-{key}",
                     "title": f"Актуализировать зависимости НПА: {key}",
                     "count": count,
                 }
-                for key, count in summary.items()
+                for key, count in task_summary.items()
                 if count > 0
             ],
         }
+
+    @staticmethod
+    def _summary_of(rows: list[NPABinding]) -> dict[str, int]:
+        """Те же ключи, что у ``summary``, но по произвольному подмножеству связей."""
+        from_context = {
+            "risks": "risk_id",
+            "checklists": "checklist_id",
+            "workflows": "workflow_definition_id",
+            "roles": "role_code",
+            "sites": "site_id",
+        }
+        counts = {
+            "templates": len({r.entity_id for r in rows if _binding_kind(r) == "template_version"}),
+            "packages": len({r.entity_id for r in rows if _binding_kind(r) == "pack"}),
+            "documents": len({r.entity_id for r in rows if _binding_kind(r) == "document"}),
+        }
+        for key, context_key in from_context.items():
+            counts[key] = len(
+                {
+                    str((r.context or {}).get(context_key))
+                    for r in rows
+                    if (r.context or {}).get(context_key)
+                }
+            )
+        return counts
+
+    async def active_revision_for(self, act_id: str) -> NpaRevision | None:
+        """Действующая сегодня редакция акта — то, «по чему» сверяют связь."""
+        revisions = (
+            (
+                await self.session.execute(
+                    select(NpaRevision)
+                    .where(NpaRevision.act_id == act_id)
+                    .order_by(
+                        NpaRevision.effective_from.desc().nullslast(), NpaRevision.created_at.desc()
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return _active_revision(list(revisions), _today())
+
+    async def stale_acts(self) -> list[StaleAct]:
+        """Акты с непересмотренными связями арендатора — по одному на акт.
+
+        Это «уведомление» разд. 19.4 в форме, которая не требует писать в чужие
+        арендаторские таблицы из-под владельца платформы: арендатор видит факт
+        в своём Центре внимания при следующем же запросе.
+        """
+        binding_rows = (
+            (
+                await self.session.execute(
+                    select(NPABinding).where(NPABinding.tenant_id == self.tenant_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if not binding_rows:
+            return []
+        by_act: dict[str, list[NPABinding]] = {}
+        for row in binding_rows:
+            by_act.setdefault(row.npa_id, []).append(row)
+        acts = (
+            (
+                await self.session.execute(
+                    select(NpaAct)
+                    .options(selectinload(NpaAct.revisions))
+                    .where(NpaAct.id.in_(by_act))
+                    .order_by(NpaAct.code)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        today = _today()
+        result: list[StaleAct] = []
+        for act in acts:
+            revisions = sorted(
+                act.revisions,
+                key=lambda r: (r.effective_from or date.min, r.created_at),
+                reverse=True,
+            )
+            active = _active_revision(revisions, today)
+            if active is None:
+                continue
+            rows = by_act[act.id]
+            stale = sum(1 for row in rows if _is_stale(row, active))
+            if stale:
+                result.append(
+                    StaleAct(
+                        act_id=act.id,
+                        code=act.code,
+                        title=act.title,
+                        revision_code=active.revision_code,
+                        stale=stale,
+                        total=len(rows),
+                    )
+                )
+        return result
 
     async def binding_titles(self, rows: list[NPABinding]) -> dict[str, str]:
         """Имена целей связей: документ — «шаблон · организация», версия шаблона —
