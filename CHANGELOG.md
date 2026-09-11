@@ -1,5 +1,42 @@
 # CHANGELOG
 
+## 2026-09-11 (fix/biz54-57-slice-146 — alembic гасил логгеры продукта внутри прогона тестов)
+
+### Зачем
+
+Первый полный прогон на `main` с `TEST_PG_ADMIN_URL` (4848f10a, после
+среза-144; 18:23–21:00 UTC) — **7270 passed, 29 skipped, 2 failed**. Оба
+красных — `tests/test_webhook_routing.py`: `caplog` не видит
+`webhook.skip` / `webhook.invalid_url`. Поодиночке файл зелёный; в паре с
+любым тестом, который гоняет `alembic upgrade` на PostgreSQL
+(`tests/test_rls_coverage.py` идёт по алфавиту раньше), — красный.
+Причина: `backend/app/migrations/env.py` вызывает `fileConfig(alembic.ini)`
+с умолчанием `disable_existing_loggers=True` — это ВЫКЛЮЧАЕТ все логгеры,
+созданные к тому моменту в процессе, в том числе `app.services.webhooks`;
+дальше он молчит до конца прогона. Раньше это не проявлялось: без
+переменной все PG-тесты пропускались, и `env.py` в процессе тестов не
+исполнялся ни разу.
+
+### Сделано
+
+- `env.py`: `fileConfig(..., disable_existing_loggers=False)` — настройка
+  логов alembic не трогает чужие логгеры (стандартная рекомендация alembic).
+
+### Проверка
+
+`tests/test_rls_coverage.py` + `tests/test_webhook_routing.py` +
+`backend/tests/test_alembic_postgres_upgrade.py` с `TEST_PG_ADMIN_URL` —
+было 2 failed, стало **10 passed**. Сторожа миграций (safety, cross-branch,
+enum, expand/contract, docker-compose) — 32 passed, 2 skipped.
+`ruff`/`black` чисты.
+
+### Урок
+
+Сторож, который включается переменной окружения, при первом же включении
+может сломать не себя, а СОСЕДЕЙ: побочные эффекты (конфиг логов, глобальные
+синглтоны) живут до конца процесса. Красные после включения нового сторожа
+сначала искать в том, что он делает с процессом, а не в упавших тестах.
+
 ## 2026-09-11 (feat/biz54-57-slice-145 — реестр требований: что арендатор обязан делать по НПА; B.18 разд. 19.2)
 
 ### Зачем
