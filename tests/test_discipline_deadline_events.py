@@ -61,7 +61,13 @@ from app.services.events import EventType
 
 pytestmark = pytest.mark.asyncio
 
-TODAY = date.today()
+#: Одни часы у проверки и у продукта (срез-143). Модуль собирается за часы
+#: до запуска теста, а полный прогон переезжает через 00:00 UTC: «сегодня»,
+#: замороженное на сборе, и «сегодня» обхода тогда разные дни — полный прогон
+#: 2026-09-11 (23:23–01:46 UTC) дал пять `11 == 10`. Поэтому обход получает
+#: ``now=NOW`` явно, и все сроки в семенах считаются от той же метки.
+NOW = datetime.now(timezone.utc)
+TODAY = NOW.date()
 EVENT = EventType.DISCIPLINE_DEADLINE_OVERDUE.value
 
 
@@ -119,7 +125,7 @@ async def _events(sessionmaker, tenant_id: str) -> list[Outbox]:
 
 async def _run(sessionmaker, tenant_id: str):
     async with sessionmaker() as session:
-        outcome = await emit_overdue_deadline_events(session, tenant_id=tenant_id)
+        outcome = await emit_overdue_deadline_events(session, tenant_id=tenant_id, now=NOW)
         await session.commit()
         return outcome
 
@@ -409,7 +415,7 @@ async def test_просроченное_назначение_становитс�
     """Срез-78: срок назначения (срез-77) — тот же обход; модуль не нужен."""
 
     tenant_id = await _tenant(sessionmaker, data_factory, modules=())
-    now = datetime.now(timezone.utc)
+    now = NOW
     async with sessionmaker() as session:
         company = Company(tenant_id=tenant_id, name="ООО Стройка")
         program = TrainingProgram(
@@ -598,7 +604,7 @@ async def test_инструктажи_становятся_событиями_п
     """
 
     tenant_id = await _tenant(sessionmaker, data_factory, modules=("fire_safety",))
-    now = datetime.now(timezone.utc)
+    now = NOW
     async with sessionmaker() as session:
         company = Company(tenant_id=tenant_id, name="ООО Склад")
         session.add(company)
