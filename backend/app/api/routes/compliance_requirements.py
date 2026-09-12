@@ -32,6 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
+from app.core.role_labels import ROLE_CODES, role_label, role_options
 from app.core.security import AccessContext, abac, rbac
 from app.core.tenant_validation import TenantContextValidator
 from app.domains.npa.requirements import RequirementsService, days_left, is_overdue, today
@@ -47,6 +48,7 @@ from app.schemas.compliance_requirements import (
     ComplianceRequirementCreate,
     ComplianceRequirementDetail,
     ComplianceRequirementListResponse,
+    ComplianceRequirementOptions,
     ComplianceRequirementRead,
     ComplianceRequirementUpdate,
 )
@@ -114,6 +116,7 @@ def _read(
     act = refs["acts"].get(row.npa_id or "", {})
     clause = refs["clauses"].get(row.clause_id or "", {})
     owner = refs["users"].get(row.owner_user_id or "", {})
+    site = refs["sites"].get(row.site_id or "", {})
     return {
         "id": row.id,
         "code": row.code,
@@ -125,7 +128,9 @@ def _read(
         "clause_id": row.clause_id,
         "clause_code": clause.get("code"),
         "role_code": row.role_code,
+        "role_label": role_label(row.role_code),
         "site_id": row.site_id,
+        "site_name": site.get("name"),
         "process_code": row.process_code,
         "owner_user_id": row.owner_user_id,
         "owner_name": owner.get("name"),
@@ -145,8 +150,17 @@ def _read(
 
 async def _validate_links(session: AsyncSession, tenant_id: str, payload: dict[str, Any]) -> None:
     """Ссылки заявки должны существовать: акт и пункт — в общем реестре,
-    площадка и ответственный — у этого арендатора. Иначе 404 с понятным
-    словом, а не 500 от внешнего ключа на PostgreSQL и молчание на SQLite."""
+    площадка (живая, не снесённая) и ответственный — у этого арендатора. Иначе
+    404 с понятным словом, а не 500 от внешнего ключа на PostgreSQL и молчание
+    на SQLite. Роль — закрытый словарь ``RoleEnum`` (срез-147): выдуманная
+    роль отвергается на записи, иначе «к кому относится» было бы свободной
+    строкой, по которой ничего не отобрать."""
+    role_code = payload.get("role_code")
+    if role_code and role_code not in ROLE_CODES:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            f"Роли «{role_code}» нет в системе — выберите роль из справочника",
+        )
     npa_id = payload.get("npa_id")
     if npa_id and await session.get(NpaAct, npa_id) is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "NPA act not found")
@@ -158,7 +172,9 @@ async def _validate_links(session: AsyncSession, tenant_id: str, payload: dict[s
     site_id = payload.get("site_id")
     if site_id:
         site = await session.scalar(
-            select(Site.id).where(Site.id == site_id, Site.tenant_id == tenant_id)
+            select(Site.id).where(
+                Site.id == site_id, Site.tenant_id == tenant_id, Site.deleted_at.is_(None)
+            )
         )
         if site is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Site not found")
@@ -283,6 +299,33 @@ async def create_requirement(
         ) from exc
     service = RequirementsService(session, str(tenant.id))
     return await _detail(service, await _reload(session, service, row), today())
+
+
+@router.get("/options", response_model=ComplianceRequirementOptions)
+async def requirement_options(
+    session: SessionDep,
+    tenant: Tenant = Depends(get_tenant_record),
+    access: AccessContext = _WriteAccess,
+) -> ComplianceRequirementOptions:
+    """Справочники формы требования — тем, кто требования заводит (срез-147).
+
+    Ответственный, площадка и роль ВЫБИРАЮТСЯ, а не впечатываются. Ручки
+    ``/admin/users`` и ``/sites`` — административные (управление доступом и
+    объектами) и отвечают специалисту по ОТ 403: без своей ручки поле
+    «Ответственный» у него было пустым, а площадку нельзя было выбрать вовсе
+    (ограничение среза-145). Отдаётся ровно то, что нужно для выбора: имя и
+    роль пользователя, имя площадки с компанией, роли словами — без почты,
+    атрибутов и прав. Объявлена раньше ``/{requirement_id}``: иначе слово
+    «options» читалось бы как идентификатор требования.
+    """
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _ = access
+    service = RequirementsService(session, str(tenant.id))
+    return ComplianceRequirementOptions(
+        owners=await service.owner_options(),
+        sites=await service.site_options(),
+        roles=role_options(),
+    )
 
 
 @router.get("/{requirement_id}", response_model=ComplianceRequirementDetail)

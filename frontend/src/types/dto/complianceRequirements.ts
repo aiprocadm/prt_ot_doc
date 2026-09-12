@@ -4,6 +4,9 @@
  *
  * `overdue` и `days_left` считает сервер по UTC-«сегодня»: витрина их не
  * пересчитывает, иначе вечером по Москве «сегодня» разошлось бы с сервером.
+ * Имена (`owner_name`, `site_name`, `role_label`) тоже приходят с сервера:
+ * витрина ничего не знает о пользователях и площадках, кроме того, что ей
+ * отдали для выбора.
  */
 
 export type RequirementSeverity = "low" | "medium" | "high" | "critical";
@@ -31,7 +34,11 @@ export interface ComplianceRequirementDto {
   clause_id?: string | null;
   clause_code?: string | null;
   role_code?: string | null;
+  /** Роль словами (срез-147); код — для машин. */
+  role_label?: string | null;
   site_id?: string | null;
+  /** Имя площадки (срез-147): без него привязка к объекту невидима. */
+  site_name?: string | null;
   process_code?: string | null;
   owner_user_id?: string | null;
   owner_name?: string | null;
@@ -77,6 +84,12 @@ export interface ComplianceRequirementCreateDto {
   severity?: RequirementSeverity;
 }
 
+/** Правка (срез-147): всё, кроме кода — он естественный ключ арендатора. */
+export type ComplianceRequirementUpdateDto = Omit<
+  ComplianceRequirementCreateDto,
+  "code"
+>;
+
 export interface ComplianceEvidenceCreateDto {
   document_id?: string | null;
   note?: string | null;
@@ -87,4 +100,31 @@ export interface ComplianceRequirementFiltersDto {
   npa_id?: string;
   status?: RequirementStatus;
   overdue?: boolean;
+}
+
+/** Кандидат в ответственные: только то, что нужно, чтобы выбрать человека. */
+export interface RequirementOwnerOptionDto {
+  id: string;
+  name: string;
+  role: string;
+  role_label: string;
+}
+
+export interface RequirementSiteOptionDto {
+  id: string;
+  name: string;
+  /** Компания площадки: у аутсорсера «Цех №1» бывает у нескольких клиентов. */
+  company_name: string;
+}
+
+export interface RequirementRoleOptionDto {
+  code: string;
+  label: string;
+}
+
+/** Справочники формы требования — `GET /compliance/requirements/options` (срез-147). */
+export interface ComplianceRequirementOptionsDto {
+  owners: RequirementOwnerOptionDto[];
+  sites: RequirementSiteOptionDto[];
+  roles: RequirementRoleOptionDto[];
 }

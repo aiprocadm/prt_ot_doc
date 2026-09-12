@@ -210,7 +210,7 @@ const RequirementsPage = () => {
             <RequirementFormDialog
               acts={acts}
               trigger={<Button className="ml-auto">Добавить требование</Button>}
-              onCreated={load}
+              onSaved={load}
             />
           ) : null}
         </CardContent>
@@ -259,9 +259,17 @@ const RequirementsPage = () => {
                         <Badge variant={severityVariant(item.severity)}>
                           {SEVERITY_LABELS[item.severity]}
                         </Badge>
-                        {item.evidence_count > 0
-                          ? `доказательств: ${item.evidence_count}`
-                          : null}
+                        {/* Срез-147: к чему относится — площадка и роль словами,
+                            без отдельных колонок (таблица уже на бюджете). */}
+                        {item.site_name ? (
+                          <span>площадка: {item.site_name}</span>
+                        ) : null}
+                        {item.role_label ? (
+                          <span>роль: {item.role_label}</span>
+                        ) : null}
+                        {item.evidence_count > 0 ? (
+                          <span>доказательств: {item.evidence_count}</span>
+                        ) : null}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -298,6 +306,16 @@ const RequirementsPage = () => {
                                 </Button>
                               }
                               onConfirmed={load}
+                            />
+                            <RequirementFormDialog
+                              acts={acts}
+                              initialData={item}
+                              trigger={
+                                <Button variant="ghost" size="sm">
+                                  Изменить
+                                </Button>
+                              }
+                              onSaved={load}
                             />
                             <Button
                               variant="ghost"

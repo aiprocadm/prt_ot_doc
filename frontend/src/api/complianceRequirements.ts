@@ -5,32 +5,11 @@ import type {
   ComplianceRequirementDetailDto,
   ComplianceRequirementFiltersDto,
   ComplianceRequirementListDto,
+  ComplianceRequirementOptionsDto,
+  ComplianceRequirementUpdateDto,
 } from "@/types/dto/complianceRequirements";
 
 const BASE = "/compliance/requirements";
-
-export interface OwnerOptionDto {
-  id: string;
-  full_name: string;
-  email: string;
-}
-
-/**
- * Кандидаты в ответственные — активные пользователи арендатора. Ручка
- * админская: специалисту по ОТ она ответит 403, и тогда список пуст — поле
- * «Ответственный» остаётся незаполненным, а форма не падает.
- */
-export const listOwnerOptions = async (): Promise<OwnerOptionDto[]> => {
-  try {
-    const { data } = await apiClient.get<{ items?: OwnerOptionDto[] }>(
-      "/admin/users",
-      { params: { is_active: true, limit: 200 } },
-    );
-    return data.items ?? [];
-  } catch {
-    return [];
-  }
-};
 
 /** Срез-145 (B.18 разд. 19.2): реестр требований — обязательное ядро арендатора. */
 export const complianceRequirementsApi = {
@@ -46,6 +25,17 @@ export const complianceRequirementsApi = {
     });
     return data;
   },
+  /**
+   * Справочники формы (срез-147): кандидаты в ответственные, площадки и роли —
+   * своя ручка для ролей записи. Раньше форма ходила в админскую `/admin/users`
+   * и у специалиста по ОТ получала 403, а площадку не давала выбрать вовсе.
+   */
+  options: async (): Promise<ComplianceRequirementOptionsDto> => {
+    const { data } = await apiClient.get<ComplianceRequirementOptionsDto>(
+      `${BASE}/options`,
+    );
+    return data;
+  },
   get: async (id: string): Promise<ComplianceRequirementDetailDto> => {
     const { data } = await apiClient.get<ComplianceRequirementDetailDto>(
       `${BASE}/${id}`,
@@ -57,6 +47,17 @@ export const complianceRequirementsApi = {
   ): Promise<ComplianceRequirementDetailDto> => {
     const { data } = await apiClient.post<ComplianceRequirementDetailDto>(
       BASE,
+      payload,
+    );
+    return data;
+  },
+  /** Правка (срез-147): код и статус не меняются — код ключ, статус меняют «Исполнено»/«Снять». */
+  update: async (
+    id: string,
+    payload: ComplianceRequirementUpdateDto,
+  ): Promise<ComplianceRequirementDetailDto> => {
+    const { data } = await apiClient.patch<ComplianceRequirementDetailDto>(
+      `${BASE}/${id}`,
       payload,
     );
     return data;

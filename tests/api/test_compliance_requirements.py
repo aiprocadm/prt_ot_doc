@@ -24,7 +24,7 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
@@ -33,6 +33,7 @@ from sqlalchemy import select
 
 from app.core.config import get_settings
 from app.models.identity import User
+from app.models.master_data import Site
 from app.models.models import RoleEnum
 
 BASE = "/api/v1/compliance/requirements"
@@ -324,3 +325,110 @@ async def test_центр_внимания_показывает_просроче
     attention = (await async_client.get(ATTENTION, headers=headers)).json()
     assert _requirement_items(attention, overdue_critical["id"]) == []
     assert attention["summary"]["overdue_requirements"] == 1
+
+
+@pytest.mark.anyio
+async def test_справочник_формы_открыт_специалисту_а_роль_и_площадка_проверяются(
+    async_client: AsyncClient, make_auth_headers, sessionmaker, data_factory
+) -> None:
+    """Срез-147: витрина 19.2 доводится до роли, которая реестр ведёт.
+
+    Специалист по ОТ заводит требования, но административные справочники
+    (пользователи, площадки) ему закрыты — ответственного было не выбрать,
+    площадку — не привязать. Своя ручка отдаёт только нужное для выбора;
+    роль — закрытый словарь; снесённая площадка не привязывается.
+    """
+    specialist = await make_auth_headers(RoleEnum.OT_SPECIALIST)
+    worker = await make_auth_headers(
+        RoleEnum.WORKER, email="candidate-worker-requirements@example.com"
+    )
+    worker_id = await _user_id(sessionmaker, "candidate-worker-requirements@example.com")
+
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        company = await data_factory.create_company(
+            tenant=tenant, name="АКМЕ Требования", session=session
+        )
+        site = Site(tenant_id=tenant.id, company_id=company.id, name="Цех требований")
+        gone = Site(
+            tenant_id=tenant.id,
+            company_id=company.id,
+            name="Снесённый цех",
+            deleted_at=datetime.now(tz=timezone.utc),
+        )
+        session.add_all([site, gone])
+        await session.flush()
+        site_id, gone_id = site.id, gone.id
+        await session.commit()
+
+    # Почему нужна своя ручка: административные справочники специалисту закрыты.
+    assert (await async_client.get("/api/v1/admin/users", headers=specialist)).status_code == 403
+    assert (await async_client.get("/api/v1/sites", headers=specialist)).status_code == 403
+
+    response = await async_client.get(f"{BASE}/options", headers=specialist)
+    assert response.status_code == 200, response.text
+    options = response.json()
+    owners = {item["id"]: item for item in options["owners"]}
+    assert owners[worker_id]["role"] == "worker"
+    assert owners[worker_id]["role_label"] == "Рабочий / сотрудник"
+    assert owners[worker_id]["name"]
+    # Ровно то, что нужно для выбора: без почты, атрибутов и прав.
+    assert set(owners[worker_id]) == {"id", "name", "role", "role_label"}
+    sites = {item["id"]: item for item in options["sites"]}
+    assert sites[site_id] == {
+        "id": site_id,
+        "name": "Цех требований",
+        "company_name": "АКМЕ Требования",
+    }
+    assert gone_id not in sites
+    roles = {item["code"]: item["label"] for item in options["roles"]}
+    assert roles["ot_specialist"] == "Специалист ОТ"
+    # Псевдонимы ролей человеку не предлагаются — две одинаковые строки в списке.
+    assert "employee" not in roles and "inspector_contractor" not in roles
+    assert set(roles) <= {role.value for role in RoleEnum}
+
+    # Работник требований не заводит — и справочник ему ни к чему.
+    forbidden = await async_client.get(f"{BASE}/options", headers=worker)
+    assert forbidden.status_code == 403, forbidden.text
+
+    # Роль — закрытый словарь: выдуманная отвергается словами и в базу не ложится.
+    bad_role = await async_client.post(
+        BASE,
+        json={"code": f"R-{uuid4().hex[:4]}", "title": "К начальнику", "role_code": "boss"},
+        headers=specialist,
+    )
+    assert bad_role.status_code == 422, bad_role.text
+    assert "boss" in bad_role.text
+
+    created = await _create(
+        async_client,
+        specialist,
+        site_id=site_id,
+        owner_user_id=worker_id,
+        role_code="worker",
+        next_due_at=FAR_FUTURE.isoformat(),
+    )
+    assert created["site_name"] == "Цех требований"
+    assert created["owner_user_id"] == worker_id
+    assert created["role_label"] == "Рабочий / сотрудник"
+    listing = (await async_client.get(BASE, headers=specialist)).json()
+    (item,) = [row for row in listing["items"] if row["id"] == created["id"]]
+    assert item["site_name"] == "Цех требований"
+
+    # Правка перевешивает роль, снимает площадку и ответственного.
+    patched = await async_client.patch(
+        f"{BASE}/{created['id']}",
+        json={"site_id": None, "owner_user_id": None, "role_code": "line_manager"},
+        headers=specialist,
+    )
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["site_id"] is None
+    assert patched.json()["site_name"] is None
+    assert patched.json()["owner_name"] is None
+    assert patched.json()["role_label"] == "Линейный руководитель"
+
+    # Снесённая площадка существует в базе, но привязать её нельзя — 404, как чужую.
+    dead_site = await async_client.patch(
+        f"{BASE}/{created['id']}", json={"site_id": gone_id}, headers=specialist
+    )
+    assert dead_site.status_code == 404, dead_site.text

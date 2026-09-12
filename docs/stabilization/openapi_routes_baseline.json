@@ -173,6 +173,7 @@
     "GET /api/v1/compliance/deadlines",
     "GET /api/v1/compliance/persons/{person_id}/summary",
     "GET /api/v1/compliance/requirements",
+    "GET /api/v1/compliance/requirements/options",
     "GET /api/v1/compliance/requirements/{requirement_id}",
     "GET /api/v1/contractors/compliance-summary",
     "GET /api/v1/contractors/document-requirements",
@@ -2041,6 +2042,7 @@
     "request_offboarding_api_v1_offboarding_request_post",
     "request_portal_otp_api_v1_portal_otp_post",
     "requeue_outbox_event_api_v1_admin_outbox_events__event_id__requeue_post",
+    "requirement_options_api_v1_compliance_requirements_options_get",
     "rerun_step_api_v1_jobs__job_id__steps__step__rerun_post",
     "resolve_conflict_api_v1_pwa_sync_conflicts__batch_id__resolve_post",
     "resolve_finding_api_v1_findings__finding_id__resolve_post",
@@ -2410,6 +2412,7 @@
     "ComplianceRequirementCreate",
     "ComplianceRequirementDetail",
     "ComplianceRequirementListResponse",
+    "ComplianceRequirementOptions",
     "ComplianceRequirementRead",
     "ComplianceRequirementUpdate",
     "ComplianceStatus",
@@ -3068,6 +3071,9 @@
     "RequestCreate",
     "RequestMessageCreate",
     "RequestPatch",
+    "RequirementOwnerOption",
+    "RequirementRoleOption",
+    "RequirementSiteOption",
     "RetryJobRequest",
     "RetryResponse",
     "RetryStepRequest",
@@ -4596,7 +4602,9 @@
       "clause_id": "null|string",
       "clause_code": "null|string",
       "role_code": "null|string",
+      "role_label": "null|string",
       "site_id": "null|string",
+      "site_name": "null|string",
       "process_code": "null|string",
       "owner_user_id": "null|string",
       "owner_name": "null|string",
@@ -4620,6 +4628,11 @@
       "overdue": "integer",
       "can_manage": "boolean"
     },
+    "ComplianceRequirementOptions": {
+      "owners": "array",
+      "sites": "array",
+      "roles": "array"
+    },
     "ComplianceRequirementRead": {
       "id": "string",
       "code": "string",
@@ -4631,7 +4644,9 @@
       "clause_id": "null|string",
       "clause_code": "null|string",
       "role_code": "null|string",
+      "role_label": "null|string",
       "site_id": "null|string",
+      "site_name": "null|string",
       "process_code": "null|string",
       "owner_user_id": "null|string",
       "owner_name": "null|string",
@@ -9524,6 +9539,21 @@
     "RequestPatch": {
       "status": "null|string",
       "priority": "null|string"
+    },
+    "RequirementOwnerOption": {
+      "id": "string",
+      "name": "string",
+      "role": "string",
+      "role_label": "string"
+    },
+    "RequirementRoleOption": {
+      "code": "string",
+      "label": "string"
+    },
+    "RequirementSiteOption": {
+      "id": "string",
+      "name": "string",
+      "company_name": "string"
     },
     "RetryJobRequest": {
       "step_key": "null|string",
