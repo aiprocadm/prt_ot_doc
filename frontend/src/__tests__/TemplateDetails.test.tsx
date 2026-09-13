@@ -46,7 +46,10 @@ describe("TemplateDetails", () => {
     name: "Приказ",
     description: "Шаблон приказа",
     template_type: "order",
-    scope: { type: "site", company_id: "cmp-1", site_id: "site-1" },
+    // Срез-162: сервер отдаёт область в поле `level` (схема
+    // TemplateScopeDTO). Фикстура присылала `type`, которого в ответе нет,
+    // и тем скрывала дефект: карточка не показывала область вовсе.
+    scope: { level: "site", company_id: "cmp-1", site_id: "site-1" },
     version: 1,
     created_at: "2025-01-01T00:00:00Z",
     updated_at: "2025-01-01T00:00:00Z",
@@ -85,6 +88,12 @@ describe("TemplateDetails", () => {
     previewVersionMock.mockReset();
     vi.mocked(toast.success).mockReset();
     vi.mocked(toast.error).mockReset();
+  });
+
+  it("показывает область применения из поля сервера (срез-162)", () => {
+    render(<TemplateDetails template={template} />);
+
+    expect(screen.getByText(/scope: site/)).toBeInTheDocument();
   });
 
   it("renders versions and allows activating non-current version", async () => {

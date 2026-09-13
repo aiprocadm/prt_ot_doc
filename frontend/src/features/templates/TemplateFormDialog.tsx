@@ -29,16 +29,22 @@ interface TemplateFormDialogProps {
 
 const toFormScope = (
   scope: TemplateDto["scope"] | undefined,
-): TemplateFormValues["scope"] => ({
-  type: (scope?.type === "legal_entity"
-    ? "organization"
-    : (scope?.type ?? "tenant")) as TemplateFormValues["scope"]["type"],
-  tenant_id: scope?.tenant_id ?? undefined,
-  company_id: scope?.company_id ?? undefined,
-  site_id: scope?.site_id ?? undefined,
-  label: scope?.label ?? undefined,
-  applicability: scope?.applicability ?? undefined,
-});
+): TemplateFormValues["scope"] => {
+  // Срез-162: в ответе сервера область лежит в `level`. Раньше читали только
+  // `type`, которого в ответе нет: у шаблона площадки форма показывала
+  // «Тенант», и сохранение молча сбрасывало область на тенанта.
+  const level = scope?.level ?? scope?.type;
+  return {
+    type: (level === "legal_entity"
+      ? "organization"
+      : (level ?? "tenant")) as TemplateFormValues["scope"]["type"],
+    tenant_id: scope?.tenant_id ?? undefined,
+    company_id: scope?.company_id ?? undefined,
+    site_id: scope?.site_id ?? undefined,
+    label: scope?.label ?? undefined,
+    applicability: scope?.applicability ?? undefined,
+  };
+};
 
 const toFormValues = (template?: TemplateDto): TemplateFormValues => ({
   code: template?.code ?? "",

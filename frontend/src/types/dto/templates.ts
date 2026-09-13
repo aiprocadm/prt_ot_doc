@@ -11,7 +11,21 @@ export type TemplateStatus =
   | "deprecated";
 
 export interface TemplateScopeDto {
-  type:
+  /**
+   * Срез-162: сервер называет это поле `level` (схема `TemplateScopeDTO`), а
+   * витрина читала только `type` — его в ответе НЕТ, поэтому область всегда
+   * читалась как «Тенант». На запись сервер принимает оба названия, поэтому
+   * `type` оставлен и помечен как необязательный.
+   */
+  level?:
+    | "global"
+    | "system"
+    | "tenant"
+    | "legal_entity"
+    | "organization"
+    | "site"
+    | string;
+  type?:
     | "global"
     | "system"
     | "tenant"
