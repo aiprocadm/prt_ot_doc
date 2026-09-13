@@ -9,6 +9,12 @@ import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  notificationChannelLabel,
+  notificationPriorityLabel,
+  notificationStatusLabel,
+  notificationTypeLabel,
+} from "@/pages/notifications/notificationsVocab";
 import type { ApiError } from "@/types/dto/common";
 
 const channels = ["all", "inapp", "email", "telegram", "webhook"] as const;
@@ -296,7 +302,9 @@ const NotificationsPage = () => {
             >
               {priorities.map((item) => (
                 <option key={item} value={item}>
-                  {item}
+                  {item === "all"
+                    ? "Любая важность"
+                    : notificationPriorityLabel(item)}
                 </option>
               ))}
             </select>
@@ -310,7 +318,7 @@ const NotificationsPage = () => {
               }}
             />
             <div className="rounded-md border px-3 py-2 text-sm text-muted-foreground">
-              Типы: {groupedByType.join(", ") || "—"}
+              Типы: {groupedByType.map(notificationTypeLabel).join(", ") || "—"}
             </div>
           </div>
           {!loading
@@ -336,14 +344,14 @@ const NotificationsPage = () => {
                           </div>
                         </div>
                         <div className="text-right text-xs text-muted-foreground">
-                          <div>{item.channel}</div>
-                          <div>{item.priority}</div>
-                          <div>{item.status}</div>
+                          <div>{notificationChannelLabel(item.channel)}</div>
+                          <div>{notificationPriorityLabel(item.priority)}</div>
+                          <div>{notificationStatusLabel(item.status)}</div>
                         </div>
                       </div>
                       <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                         <span className="rounded-full border px-2 py-1">
-                          {item.type}
+                          {notificationTypeLabel(item.type)}
                         </span>
                         <span className="rounded-full border px-2 py-1">
                           {item.is_read ? "прочитано" : "непрочитано"}
