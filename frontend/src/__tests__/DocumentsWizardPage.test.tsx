@@ -199,9 +199,11 @@ describe("DocumentsWizardPage", () => {
     expect(
       screen.getByRole("link", { name: /перейти в архив/i }),
     ).toHaveAttribute("href", "/archive");
+    // Срез-155: тест закреплял `/approvals` — маршрута с таким путём нет
+    // (только inbox и outbox), и человек молча уезжал на посадочную страницу.
     expect(
       screen.getByRole("link", { name: /открыть согласование \/ подпись/i }),
-    ).toHaveAttribute("href", "/approvals");
+    ).toHaveAttribute("href", "/approvals/inbox");
     expect(
       screen.queryByRole("button", { name: /mvp placeholder/i }),
     ).not.toBeInTheDocument();
