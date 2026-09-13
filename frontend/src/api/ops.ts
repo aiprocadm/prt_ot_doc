@@ -1,4 +1,5 @@
 import { apiClient } from "@/api/client";
+import { allowedOr, type PartialLoad } from "@/api/partial";
 import type { PersonDto } from "@/types/dto/persons";
 import type { TaskDto } from "@/types/dto/tasks";
 
@@ -55,6 +56,8 @@ export type PpeOverviewSnapshot = {
   issues: PpeIssueDto[];
   expiring: PpeIssueDto[];
   persons: PersonDto[];
+  /** Срез-167: разделы, закрытые правами. Пусто — значит видно всё. */
+  denied: string[];
 };
 
 export type CreatePpeIssuePayload = {
@@ -99,24 +102,50 @@ export type AuditPrepSnapshot = {
   inspections: InspectionDto[];
   prescriptions: PrescriptionDto[];
   overdueTasks: TaskDto[];
+  /** Срез-167: разделы, закрытые правами. Пусто — значит видно всё. */
+  denied: string[];
 };
 
 export const opsApi = {
   async getPpeOverview(): Promise<PpeOverviewSnapshot> {
+    // Срез-167: раньше один отказ по правам гасил весь экран. Теперь каждый
+    // список грузится отдельно, а закрытые разделы называются словами.
+    const state: PartialLoad = { denied: [] };
+    const empty = { data: { items: [] } } as { data: { items: never[] } };
     const [itemsResponse, issuesResponse, expiringResponse, personsResponse] =
       await Promise.all([
-        apiClient.get<PageResponse<PpeItemDto>>("/ppe/items", {
-          params: { limit: 100, offset: 0 },
-        }),
-        apiClient.get<PageResponse<PpeIssueDto>>("/ppe/issues", {
-          params: { limit: 100, offset: 0 },
-        }),
-        apiClient.get<PageResponse<PpeIssueDto>>("/ppe/issues/expiring", {
-          params: { within_days: 30 },
-        }),
-        apiClient.get<PageResponse<PersonDto>>("/persons", {
-          params: { page: 1, page_size: 100 },
-        }),
+        allowedOr(
+          state,
+          "номенклатура СИЗ",
+          apiClient.get<PageResponse<PpeItemDto>>("/ppe/items", {
+            params: { limit: 100, offset: 0 },
+          }),
+          empty as never,
+        ),
+        allowedOr(
+          state,
+          "выдачи СИЗ",
+          apiClient.get<PageResponse<PpeIssueDto>>("/ppe/issues", {
+            params: { limit: 100, offset: 0 },
+          }),
+          empty as never,
+        ),
+        allowedOr(
+          state,
+          "истекающие сроки носки",
+          apiClient.get<PageResponse<PpeIssueDto>>("/ppe/issues/expiring", {
+            params: { within_days: 30 },
+          }),
+          empty as never,
+        ),
+        allowedOr(
+          state,
+          "сотрудники",
+          apiClient.get<PageResponse<PersonDto>>("/persons", {
+            params: { page: 1, page_size: 100 },
+          }),
+          empty as never,
+        ),
       ]);
 
     return {
@@ -124,6 +153,7 @@ export const opsApi = {
       issues: issuesResponse.data.items ?? [],
       expiring: expiringResponse.data.items ?? [],
       persons: personsResponse.data.items ?? [],
+      denied: state.denied,
     };
   },
 
@@ -153,23 +183,41 @@ export const opsApi = {
   },
 
   async getAuditPrepSnapshot(): Promise<AuditPrepSnapshot> {
+    const state: PartialLoad = { denied: [] };
+    const empty = { data: { items: [] } } as { data: { items: never[] } };
     const [inspectionsResponse, prescriptionsResponse, tasksResponse] =
       await Promise.all([
-        apiClient.get<PageResponse<InspectionDto>>("/inspections", {
-          params: { limit: 100, offset: 0 },
-        }),
-        apiClient.get<PageResponse<PrescriptionDto>>("/prescriptions", {
-          params: { limit: 100, offset: 0 },
-        }),
-        apiClient.get<PageResponse<TaskDto>>("/tasks", {
-          params: { overdue: true, page: 1, page_size: 100 },
-        }),
+        allowedOr(
+          state,
+          "проверки",
+          apiClient.get<PageResponse<InspectionDto>>("/inspections", {
+            params: { limit: 100, offset: 0 },
+          }),
+          empty as never,
+        ),
+        allowedOr(
+          state,
+          "предписания",
+          apiClient.get<PageResponse<PrescriptionDto>>("/prescriptions", {
+            params: { limit: 100, offset: 0 },
+          }),
+          empty as never,
+        ),
+        allowedOr(
+          state,
+          "просроченные задачи",
+          apiClient.get<PageResponse<TaskDto>>("/tasks", {
+            params: { overdue: true, page: 1, page_size: 100 },
+          }),
+          empty as never,
+        ),
       ]);
 
     return {
       inspections: inspectionsResponse.data.items ?? [],
       prescriptions: prescriptionsResponse.data.items ?? [],
       overdueTasks: tasksResponse.data.items ?? [],
+      denied: state.denied,
     };
   },
 };
