@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 
 import { operationsApi } from "@/api/operations";
 import { EmptyState } from "@/components/common/EmptyState";
+import { deniedNotice } from "@/api/partial";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
@@ -21,6 +22,7 @@ const InspectionPlansPage = () => {
       [],
     ),
     initialData: {
+      denied: [],
       inspections: [],
       prescriptions: [],
       tasks: [],
@@ -58,6 +60,11 @@ const InspectionPlansPage = () => {
         description="Реестр предстоящих и активных проверок с фильтрацией и постраничной навигацией."
       />
       <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
+      {deniedNotice(data.denied) ? (
+        <p className="rounded-md border border-amber-500/40 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-600/50 dark:bg-amber-950/30 dark:text-amber-50">
+          {deniedNotice(data.denied)}
+        </p>
+      ) : null}
       {loading ? <LoadingScreen label="Загрузка планов проверок" /> : null}
       {!loading && !error && (overduePlanned > 0 || openPlanTasks > 0) ? (
         <Card className="border-orange-200 bg-orange-50/40">

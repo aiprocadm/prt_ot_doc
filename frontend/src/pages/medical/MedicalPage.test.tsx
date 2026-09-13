@@ -31,6 +31,8 @@ vi.mock("@/api/operations", () => ({
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(operationsApi.getMedicalSnapshot).mockResolvedValue({
+    // Срез-168: сводка сообщает, какие разделы закрыты правами.
+    denied: [],
     exams: [
       {
         id: "e1",

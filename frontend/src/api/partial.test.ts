@@ -65,4 +65,33 @@ describe("частичная загрузка сводных экранов", ()
 
     expect(snapshot.denied).toEqual(["предписания"]);
   });
+
+  it("сводка медосмотров: закрытый реестр сотрудников не гасит экран (срез-168)", async () => {
+    const { operationsApi } = await import("@/api/operations");
+    getMock.mockImplementation((url: string) => {
+      if (url === "/persons") return Promise.reject(forbidden);
+      if (url === "/medical/exams")
+        return Promise.resolve(page([{ id: "exam-1" }]));
+      return Promise.resolve(page([]));
+    });
+
+    const snapshot = await operationsApi.getMedicalSnapshot();
+
+    expect(snapshot.exams).toHaveLength(1);
+    expect(snapshot.denied).toEqual(["сотрудники"]);
+  });
+
+  it("рабочее место проверок: закрытые проверки не гасят четыре экрана (срез-168)", async () => {
+    const { operationsApi } = await import("@/api/operations");
+    getMock.mockImplementation((url: string) => {
+      if (url === "/inspections") return Promise.reject(forbidden);
+      if (url === "/pack-runs") return Promise.resolve({ data: [] });
+      return Promise.resolve(page([]));
+    });
+
+    const snapshot = await operationsApi.getInspectionWorkspaceSnapshot();
+
+    expect(snapshot.denied).toContain("проверки");
+    expect(snapshot.inspections).toEqual([]);
+  });
 });

@@ -1,3 +1,4 @@
+import { allowedOr, type PartialLoad } from "@/api/partial";
 import { apiClient } from "@/api/client";
 import { downloadBlob } from "@/utils/download";
 import {
@@ -271,8 +272,13 @@ export type RoleWorkspaceSummaryDto = {
   recommendations: string[];
 };
 
+/** Пустой ответ-страница: подставляется вместо закрытого правами раздела. */
+const EMPTY_PAGE = { data: { items: [] } };
+
 export const operationsApi = {
   getReferenceSnapshot: async () => {
+    // Срез-168: раздел, закрытый правами, больше не гасит весь справочник.
+    const state: PartialLoad = { denied: [] };
     const [
       npaResponse,
       ppeResponse,
@@ -280,19 +286,45 @@ export const operationsApi = {
       templatesResponse,
       briefingTemplates,
     ] = await Promise.all([
-      apiClient.get<{
-        items: Array<{ id: string; code: string; title: string }>;
-      }>("/npa"),
-      apiClient.get<{ items: PpeItemDto[]; total: number }>("/ppe/items", {
-        params: { limit: 100, offset: 0 },
-      }),
-      apiClient.get<{ items: TrainingProgramDto[] }>("/training/programs"),
-      apiClient.get<{ items: TemplateDto[]; total?: number }>("/templates", {
-        params: { limit: 100, offset: 0 },
-      }),
-      briefingsApi.listTemplates(),
+      allowedOr(
+        state,
+        "НПА",
+        apiClient.get<{
+          items: Array<{ id: string; code: string; title: string }>;
+        }>("/npa"),
+        EMPTY_PAGE as never,
+      ),
+      allowedOr(
+        state,
+        "номенклатура СИЗ",
+        apiClient.get<{ items: PpeItemDto[]; total: number }>("/ppe/items", {
+          params: { limit: 100, offset: 0 },
+        }),
+        EMPTY_PAGE as never,
+      ),
+      allowedOr(
+        state,
+        "программы обучения",
+        apiClient.get<{ items: TrainingProgramDto[] }>("/training/programs"),
+        EMPTY_PAGE as never,
+      ),
+      allowedOr(
+        state,
+        "шаблоны",
+        apiClient.get<{ items: TemplateDto[]; total?: number }>("/templates", {
+          params: { limit: 100, offset: 0 },
+        }),
+        EMPTY_PAGE as never,
+      ),
+      allowedOr(
+        state,
+        "шаблоны инструктажей",
+        briefingsApi.listTemplates(),
+        [],
+      ),
     ]);
     return {
+      denied: state.denied,
       npa: npaResponse.data.items ?? [],
       ppeItems: ppeResponse.data.items ?? [],
       programs: programsResponse.data.items ?? [],
@@ -316,34 +348,63 @@ export const operationsApi = {
   },
 
   getActivitiesSnapshot: async () => {
+    const state: PartialLoad = { denied: [] };
     const [tasksResponse, actions] = await Promise.all([
-      apiClient.get<{ items: TaskDto[]; pagination: { total: number } }>(
-        "/tasks",
-        { params: { page: 1, page_size: 100 } },
+      allowedOr(
+        state,
+        "задачи",
+        apiClient.get<{ items: TaskDto[]; pagination: { total: number } }>(
+          "/tasks",
+          { params: { page: 1, page_size: 100 } },
+        ),
+        EMPTY_PAGE as never,
       ),
-      opsApi.getCorrectiveActions(),
+      allowedOr(
+        state,
+        "корректирующие мероприятия",
+        opsApi.getCorrectiveActions(),
+        [],
+      ),
     ]);
     return {
+      denied: state.denied,
       tasks: tasksResponse.data.items ?? [],
       correctiveActions: actions,
     };
   },
 
   getMedicalSnapshot: async () => {
+    const state: PartialLoad = { denied: [] };
     const [examsResponse, personsResponse, tasksResponse] = await Promise.all([
-      apiClient.get<{ items: MedicalExamDto[]; total: number }>(
-        "/medical/exams",
-        { params: { limit: 100, offset: 0 } },
+      allowedOr(
+        state,
+        "медосмотры",
+        apiClient.get<{ items: MedicalExamDto[]; total: number }>(
+          "/medical/exams",
+          { params: { limit: 100, offset: 0 } },
+        ),
+        EMPTY_PAGE as never,
       ),
-      apiClient.get<{ items: PersonDto[]; total: number }>("/persons", {
-        params: { page: 1, page_size: 100 },
-      }),
-      apiClient.get<{ items: TaskDto[]; pagination: { total: number } }>(
-        "/tasks",
-        { params: { type: "medical_requirement", page: 1, page_size: 100 } },
+      allowedOr(
+        state,
+        "сотрудники",
+        apiClient.get<{ items: PersonDto[]; total: number }>("/persons", {
+          params: { page: 1, page_size: 100 },
+        }),
+        EMPTY_PAGE as never,
+      ),
+      allowedOr(
+        state,
+        "задачи по медосмотрам",
+        apiClient.get<{ items: TaskDto[]; pagination: { total: number } }>(
+          "/tasks",
+          { params: { type: "medical_requirement", page: 1, page_size: 100 } },
+        ),
+        EMPTY_PAGE as never,
       ),
     ]);
     return {
+      denied: state.denied,
       exams: examsResponse.data.items ?? [],
       persons: personsResponse.data.items ?? [],
       tasks: tasksResponse.data.items ?? [],
@@ -536,6 +597,7 @@ export const operationsApi = {
   },
 
   getInspectionWorkspaceSnapshot: async () => {
+    const state: PartialLoad = { denied: [] };
     const [
       inspectionsResponse,
       prescriptions,
@@ -543,22 +605,41 @@ export const operationsApi = {
       templates,
       packsResponse,
     ] = await Promise.all([
-      apiClient.get<{ items: InspectionDto[]; total: number }>("/inspections", {
-        params: { limit: 100, offset: 0 },
-      }),
-      opsApi.getPrescriptions(),
-      apiClient.get<{ items: TaskDto[]; pagination: { total: number } }>(
-        "/tasks",
-        { params: { type: "inspection", page: 1, page_size: 100 } },
+      allowedOr(
+        state,
+        "проверки",
+        apiClient.get<{ items: InspectionDto[]; total: number }>(
+          "/inspections",
+          { params: { limit: 100, offset: 0 } },
+        ),
+        EMPTY_PAGE as never,
       ),
-      apiClient.get<{ items: TemplateDto[]; total?: number }>("/templates", {
-        params: { limit: 100, offset: 0 },
-      }),
+      allowedOr(state, "предписания", opsApi.getPrescriptions(), []),
+      allowedOr(
+        state,
+        "задачи по проверкам",
+        apiClient.get<{ items: TaskDto[]; pagination: { total: number } }>(
+          "/tasks",
+          { params: { type: "inspection", page: 1, page_size: 100 } },
+        ),
+        EMPTY_PAGE as never,
+      ),
+      allowedOr(
+        state,
+        "шаблоны",
+        apiClient.get<{ items: TemplateDto[]; total?: number }>("/templates", {
+          params: { limit: 100, offset: 0 },
+        }),
+        EMPTY_PAGE as never,
+      ),
+      // Прогоны комплектов гасятся любой ошибкой намеренно и давно: это
+      // необязательная подсказка сбоку. Трогать не стал.
       apiClient
         .get<unknown[]>("/pack-runs")
         .catch(() => ({ data: [] as unknown[] })),
     ]);
     return {
+      denied: state.denied,
       inspections: inspectionsResponse.data.items ?? [],
       prescriptions,
       tasks: tasksResponse.data.items ?? [],

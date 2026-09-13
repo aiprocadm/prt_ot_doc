@@ -9,6 +9,7 @@ import {
   type NamedListRowDto,
 } from "@/api/operations";
 import { EmptyState } from "@/components/common/EmptyState";
+import { deniedNotice } from "@/api/partial";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
@@ -47,7 +48,7 @@ const mutationErrorText = (err: unknown, fallback: string) =>
 const MedicalPage = () => {
   const { data, loading, error, reload } = useAsyncResource({
     loader: useCallback(() => operationsApi.getMedicalSnapshot(), []),
-    initialData: { exams: [], persons: [], tasks: [] },
+    initialData: { denied: [], exams: [], persons: [], tasks: [] },
     errorMessage: "Не удалось загрузить медосмотры",
   });
 
@@ -329,6 +330,11 @@ const MedicalPage = () => {
         ]}
       />
       <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
+      {deniedNotice(data.denied) ? (
+        <p className="rounded-md border border-amber-500/40 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-600/50 dark:bg-amber-950/30 dark:text-amber-50">
+          {deniedNotice(data.denied)}
+        </p>
+      ) : null}
       {loading ? <LoadingScreen label="Загрузка медосмотров" /> : null}
       {!loading && !error && registry.total === 0 ? (
         <EmptyState
