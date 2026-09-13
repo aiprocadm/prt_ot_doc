@@ -120,6 +120,48 @@
         "VARCHAR"
       ]
     ],
+    "api_deprecation_usage": [
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "first_seen_at",
+        "DATETIME"
+      ],
+      [
+        "hits_2xx",
+        "INTEGER"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "last_notified_at",
+        "DATETIME"
+      ],
+      [
+        "last_seen_at",
+        "DATETIME"
+      ],
+      [
+        "path_prefix",
+        "VARCHAR(255)"
+      ],
+      [
+        "tenant_slug",
+        "VARCHAR(64)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
     "api_key": [
       [
         "created_at",
@@ -782,37 +824,11 @@
         "INTEGER"
       ]
     ],
-    "asset": [
-      [
-        "category",
-        "VARCHAR(128)"
-      ],
-      [
-        "created_at",
-        "DATETIME"
-      ],
-      [
-        "id",
-        "VARCHAR"
-      ],
-      [
-        "name",
-        "VARCHAR(255)"
-      ],
-      [
-        "tenant_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "updated_at",
-        "DATETIME"
-      ],
-      [
-        "version",
-        "INTEGER"
-      ]
-    ],
     "attestation": [
+      [
+        "area_code",
+        "VARCHAR(16)"
+      ],
       [
         "created_at",
         "DATETIME"
@@ -1236,6 +1252,110 @@
         "INTEGER"
       ]
     ],
+    "automation_rule": [
+      [
+        "actions_json",
+        "JSONB"
+      ],
+      [
+        "conditions_json",
+        "JSONB"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "description",
+        "TEXT"
+      ],
+      [
+        "event_type",
+        "VARCHAR(64)"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "is_enabled",
+        "BOOLEAN"
+      ],
+      [
+        "name",
+        "VARCHAR(255)"
+      ],
+      [
+        "priority",
+        "INTEGER"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "automation_rule_trigger": [
+      [
+        "actions_result",
+        "JSONB"
+      ],
+      [
+        "correlation_id",
+        "VARCHAR(128)"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "event_key",
+        "VARCHAR(255)"
+      ],
+      [
+        "event_payload",
+        "JSONB"
+      ],
+      [
+        "event_type",
+        "VARCHAR(64)"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "rule_id",
+        "VARCHAR"
+      ],
+      [
+        "status",
+        "VARCHAR(7)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
     "billing_events": [
       [
         "amount",
@@ -1272,6 +1392,64 @@
       [
         "type",
         "VARCHAR(20)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "branch": [
+      [
+        "address",
+        "VARCHAR(255)"
+      ],
+      [
+        "code",
+        "VARCHAR(64)"
+      ],
+      [
+        "company_id",
+        "VARCHAR"
+      ],
+      [
+        "contact_email",
+        "VARCHAR(320)"
+      ],
+      [
+        "contact_name",
+        "VARCHAR(255)"
+      ],
+      [
+        "contact_phone",
+        "VARCHAR(32)"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "name",
+        "VARCHAR(255)"
+      ],
+      [
+        "status",
+        "VARCHAR(32)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
       ],
       [
         "updated_at",
@@ -1514,6 +1692,230 @@
         "INTEGER"
       ]
     ],
+    "budget_expense": [
+      [
+        "amount",
+        "NUMERIC(14, 2)"
+      ],
+      [
+        "article_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "branch_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "company_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "domain",
+        "VARCHAR(32)"
+      ],
+      [
+        "entity_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "entity_type",
+        "VARCHAR(64)"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "notes",
+        "VARCHAR(1000)"
+      ],
+      [
+        "occurred_on",
+        "DATE"
+      ],
+      [
+        "site_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "title",
+        "VARCHAR(255)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "budget_expense_article": [
+      [
+        "code",
+        "VARCHAR(64)"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "domain",
+        "VARCHAR(32)"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "is_active",
+        "BOOLEAN"
+      ],
+      [
+        "name",
+        "VARCHAR(255)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "budget_reimbursement": [
+      [
+        "approved_amount",
+        "NUMERIC(14, 2)"
+      ],
+      [
+        "company_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "decided_at",
+        "DATETIME"
+      ],
+      [
+        "decision_reason",
+        "VARCHAR(1000)"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "notes",
+        "VARCHAR(1000)"
+      ],
+      [
+        "paid_at",
+        "DATETIME"
+      ],
+      [
+        "period_end",
+        "DATE"
+      ],
+      [
+        "period_start",
+        "DATE"
+      ],
+      [
+        "reference",
+        "VARCHAR(64)"
+      ],
+      [
+        "requested_amount",
+        "NUMERIC(14, 2)"
+      ],
+      [
+        "status",
+        "VARCHAR(32)"
+      ],
+      [
+        "submitted_at",
+        "DATETIME"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "title",
+        "VARCHAR(255)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "budget_reimbursement_item": [
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "expense_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "reimbursement_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
     "calendar_events": [
       [
         "assigned_user_id",
@@ -1568,6 +1970,284 @@
         "INTEGER"
       ]
     ],
+    "cd_document": [
+      [
+        "approved_on",
+        "DATE"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "document_id",
+        "VARCHAR"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "kind",
+        "VARCHAR(32)"
+      ],
+      [
+        "notes",
+        "TEXT"
+      ],
+      [
+        "number",
+        "VARCHAR(64)"
+      ],
+      [
+        "responsible",
+        "VARCHAR(255)"
+      ],
+      [
+        "review_due",
+        "DATE"
+      ],
+      [
+        "site_id",
+        "VARCHAR"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "title",
+        "VARCHAR(255)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "cd_drill": [
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "findings",
+        "TEXT"
+      ],
+      [
+        "formation_id",
+        "VARCHAR"
+      ],
+      [
+        "held_on",
+        "DATE"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "kind",
+        "VARCHAR(32)"
+      ],
+      [
+        "outcome",
+        "VARCHAR(32)"
+      ],
+      [
+        "participants",
+        "INTEGER"
+      ],
+      [
+        "planned_on",
+        "DATE"
+      ],
+      [
+        "scenario",
+        "TEXT"
+      ],
+      [
+        "site_id",
+        "VARCHAR"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "title",
+        "VARCHAR(255)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "cd_formation": [
+      [
+        "commander_person_id",
+        "VARCHAR"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "equipment_notes",
+        "TEXT"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "kind",
+        "VARCHAR(16)"
+      ],
+      [
+        "name",
+        "VARCHAR(255)"
+      ],
+      [
+        "notes",
+        "TEXT"
+      ],
+      [
+        "purpose",
+        "VARCHAR(255)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "cd_formation_member": [
+      [
+        "assigned_on",
+        "DATE"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "formation_id",
+        "VARCHAR"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "notes",
+        "TEXT"
+      ],
+      [
+        "person_id",
+        "VARCHAR"
+      ],
+      [
+        "released_on",
+        "DATE"
+      ],
+      [
+        "role_in_formation",
+        "VARCHAR(128)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "cd_profile": [
+      [
+        "category",
+        "VARCHAR(16)"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "decision_date",
+        "DATE"
+      ],
+      [
+        "decision_number",
+        "VARCHAR(128)"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "notes",
+        "TEXT"
+      ],
+      [
+        "responsible",
+        "VARCHAR(255)"
+      ],
+      [
+        "site_id",
+        "VARCHAR"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
     "checklist": [
       [
         "created_at",
@@ -1592,6 +2272,118 @@
       [
         "title",
         "VARCHAR(255)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "client_audit_report": [
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "managed_client_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "overall",
+        "VARCHAR(16)"
+      ],
+      [
+        "payload",
+        "JSON"
+      ],
+      [
+        "period_end",
+        "DATE"
+      ],
+      [
+        "period_start",
+        "DATE"
+      ],
+      [
+        "summary",
+        "TEXT"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "client_change": [
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "details",
+        "TEXT"
+      ],
+      [
+        "handled_at",
+        "DATETIME"
+      ],
+      [
+        "handled_by",
+        "VARCHAR(36)"
+      ],
+      [
+        "happened_on",
+        "DATE"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "kind",
+        "VARCHAR(21)"
+      ],
+      [
+        "managed_client_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "source",
+        "VARCHAR(16)"
+      ],
+      [
+        "source_ref",
+        "VARCHAR(128)"
+      ],
+      [
+        "status",
+        "VARCHAR(9)"
+      ],
+      [
+        "summary",
+        "VARCHAR(255)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
       ],
       [
         "updated_at",
@@ -1686,6 +2478,30 @@
         "VARCHAR"
       ],
       [
+        "last_used_at",
+        "DATETIME"
+      ],
+      [
+        "max_uses",
+        "INTEGER"
+      ],
+      [
+        "otp_attempts",
+        "INTEGER"
+      ],
+      [
+        "otp_code_hash",
+        "VARCHAR(128)"
+      ],
+      [
+        "otp_email",
+        "VARCHAR(320)"
+      ],
+      [
+        "otp_expires_at",
+        "DATETIME"
+      ],
+      [
         "package_run_id",
         "VARCHAR"
       ],
@@ -1708,6 +2524,10 @@
       [
         "updated_at",
         "DATETIME"
+      ],
+      [
+        "uses_count",
+        "INTEGER"
       ],
       [
         "version",
@@ -1784,6 +2604,10 @@
       [
         "name",
         "VARCHAR(255)"
+      ],
+      [
+        "quorum_threshold_pct",
+        "INTEGER"
       ],
       [
         "tenant_id",
@@ -1916,6 +2740,40 @@
         "INTEGER"
       ]
     ],
+    "committee_decision_vote": [
+      [
+        "choice",
+        "VARCHAR(7)"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "decision_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "person_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
     "committee_meeting": [
       [
         "committee_id",
@@ -1930,6 +2788,10 @@
         "DATETIME"
       ],
       [
+        "held_at",
+        "DATETIME"
+      ],
+      [
         "id",
         "VARCHAR"
       ],
@@ -1938,12 +2800,100 @@
         "VARCHAR(255)"
       ],
       [
+        "members_total",
+        "INTEGER"
+      ],
+      [
+        "present_count",
+        "INTEGER"
+      ],
+      [
+        "protocol_seq",
+        "INTEGER"
+      ],
+      [
+        "protocol_year",
+        "INTEGER"
+      ],
+      [
+        "quorum_met",
+        "BOOLEAN"
+      ],
+      [
         "scheduled_at",
         "DATETIME"
       ],
       [
         "status",
         "VARCHAR(9)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "committee_meeting_attendance": [
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "meeting_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "person_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "present",
+        "BOOLEAN"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "committee_meeting_invitation": [
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "invited_at",
+        "DATETIME"
+      ],
+      [
+        "meeting_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "person_id",
+        "VARCHAR(36)"
       ],
       [
         "tenant_id",
@@ -2086,6 +3036,10 @@
         "JSON"
       ],
       [
+        "parent_company_id",
+        "VARCHAR(36)"
+      ],
+      [
         "phone_numbers",
         "JSON"
       ],
@@ -2162,6 +3116,130 @@
       [
         "status",
         "VARCHAR(32)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "compliance_requirement": [
+      [
+        "clause_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "code",
+        "VARCHAR(64)"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "description",
+        "TEXT"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "last_confirmed_at",
+        "DATE"
+      ],
+      [
+        "next_due_at",
+        "DATE"
+      ],
+      [
+        "npa_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "owner_user_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "periodicity_days",
+        "INTEGER"
+      ],
+      [
+        "process_code",
+        "VARCHAR(64)"
+      ],
+      [
+        "retired_at",
+        "DATETIME"
+      ],
+      [
+        "role_code",
+        "VARCHAR(64)"
+      ],
+      [
+        "severity",
+        "VARCHAR(16)"
+      ],
+      [
+        "site_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "status",
+        "VARCHAR(16)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "title",
+        "VARCHAR(255)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "compliance_requirement_evidence": [
+      [
+        "confirmed_at",
+        "DATE"
+      ],
+      [
+        "confirmed_by",
+        "VARCHAR(36)"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "document_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "note",
+        "TEXT"
+      ],
+      [
+        "requirement_id",
+        "VARCHAR(36)"
       ],
       [
         "tenant_id",
@@ -2586,40 +3664,6 @@
         "INTEGER"
       ]
     ],
-    "corrective_action_attachments": [
-      [
-        "attachment_type",
-        "TEXT"
-      ],
-      [
-        "corrective_action_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "created_at",
-        "DATETIME"
-      ],
-      [
-        "file_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "id",
-        "VARCHAR"
-      ],
-      [
-        "tenant_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "updated_at",
-        "DATETIME"
-      ],
-      [
-        "version",
-        "INTEGER"
-      ]
-    ],
     "corrective_actions": [
       [
         "action_type",
@@ -2810,6 +3854,48 @@
       [
         "tenant_id",
         "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "discipline_status_report": [
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "payload",
+        "JSON"
+      ],
+      [
+        "period_end",
+        "DATE"
+      ],
+      [
+        "period_start",
+        "DATE"
+      ],
+      [
+        "summary",
+        "TEXT"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "total_issues",
+        "INTEGER"
       ],
       [
         "updated_at",
@@ -3510,92 +4596,6 @@
         "INTEGER"
       ]
     ],
-    "documentgenerationjob": [
-      [
-        "company_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "created_at",
-        "DATETIME"
-      ],
-      [
-        "document_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "finished_at",
-        "DATETIME"
-      ],
-      [
-        "id",
-        "VARCHAR"
-      ],
-      [
-        "idempotency_key",
-        "VARCHAR(128)"
-      ],
-      [
-        "initiated_by",
-        "VARCHAR(36)"
-      ],
-      [
-        "last_error",
-        "VARCHAR(255)"
-      ],
-      [
-        "pack_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "payload",
-        "JSONB"
-      ],
-      [
-        "payload_hash",
-        "VARCHAR(64)"
-      ],
-      [
-        "person_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "queued_at",
-        "DATETIME"
-      ],
-      [
-        "started_at",
-        "DATETIME"
-      ],
-      [
-        "status",
-        "VARCHAR(10)"
-      ],
-      [
-        "task_id",
-        "VARCHAR(128)"
-      ],
-      [
-        "template_code",
-        "VARCHAR(255)"
-      ],
-      [
-        "template_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "tenant_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "updated_at",
-        "DATETIME"
-      ],
-      [
-        "version",
-        "INTEGER"
-      ]
-    ],
     "documentversion": [
       [
         "approval_status",
@@ -3802,40 +4802,6 @@
         "INTEGER"
       ]
     ],
-    "edo_receipts": [
-      [
-        "created_at",
-        "DATETIME"
-      ],
-      [
-        "edo_message_id",
-        "VARCHAR"
-      ],
-      [
-        "id",
-        "VARCHAR"
-      ],
-      [
-        "receipt_type",
-        "VARCHAR(64)"
-      ],
-      [
-        "s3_key",
-        "VARCHAR(512)"
-      ],
-      [
-        "tenant_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "updated_at",
-        "DATETIME"
-      ],
-      [
-        "version",
-        "INTEGER"
-      ]
-    ],
     "edo_status_events": [
       [
         "created_at",
@@ -3970,13 +4936,13 @@
         "INTEGER"
       ]
     ],
-    "equipment": [
-      [
-        "asset_id",
-        "VARCHAR"
-      ],
+    "emission_measurement": [
       [
         "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
         "DATETIME"
       ],
       [
@@ -3984,12 +4950,198 @@
         "VARCHAR"
       ],
       [
-        "serial_number",
-        "VARCHAR(128)"
+        "laboratory",
+        "VARCHAR(255)"
       ],
       [
-        "status",
-        "VARCHAR(14)"
+        "measured_on",
+        "DATE"
+      ],
+      [
+        "notes",
+        "TEXT"
+      ],
+      [
+        "plan_id",
+        "VARCHAR"
+      ],
+      [
+        "protocol_number",
+        "VARCHAR(64)"
+      ],
+      [
+        "source_id",
+        "VARCHAR"
+      ],
+      [
+        "substance",
+        "VARCHAR(255)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "value_grams_per_second",
+        "NUMERIC(14, 6)"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "emission_monitoring_plan": [
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "laboratory",
+        "VARCHAR(255)"
+      ],
+      [
+        "method",
+        "VARCHAR(255)"
+      ],
+      [
+        "next_due_on",
+        "DATE"
+      ],
+      [
+        "notes",
+        "TEXT"
+      ],
+      [
+        "periodicity_months",
+        "INTEGER"
+      ],
+      [
+        "source_id",
+        "VARCHAR"
+      ],
+      [
+        "substance",
+        "VARCHAR(255)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "emission_norm": [
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "limit_grams_per_second",
+        "NUMERIC(14, 6)"
+      ],
+      [
+        "limit_tons_per_year",
+        "NUMERIC(14, 3)"
+      ],
+      [
+        "notes",
+        "TEXT"
+      ],
+      [
+        "permit_number",
+        "VARCHAR(64)"
+      ],
+      [
+        "source_id",
+        "VARCHAR"
+      ],
+      [
+        "substance",
+        "VARCHAR(255)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "valid_until",
+        "DATE"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "emission_source": [
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "facility_id",
+        "VARCHAR"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "inventoried_on",
+        "DATE"
+      ],
+      [
+        "kind",
+        "VARCHAR(16)"
+      ],
+      [
+        "location",
+        "VARCHAR(255)"
+      ],
+      [
+        "name",
+        "VARCHAR(255)"
+      ],
+      [
+        "notes",
+        "TEXT"
+      ],
+      [
+        "source_number",
+        "VARCHAR(32)"
       ],
       [
         "tenant_id",
@@ -4227,6 +5379,10 @@
       ],
       [
         "created_at",
+        "DATETIME"
+      ],
+      [
+        "expires_at",
         "DATETIME"
       ],
       [
@@ -4842,60 +5998,174 @@
         "VARCHAR(36)"
       ]
     ],
-    "hazard_bindings": [
+    "fire_document": [
       [
-        "binding_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "binding_type",
-        "VARCHAR(9)"
+        "approved_on",
+        "DATE"
       ],
       [
         "created_at",
         "DATETIME"
       ],
       [
-        "hazard_id",
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "document_id",
         "VARCHAR"
       ],
       [
         "id",
-        "VARCHAR(36)"
+        "VARCHAR"
+      ],
+      [
+        "kind",
+        "VARCHAR(32)"
+      ],
+      [
+        "location",
+        "VARCHAR(255)"
       ],
       [
         "notes",
         "TEXT"
       ],
       [
+        "number",
+        "VARCHAR(64)"
+      ],
+      [
+        "responsible",
+        "VARCHAR(255)"
+      ],
+      [
+        "review_due",
+        "DATE"
+      ],
+      [
+        "site_id",
+        "VARCHAR"
+      ],
+      [
         "tenant_id",
         "VARCHAR(36)"
       ],
       [
+        "title",
+        "VARCHAR(255)"
+      ],
+      [
         "updated_at",
         "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
       ]
     ],
-    "hazard_measures": [
+    "fire_drill": [
       [
         "created_at",
         "DATETIME"
       ],
       [
-        "hazard_id",
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "findings",
+        "TEXT"
+      ],
+      [
+        "held_on",
+        "DATE"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "kind",
+        "VARCHAR(32)"
+      ],
+      [
+        "outcome",
+        "VARCHAR(32)"
+      ],
+      [
+        "participants",
+        "INTEGER"
+      ],
+      [
+        "planned_on",
+        "DATE"
+      ],
+      [
+        "scenario",
+        "TEXT"
+      ],
+      [
+        "site_id",
+        "VARCHAR"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "title",
+        "VARCHAR(255)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "fire_maintenance": [
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "equipment_id",
         "VARCHAR"
       ],
       [
         "id",
-        "VARCHAR(36)"
-      ],
-      [
-        "is_recommended",
-        "BOOLEAN"
-      ],
-      [
-        "measure_id",
         "VARCHAR"
+      ],
+      [
+        "kind",
+        "VARCHAR(32)"
+      ],
+      [
+        "next_due",
+        "DATE"
+      ],
+      [
+        "notes",
+        "TEXT"
+      ],
+      [
+        "performed_on",
+        "DATE"
+      ],
+      [
+        "performer",
+        "VARCHAR(255)"
+      ],
+      [
+        "result",
+        "VARCHAR(32)"
       ],
       [
         "tenant_id",
@@ -4904,6 +6174,126 @@
       [
         "updated_at",
         "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "fire_safety_equipment": [
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "inspection_due",
+        "DATE"
+      ],
+      [
+        "kind",
+        "VARCHAR(32)"
+      ],
+      [
+        "label",
+        "VARCHAR(255)"
+      ],
+      [
+        "location",
+        "VARCHAR(255)"
+      ],
+      [
+        "recharge_due",
+        "DATE"
+      ],
+      [
+        "site_id",
+        "VARCHAR"
+      ],
+      [
+        "status",
+        "VARCHAR(32)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "hazardous_facility": [
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "excluded_on",
+        "DATE"
+      ],
+      [
+        "hazard_class",
+        "VARCHAR(8)"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "name",
+        "VARCHAR(255)"
+      ],
+      [
+        "notes",
+        "TEXT"
+      ],
+      [
+        "register_number",
+        "VARCHAR(64)"
+      ],
+      [
+        "registered_on",
+        "DATE"
+      ],
+      [
+        "responsible",
+        "VARCHAR(255)"
+      ],
+      [
+        "site_id",
+        "VARCHAR"
+      ],
+      [
+        "status",
+        "VARCHAR(16)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
       ]
     ],
     "hazards": [
@@ -4958,6 +6348,76 @@
       [
         "version",
         "INTEGER"
+      ]
+    ],
+    "header_footer_presets": [
+      [
+        "code",
+        "VARCHAR(128)"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "different_first",
+        "BOOLEAN"
+      ],
+      [
+        "different_odd_even",
+        "BOOLEAN"
+      ],
+      [
+        "footer_even_xml",
+        "TEXT"
+      ],
+      [
+        "footer_first_xml",
+        "TEXT"
+      ],
+      [
+        "footer_odd_xml",
+        "TEXT"
+      ],
+      [
+        "header_even_xml",
+        "TEXT"
+      ],
+      [
+        "header_first_xml",
+        "TEXT"
+      ],
+      [
+        "header_odd_xml",
+        "TEXT"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "name",
+        "VARCHAR(255)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ],
+      [
+        "watermark",
+        "JSONB"
       ]
     ],
     "idempotency_keys": [
@@ -5030,6 +6490,166 @@
         "INTEGER"
       ]
     ],
+    "import_batch": [
+      [
+        "applied_at",
+        "DATETIME"
+      ],
+      [
+        "applied_by",
+        "VARCHAR(64)"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "created_count",
+        "INTEGER"
+      ],
+      [
+        "error_message",
+        "TEXT"
+      ],
+      [
+        "failed_count",
+        "INTEGER"
+      ],
+      [
+        "finished_at",
+        "DATETIME"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "mapping",
+        "JSON"
+      ],
+      [
+        "mode",
+        "VARCHAR(8)"
+      ],
+      [
+        "notes",
+        "JSON"
+      ],
+      [
+        "processed_rows",
+        "INTEGER"
+      ],
+      [
+        "rolled_back_at",
+        "DATETIME"
+      ],
+      [
+        "rolled_back_by",
+        "VARCHAR(64)"
+      ],
+      [
+        "skipped_count",
+        "INTEGER"
+      ],
+      [
+        "source_filename",
+        "VARCHAR(255)"
+      ],
+      [
+        "source_format",
+        "VARCHAR(16)"
+      ],
+      [
+        "source_key",
+        "VARCHAR(512)"
+      ],
+      [
+        "status",
+        "VARCHAR(16)"
+      ],
+      [
+        "target",
+        "VARCHAR(64)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "total_rows",
+        "INTEGER"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "updated_count",
+        "INTEGER"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "import_row": [
+      [
+        "action",
+        "VARCHAR(16)"
+      ],
+      [
+        "batch_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "before_values",
+        "JSON"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "entity_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "entity_table",
+        "VARCHAR(64)"
+      ],
+      [
+        "errors",
+        "JSON"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "message",
+        "TEXT"
+      ],
+      [
+        "natural_key",
+        "VARCHAR(512)"
+      ],
+      [
+        "row_number",
+        "INTEGER"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
     "inbound_webhook_dedup": [
       [
         "created_at",
@@ -5086,6 +6706,10 @@
         "TEXT"
       ],
       [
+        "discipline",
+        "VARCHAR(32)"
+      ],
+      [
         "id",
         "VARCHAR"
       ],
@@ -5128,208 +6752,6 @@
       [
         "title",
         "VARCHAR(255)"
-      ],
-      [
-        "updated_at",
-        "DATETIME"
-      ],
-      [
-        "version",
-        "INTEGER"
-      ]
-    ],
-    "incident_attachments": [
-      [
-        "attachment_type",
-        "TEXT"
-      ],
-      [
-        "created_at",
-        "DATETIME"
-      ],
-      [
-        "file_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "id",
-        "VARCHAR"
-      ],
-      [
-        "incident_case_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "tenant_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "updated_at",
-        "DATETIME"
-      ],
-      [
-        "version",
-        "INTEGER"
-      ]
-    ],
-    "incident_cases": [
-      [
-        "code",
-        "TEXT"
-      ],
-      [
-        "company_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "consequences",
-        "TEXT"
-      ],
-      [
-        "contractor_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "created_at",
-        "DATETIME"
-      ],
-      [
-        "created_by",
-        "VARCHAR(36)"
-      ],
-      [
-        "deleted_at",
-        "DATETIME"
-      ],
-      [
-        "department_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "description",
-        "TEXT"
-      ],
-      [
-        "detected_at",
-        "DATETIME"
-      ],
-      [
-        "external_report_required",
-        "BOOLEAN"
-      ],
-      [
-        "id",
-        "VARCHAR"
-      ],
-      [
-        "incident_type",
-        "TEXT"
-      ],
-      [
-        "linked_risk_review_required",
-        "BOOLEAN"
-      ],
-      [
-        "occurred_at",
-        "DATETIME"
-      ],
-      [
-        "person_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "registered_at",
-        "DATETIME"
-      ],
-      [
-        "root_cause_summary",
-        "TEXT"
-      ],
-      [
-        "severity",
-        "TEXT"
-      ],
-      [
-        "site_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "status",
-        "TEXT"
-      ],
-      [
-        "tenant_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "title",
-        "TEXT"
-      ],
-      [
-        "updated_at",
-        "DATETIME"
-      ],
-      [
-        "version",
-        "INTEGER"
-      ],
-      [
-        "workplace_id",
-        "VARCHAR(36)"
-      ]
-    ],
-    "incident_investigations": [
-      [
-        "approved_at",
-        "DATETIME"
-      ],
-      [
-        "causes_json",
-        "JSON"
-      ],
-      [
-        "completed_at",
-        "DATETIME"
-      ],
-      [
-        "created_at",
-        "DATETIME"
-      ],
-      [
-        "deleted_at",
-        "DATETIME"
-      ],
-      [
-        "findings_json",
-        "JSON"
-      ],
-      [
-        "id",
-        "VARCHAR"
-      ],
-      [
-        "incident_case_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "methodology",
-        "TEXT"
-      ],
-      [
-        "recommendations_json",
-        "JSON"
-      ],
-      [
-        "started_at",
-        "DATETIME"
-      ],
-      [
-        "status",
-        "TEXT"
-      ],
-      [
-        "tenant_id",
-        "VARCHAR(36)"
       ],
       [
         "updated_at",
@@ -5420,48 +6842,6 @@
         "INTEGER"
       ]
     ],
-    "incident_persons": [
-      [
-        "created_at",
-        "DATETIME"
-      ],
-      [
-        "fio_text",
-        "TEXT"
-      ],
-      [
-        "id",
-        "VARCHAR"
-      ],
-      [
-        "incident_case_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "notes",
-        "TEXT"
-      ],
-      [
-        "person_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "role",
-        "TEXT"
-      ],
-      [
-        "tenant_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "updated_at",
-        "DATETIME"
-      ],
-      [
-        "version",
-        "INTEGER"
-      ]
-    ],
     "inspection": [
       [
         "checklist_id",
@@ -5490,236 +6870,6 @@
       [
         "status",
         "VARCHAR(11)"
-      ],
-      [
-        "tenant_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "updated_at",
-        "DATETIME"
-      ],
-      [
-        "version",
-        "INTEGER"
-      ]
-    ],
-    "inspection_attachments": [
-      [
-        "attachment_type",
-        "TEXT"
-      ],
-      [
-        "created_at",
-        "DATETIME"
-      ],
-      [
-        "file_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "id",
-        "VARCHAR"
-      ],
-      [
-        "inspection_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "tenant_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "updated_at",
-        "DATETIME"
-      ],
-      [
-        "version",
-        "INTEGER"
-      ]
-    ],
-    "inspection_checklist_items": [
-      [
-        "code",
-        "TEXT"
-      ],
-      [
-        "created_at",
-        "DATETIME"
-      ],
-      [
-        "description",
-        "TEXT"
-      ],
-      [
-        "id",
-        "VARCHAR"
-      ],
-      [
-        "inspection_checklist_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "item_order",
-        "INTEGER"
-      ],
-      [
-        "normative_ref",
-        "TEXT"
-      ],
-      [
-        "section",
-        "TEXT"
-      ],
-      [
-        "severity_if_failed",
-        "TEXT"
-      ],
-      [
-        "tenant_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "title",
-        "TEXT"
-      ],
-      [
-        "updated_at",
-        "DATETIME"
-      ],
-      [
-        "version",
-        "INTEGER"
-      ]
-    ],
-    "inspection_checklists": [
-      [
-        "checklist_type",
-        "TEXT"
-      ],
-      [
-        "code",
-        "TEXT"
-      ],
-      [
-        "created_at",
-        "DATETIME"
-      ],
-      [
-        "deleted_at",
-        "DATETIME"
-      ],
-      [
-        "id",
-        "VARCHAR"
-      ],
-      [
-        "name",
-        "TEXT"
-      ],
-      [
-        "status",
-        "TEXT"
-      ],
-      [
-        "tenant_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "updated_at",
-        "DATETIME"
-      ],
-      [
-        "version",
-        "INTEGER"
-      ]
-    ],
-    "inspection_plan_items": [
-      [
-        "contractor_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "created_at",
-        "DATETIME"
-      ],
-      [
-        "department_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "id",
-        "VARCHAR"
-      ],
-      [
-        "inspection_plan_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "planned_for",
-        "DATE"
-      ],
-      [
-        "site_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "status",
-        "TEXT"
-      ],
-      [
-        "subject",
-        "TEXT"
-      ],
-      [
-        "tenant_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "updated_at",
-        "DATETIME"
-      ],
-      [
-        "version",
-        "INTEGER"
-      ]
-    ],
-    "inspection_plans": [
-      [
-        "code",
-        "TEXT"
-      ],
-      [
-        "created_at",
-        "DATETIME"
-      ],
-      [
-        "deleted_at",
-        "DATETIME"
-      ],
-      [
-        "id",
-        "VARCHAR"
-      ],
-      [
-        "name",
-        "TEXT"
-      ],
-      [
-        "period_end",
-        "DATE"
-      ],
-      [
-        "period_start",
-        "DATE"
-      ],
-      [
-        "plan_type",
-        "TEXT"
-      ],
-      [
-        "status",
-        "TEXT"
       ],
       [
         "tenant_id",
@@ -5880,10 +7030,6 @@
         "VARCHAR(36)"
       ],
       [
-        "source_inspection_id",
-        "VARCHAR(36)"
-      ],
-      [
         "status",
         "TEXT"
       ],
@@ -6016,68 +7162,58 @@
         "INTEGER"
       ]
     ],
-    "inspection_run_items": [
+    "internship": [
       [
-        "checklist_item_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "comment",
-        "TEXT"
-      ],
-      [
-        "created_at",
-        "DATETIME"
-      ],
-      [
-        "evidence_required",
-        "BOOLEAN"
-      ],
-      [
-        "id",
-        "VARCHAR"
-      ],
-      [
-        "inspection_run_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "result",
-        "TEXT"
-      ],
-      [
-        "tenant_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "updated_at",
-        "DATETIME"
-      ],
-      [
-        "version",
+        "completed_shifts",
         "INTEGER"
-      ]
-    ],
-    "inspection_runs": [
+      ],
       [
         "created_at",
         "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "discipline",
+        "VARCHAR(32)"
+      ],
+      [
+        "finished_on",
+        "DATE"
       ],
       [
         "id",
         "VARCHAR"
       ],
       [
-        "inspection_checklist_id",
-        "VARCHAR(36)"
+        "mentor_person_id",
+        "VARCHAR"
       ],
       [
-        "inspection_id",
-        "VARCHAR(36)"
+        "notes",
+        "TEXT"
+      ],
+      [
+        "person_id",
+        "VARCHAR"
+      ],
+      [
+        "planned_shifts",
+        "INTEGER"
+      ],
+      [
+        "started_on",
+        "DATE"
       ],
       [
         "status",
-        "TEXT"
+        "VARCHAR(16)"
+      ],
+      [
+        "subject",
+        "VARCHAR(255)"
       ],
       [
         "tenant_id",
@@ -6392,6 +7528,284 @@
         "INTEGER"
       ]
     ],
+    "managed_client": [
+      [
+        "company_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "contract_ends_at",
+        "DATE"
+      ],
+      [
+        "contract_no",
+        "VARCHAR(128)"
+      ],
+      [
+        "contract_starts_at",
+        "DATE"
+      ],
+      [
+        "contract_status",
+        "VARCHAR(10)"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "dedicated_tenant_slug",
+        "VARCHAR(64)"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "mode",
+        "VARCHAR(11)"
+      ],
+      [
+        "name",
+        "VARCHAR(255)"
+      ],
+      [
+        "notes",
+        "TEXT"
+      ],
+      [
+        "report_email",
+        "VARCHAR(320)"
+      ],
+      [
+        "report_opt_in",
+        "BOOLEAN"
+      ],
+      [
+        "responsible_person_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "managed_client_access": [
+      [
+        "all_modules",
+        "BOOLEAN"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "granted_at",
+        "DATETIME"
+      ],
+      [
+        "granted_by_user_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "managed_client_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "modules",
+        "JSON"
+      ],
+      [
+        "revoked_at",
+        "DATETIME"
+      ],
+      [
+        "revoked_by_user_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "user_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "managed_client_consent": [
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "document_ref",
+        "VARCHAR(255)"
+      ],
+      [
+        "expires_at",
+        "DATETIME"
+      ],
+      [
+        "granted_at",
+        "DATETIME"
+      ],
+      [
+        "granted_by_user_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "managed_client_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "revoke_reason",
+        "TEXT"
+      ],
+      [
+        "revoked_at",
+        "DATETIME"
+      ],
+      [
+        "revoked_by_user_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "managed_client_context_session": [
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "ended_at",
+        "DATETIME"
+      ],
+      [
+        "ended_reason",
+        "VARCHAR(32)"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "managed_client_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "started_at",
+        "DATETIME"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "user_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "managed_client_transfer": [
+      [
+        "counts",
+        "JSON"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "finished_at",
+        "DATETIME"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "id_map",
+        "JSON"
+      ],
+      [
+        "managed_client_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "started_at",
+        "DATETIME"
+      ],
+      [
+        "started_by_user_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "status",
+        "VARCHAR(16)"
+      ],
+      [
+        "target_tenant_slug",
+        "VARCHAR(64)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
     "marketplace_catalog_items": [
       [
         "category",
@@ -6514,6 +7928,14 @@
       [
         "person_id",
         "VARCHAR"
+      ],
+      [
+        "psychiatric_activity_codes",
+        "JSON"
+      ],
+      [
+        "psychiatric_protocol_no",
+        "VARCHAR(128)"
       ],
       [
         "referral_id",
@@ -6942,44 +8364,6 @@
         "INTEGER"
       ]
     ],
-    "npa": [
-      [
-        "code",
-        "VARCHAR(128)"
-      ],
-      [
-        "created_at",
-        "DATETIME"
-      ],
-      [
-        "edition_date",
-        "DATE"
-      ],
-      [
-        "id",
-        "VARCHAR"
-      ],
-      [
-        "status",
-        "VARCHAR(8)"
-      ],
-      [
-        "tenant_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "title",
-        "VARCHAR(512)"
-      ],
-      [
-        "updated_at",
-        "DATETIME"
-      ],
-      [
-        "version",
-        "INTEGER"
-      ]
-    ],
     "npa_act": [
       [
         "code",
@@ -7113,11 +8497,15 @@
       ],
       [
         "npa_id",
-        "VARCHAR"
+        "VARCHAR(36)"
       ],
       [
         "ref",
         "VARCHAR(255)"
+      ],
+      [
+        "reviewed_revision_id",
+        "VARCHAR(36)"
       ],
       [
         "template_version_id",
@@ -7126,6 +8514,230 @@
       [
         "tenant_id",
         "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "nvos_facility": [
+      [
+        "actualized_on",
+        "DATE"
+      ],
+      [
+        "category",
+        "VARCHAR(8)"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "excluded_on",
+        "DATE"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "name",
+        "VARCHAR(255)"
+      ],
+      [
+        "notes",
+        "TEXT"
+      ],
+      [
+        "register_number",
+        "VARCHAR(64)"
+      ],
+      [
+        "registered_on",
+        "DATE"
+      ],
+      [
+        "responsible",
+        "VARCHAR(255)"
+      ],
+      [
+        "site_id",
+        "VARCHAR"
+      ],
+      [
+        "status",
+        "VARCHAR(16)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "nvos_fee_line": [
+      [
+        "coefficient",
+        "NUMERIC(6, 2)"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "impact_kind",
+        "VARCHAR(16)"
+      ],
+      [
+        "mass_tons",
+        "NUMERIC(16, 3)"
+      ],
+      [
+        "notes",
+        "TEXT"
+      ],
+      [
+        "quarter",
+        "INTEGER"
+      ],
+      [
+        "subject",
+        "VARCHAR(255)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ],
+      [
+        "year",
+        "INTEGER"
+      ]
+    ],
+    "nvos_fee_rate": [
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "impact_kind",
+        "VARCHAR(16)"
+      ],
+      [
+        "notes",
+        "TEXT"
+      ],
+      [
+        "rate_per_ton",
+        "NUMERIC(14, 2)"
+      ],
+      [
+        "source_document",
+        "VARCHAR(255)"
+      ],
+      [
+        "subject",
+        "VARCHAR(255)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ],
+      [
+        "year",
+        "INTEGER"
+      ]
+    ],
+    "nvos_reporting_deadline": [
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "done_on",
+        "DATE"
+      ],
+      [
+        "due_on",
+        "DATE"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "kind",
+        "VARCHAR(16)"
+      ],
+      [
+        "notes",
+        "TEXT"
+      ],
+      [
+        "period",
+        "VARCHAR(32)"
+      ],
+      [
+        "responsible",
+        "VARCHAR(255)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "title",
+        "VARCHAR(255)"
       ],
       [
         "updated_at",
@@ -7228,26 +8840,10 @@
         "INTEGER"
       ]
     ],
-    "ops_inspections": [
+    "opo_device_work": [
       [
-        "approved_at",
-        "DATETIME"
-      ],
-      [
-        "code",
-        "TEXT"
-      ],
-      [
-        "company_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "completed_at",
-        "DATETIME"
-      ],
-      [
-        "contractor_id",
-        "VARCHAR(36)"
+        "conclusion_number",
+        "VARCHAR(64)"
       ],
       [
         "created_at",
@@ -7258,44 +8854,90 @@
         "DATETIME"
       ],
       [
-        "department_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "description",
-        "TEXT"
+        "device_id",
+        "VARCHAR"
       ],
       [
         "id",
         "VARCHAR"
       ],
       [
-        "inspection_type",
+        "kind",
+        "VARCHAR(32)"
+      ],
+      [
+        "next_due",
+        "DATE"
+      ],
+      [
+        "notes",
         "TEXT"
       ],
       [
-        "inspector_user_id",
+        "performed_on",
+        "DATE"
+      ],
+      [
+        "performer",
+        "VARCHAR(255)"
+      ],
+      [
+        "result",
+        "VARCHAR(32)"
+      ],
+      [
+        "tenant_id",
         "VARCHAR(36)"
       ],
       [
-        "plan_item_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "site_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "source",
-        "TEXT"
-      ],
-      [
-        "started_at",
+        "updated_at",
         "DATETIME"
       ],
       [
-        "status",
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "opo_production_control_measure": [
+      [
+        "completed_on",
+        "DATE"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "due_on",
+        "DATE"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "plan_id",
+        "VARCHAR"
+      ],
+      [
+        "responsible",
+        "VARCHAR(255)"
+      ],
+      [
+        "result",
         "TEXT"
+      ],
+      [
+        "section",
+        "VARCHAR(32)"
+      ],
+      [
+        "status",
+        "VARCHAR(16)"
       ],
       [
         "tenant_id",
@@ -7303,7 +8945,127 @@
       ],
       [
         "title",
+        "VARCHAR(255)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "opo_production_control_plan": [
+      [
+        "approved_on",
+        "DATE"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "notes",
         "TEXT"
+      ],
+      [
+        "responsible",
+        "VARCHAR(255)"
+      ],
+      [
+        "status",
+        "VARCHAR(16)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "title",
+        "VARCHAR(255)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ],
+      [
+        "year",
+        "INTEGER"
+      ]
+    ],
+    "opo_technical_device": [
+      [
+        "commissioned_on",
+        "DATE"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "epb_conclusion_number",
+        "VARCHAR(64)"
+      ],
+      [
+        "epb_registered_on",
+        "DATE"
+      ],
+      [
+        "epb_valid_until",
+        "DATE"
+      ],
+      [
+        "facility_id",
+        "VARCHAR"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "kind",
+        "VARCHAR(32)"
+      ],
+      [
+        "lifetime_until",
+        "DATE"
+      ],
+      [
+        "name",
+        "VARCHAR(255)"
+      ],
+      [
+        "notes",
+        "TEXT"
+      ],
+      [
+        "serial_number",
+        "VARCHAR(64)"
+      ],
+      [
+        "status",
+        "VARCHAR(16)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
       ],
       [
         "updated_at",
@@ -8376,6 +10138,356 @@
         "INTEGER"
       ]
     ],
+    "pdn_access_log": [
+      [
+        "action",
+        "VARCHAR(32)"
+      ],
+      [
+        "actor_email",
+        "VARCHAR(255)"
+      ],
+      [
+        "actor_role",
+        "VARCHAR(64)"
+      ],
+      [
+        "actor_user_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "ip",
+        "VARCHAR(64)"
+      ],
+      [
+        "occurred_at",
+        "DATETIME"
+      ],
+      [
+        "purpose",
+        "VARCHAR(255)"
+      ],
+      [
+        "request_id",
+        "VARCHAR(64)"
+      ],
+      [
+        "subject_person_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "pdn_consent": [
+      [
+        "consent_version",
+        "INTEGER"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "document_ref",
+        "VARCHAR(255)"
+      ],
+      [
+        "expires_at",
+        "DATETIME"
+      ],
+      [
+        "granted_at",
+        "DATETIME"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "legal_basis",
+        "VARCHAR(32)"
+      ],
+      [
+        "purpose",
+        "VARCHAR(64)"
+      ],
+      [
+        "recorded_by_email",
+        "VARCHAR(255)"
+      ],
+      [
+        "recorded_by_user_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "status",
+        "VARCHAR(16)"
+      ],
+      [
+        "subject_person_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "text_sha256",
+        "VARCHAR(64)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ],
+      [
+        "withdrawal_reason",
+        "TEXT"
+      ],
+      [
+        "withdrawn_at",
+        "DATETIME"
+      ]
+    ],
+    "pdn_erasure_record": [
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "performed_at",
+        "DATETIME"
+      ],
+      [
+        "performed_by_email",
+        "VARCHAR(255)"
+      ],
+      [
+        "performed_by_user_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "pseudonym",
+        "VARCHAR(64)"
+      ],
+      [
+        "reason",
+        "TEXT"
+      ],
+      [
+        "retained_sections",
+        "JSON"
+      ],
+      [
+        "scrubbed_fields",
+        "JSON"
+      ],
+      [
+        "subject_person_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "pdn_processing_activity": [
+      [
+        "access_roles",
+        "JSON"
+      ],
+      [
+        "code",
+        "VARCHAR(64)"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "cross_border_transfer",
+        "BOOLEAN"
+      ],
+      [
+        "data_categories",
+        "JSON"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "is_active",
+        "BOOLEAN"
+      ],
+      [
+        "legal_basis",
+        "VARCHAR(32)"
+      ],
+      [
+        "name",
+        "VARCHAR(255)"
+      ],
+      [
+        "notes",
+        "TEXT"
+      ],
+      [
+        "purpose",
+        "VARCHAR(64)"
+      ],
+      [
+        "purpose_description",
+        "TEXT"
+      ],
+      [
+        "recipients",
+        "JSON"
+      ],
+      [
+        "retention_basis",
+        "VARCHAR(255)"
+      ],
+      [
+        "retention_months",
+        "INTEGER"
+      ],
+      [
+        "review_at",
+        "DATE"
+      ],
+      [
+        "storage_location",
+        "VARCHAR(64)"
+      ],
+      [
+        "subject_categories",
+        "JSON"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "pdn_processing_agreement": [
+      [
+        "breach_notification_hours",
+        "INTEGER"
+      ],
+      [
+        "counterparty_inn",
+        "VARCHAR(32)"
+      ],
+      [
+        "counterparty_name",
+        "VARCHAR(255)"
+      ],
+      [
+        "counterparty_tenant_slug",
+        "VARCHAR(64)"
+      ],
+      [
+        "covered_activity_codes",
+        "JSON"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "document_ref",
+        "VARCHAR(255)"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "kind",
+        "VARCHAR(32)"
+      ],
+      [
+        "notes",
+        "TEXT"
+      ],
+      [
+        "party_role",
+        "VARCHAR(16)"
+      ],
+      [
+        "signed_at",
+        "DATE"
+      ],
+      [
+        "status",
+        "VARCHAR(16)"
+      ],
+      [
+        "subprocessing_allowed",
+        "BOOLEAN"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "terminated_at",
+        "DATETIME"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "valid_until",
+        "DATE"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
     "permit": [
       [
         "created_at",
@@ -8423,6 +10535,10 @@
       ]
     ],
     "person": [
+      [
+        "anonymized_at",
+        "DATETIME"
+      ],
       [
         "birth_date",
         "DATE"
@@ -9082,6 +11198,144 @@
         "INTEGER"
       ]
     ],
+    "ppe_inventory_count": [
+      [
+        "applied_at",
+        "DATETIME"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "note",
+        "VARCHAR(255)"
+      ],
+      [
+        "scope_item_id",
+        "VARCHAR"
+      ],
+      [
+        "scope_location",
+        "VARCHAR(255)"
+      ],
+      [
+        "status",
+        "VARCHAR(16)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "ppe_inventory_count_line": [
+      [
+        "adjustment_movement_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "batch_id",
+        "VARCHAR"
+      ],
+      [
+        "count_id",
+        "VARCHAR"
+      ],
+      [
+        "counted_qty",
+        "INTEGER"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "item_id",
+        "VARCHAR"
+      ],
+      [
+        "system_qty",
+        "INTEGER"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "ppe_safety_budget": [
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "name",
+        "VARCHAR(255)"
+      ],
+      [
+        "notes",
+        "VARCHAR(1000)"
+      ],
+      [
+        "period_end",
+        "DATE"
+      ],
+      [
+        "period_start",
+        "DATE"
+      ],
+      [
+        "planned_amount",
+        "NUMERIC(14, 2)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
     "ppe_stock_batch": [
       [
         "batch_no",
@@ -9122,6 +11376,110 @@
       [
         "received_at",
         "DATE"
+      ],
+      [
+        "supplier_id",
+        "VARCHAR"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "unit_cost",
+        "NUMERIC(14, 2)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "ppe_stock_movement": [
+      [
+        "batch_id",
+        "VARCHAR"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "item_id",
+        "VARCHAR"
+      ],
+      [
+        "kind",
+        "VARCHAR(32)"
+      ],
+      [
+        "occurred_at",
+        "DATETIME"
+      ],
+      [
+        "quantity_delta",
+        "INTEGER"
+      ],
+      [
+        "reason",
+        "VARCHAR(255)"
+      ],
+      [
+        "ref_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "ref_type",
+        "VARCHAR(64)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "ppe_supplier": [
+      [
+        "contact_email",
+        "VARCHAR(255)"
+      ],
+      [
+        "contact_phone",
+        "VARCHAR(64)"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "inn",
+        "VARCHAR(12)"
+      ],
+      [
+        "name",
+        "VARCHAR(255)"
       ],
       [
         "tenant_id",
@@ -9256,8 +11614,16 @@
         "JSON"
       ],
       [
+        "min_stock",
+        "INTEGER"
+      ],
+      [
         "name",
         "VARCHAR(255)"
+      ],
+      [
+        "preferred_supplier_id",
+        "VARCHAR"
       ],
       [
         "tenant_id",
@@ -9318,54 +11684,60 @@
         "INTEGER"
       ]
     ],
-    "prescription_items": [
+    "psychiatric_activity_type": [
+      [
+        "code",
+        "VARCHAR(32)"
+      ],
       [
         "created_at",
         "DATETIME"
-      ],
-      [
-        "deleted_at",
-        "DATETIME"
-      ],
-      [
-        "description",
-        "TEXT"
-      ],
-      [
-        "due_date",
-        "DATE"
-      ],
-      [
-        "finding_id",
-        "VARCHAR(36)"
       ],
       [
         "id",
         "VARCHAR"
       ],
       [
-        "item_order",
+        "interval_days",
         "INTEGER"
       ],
       [
-        "prescription_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "responsible_user_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "status",
-        "TEXT"
+        "name",
+        "VARCHAR(255)"
       ],
       [
         "tenant_id",
         "VARCHAR(36)"
       ],
       [
-        "title",
-        "TEXT"
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "psychiatric_position_activity": [
+      [
+        "activity_code",
+        "VARCHAR(32)"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "position_id",
+        "VARCHAR"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
       ],
       [
         "updated_at",
@@ -9508,64 +11880,6 @@
         "INTEGER"
       ]
     ],
-    "reminder_rules": [
-      [
-        "action",
-        "JSON"
-      ],
-      [
-        "code",
-        "VARCHAR(128)"
-      ],
-      [
-        "created_at",
-        "DATETIME"
-      ],
-      [
-        "date_field",
-        "VARCHAR(64)"
-      ],
-      [
-        "deleted_at",
-        "DATETIME"
-      ],
-      [
-        "entity_type",
-        "VARCHAR(12)"
-      ],
-      [
-        "id",
-        "VARCHAR"
-      ],
-      [
-        "is_enabled",
-        "BOOLEAN"
-      ],
-      [
-        "name",
-        "VARCHAR(255)"
-      ],
-      [
-        "recipients",
-        "JSON"
-      ],
-      [
-        "schedule",
-        "JSON"
-      ],
-      [
-        "tenant_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "updated_at",
-        "DATETIME"
-      ],
-      [
-        "version",
-        "INTEGER"
-      ]
-    ],
     "replace_map": [
       [
         "code",
@@ -9690,42 +12004,38 @@
         "INTEGER"
       ]
     ],
-    "risk": [
+    "report_definition": [
       [
-        "company_id",
-        "VARCHAR"
-      ],
-      [
-        "controls",
-        "TEXT"
+        "config_json",
+        "JSON"
       ],
       [
         "created_at",
         "DATETIME"
       ],
       [
-        "hazard",
-        "VARCHAR(512)"
+        "dataset_code",
+        "VARCHAR(64)"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "description",
+        "TEXT"
       ],
       [
         "id",
         "VARCHAR"
       ],
       [
-        "level",
-        "INTEGER"
+        "is_system",
+        "BOOLEAN"
       ],
       [
-        "probability",
-        "INTEGER"
-      ],
-      [
-        "severity",
-        "INTEGER"
-      ],
-      [
-        "site_id",
-        "VARCHAR"
+        "name",
+        "VARCHAR(255)"
       ],
       [
         "tenant_id",
@@ -10458,6 +12768,402 @@
         "INTEGER"
       ]
     ],
+    "road_accident": [
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "description",
+        "TEXT"
+      ],
+      [
+        "driver_id",
+        "VARCHAR"
+      ],
+      [
+        "fatalities_count",
+        "INTEGER"
+      ],
+      [
+        "fault",
+        "VARCHAR(24)"
+      ],
+      [
+        "gibdd_reference",
+        "VARCHAR(128)"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "incident_id",
+        "VARCHAR"
+      ],
+      [
+        "injured_count",
+        "INTEGER"
+      ],
+      [
+        "kind",
+        "VARCHAR(24)"
+      ],
+      [
+        "occurred_at",
+        "DATETIME"
+      ],
+      [
+        "place",
+        "VARCHAR(255)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "vehicle_id",
+        "VARCHAR"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "road_driver": [
+      [
+        "categories",
+        "JSON"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "experience_since",
+        "DATE"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "license_due",
+        "DATE"
+      ],
+      [
+        "license_issued_at",
+        "DATE"
+      ],
+      [
+        "license_number",
+        "VARCHAR(32)"
+      ],
+      [
+        "notes",
+        "TEXT"
+      ],
+      [
+        "person_id",
+        "VARCHAR"
+      ],
+      [
+        "status",
+        "VARCHAR(16)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "road_vehicle": [
+      [
+        "brand_model",
+        "VARCHAR(255)"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "inspection_due",
+        "DATE"
+      ],
+      [
+        "insurance_due",
+        "DATE"
+      ],
+      [
+        "kind",
+        "VARCHAR(16)"
+      ],
+      [
+        "license_due",
+        "DATE"
+      ],
+      [
+        "license_number",
+        "VARCHAR(128)"
+      ],
+      [
+        "notes",
+        "TEXT"
+      ],
+      [
+        "plate_number",
+        "VARCHAR(32)"
+      ],
+      [
+        "site_id",
+        "VARCHAR"
+      ],
+      [
+        "status",
+        "VARCHAR(16)"
+      ],
+      [
+        "tachograph_due",
+        "DATE"
+      ],
+      [
+        "tachograph_installed",
+        "BOOLEAN"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ],
+      [
+        "vin",
+        "VARCHAR(32)"
+      ],
+      [
+        "year_made",
+        "INTEGER"
+      ]
+    ],
+    "road_violation": [
+      [
+        "article",
+        "VARCHAR(64)"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "description",
+        "TEXT"
+      ],
+      [
+        "driver_id",
+        "VARCHAR"
+      ],
+      [
+        "fine_amount",
+        "NUMERIC(12, 2)"
+      ],
+      [
+        "fine_paid_on",
+        "DATE"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "occurred_at",
+        "DATETIME"
+      ],
+      [
+        "place",
+        "VARCHAR(255)"
+      ],
+      [
+        "resolution_number",
+        "VARCHAR(64)"
+      ],
+      [
+        "source",
+        "VARCHAR(16)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "vehicle_id",
+        "VARCHAR"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "road_waybill": [
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "departure_at",
+        "DATETIME"
+      ],
+      [
+        "driver_id",
+        "VARCHAR"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "issued_on",
+        "DATE"
+      ],
+      [
+        "notes",
+        "TEXT"
+      ],
+      [
+        "number",
+        "VARCHAR(32)"
+      ],
+      [
+        "post_trip_medical",
+        "VARCHAR(16)"
+      ],
+      [
+        "pre_trip_medical",
+        "VARCHAR(16)"
+      ],
+      [
+        "pre_trip_technical",
+        "VARCHAR(16)"
+      ],
+      [
+        "return_at",
+        "DATETIME"
+      ],
+      [
+        "status",
+        "VARCHAR(16)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "vehicle_id",
+        "VARCHAR"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "safety_budget": [
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "domain",
+        "VARCHAR(32)"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "name",
+        "VARCHAR(255)"
+      ],
+      [
+        "notes",
+        "VARCHAR(1000)"
+      ],
+      [
+        "period_end",
+        "DATE"
+      ],
+      [
+        "period_start",
+        "DATE"
+      ],
+      [
+        "planned_amount",
+        "NUMERIC(14, 2)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
     "saved_calendar_views": [
       [
         "created_at",
@@ -10892,6 +13598,10 @@
       [
         "address",
         "VARCHAR(255)"
+      ],
+      [
+        "branch_id",
+        "VARCHAR(36)"
       ],
       [
         "branding_payload",
@@ -11650,6 +14360,56 @@
         "INTEGER"
       ]
     ],
+    "tenant_branding": [
+      [
+        "app_name",
+        "VARCHAR(120)"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "favicon_image",
+        "BLOB"
+      ],
+      [
+        "favicon_media_type",
+        "VARCHAR(64)"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "logo_image",
+        "BLOB"
+      ],
+      [
+        "logo_media_type",
+        "VARCHAR(64)"
+      ],
+      [
+        "primary_color",
+        "VARCHAR(32)"
+      ],
+      [
+        "support_email",
+        "VARCHAR(255)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
     "tenant_counters": [
       [
         "created_at",
@@ -11714,6 +14474,94 @@
         "INTEGER"
       ]
     ],
+    "tenant_legal_acceptance": [
+      [
+        "accepted_at",
+        "DATETIME"
+      ],
+      [
+        "body_sha256",
+        "VARCHAR(64)"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "doc_version",
+        "INTEGER"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "kind",
+        "VARCHAR(32)"
+      ],
+      [
+        "source",
+        "VARCHAR(16)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "user_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "tenant_legal_document": [
+      [
+        "body",
+        "TEXT"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "doc_version",
+        "INTEGER"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "kind",
+        "VARCHAR(32)"
+      ],
+      [
+        "published_at",
+        "DATETIME"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "title",
+        "VARCHAR(255)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
     "tenant_limits_override": [
       [
         "created_at",
@@ -11734,6 +14582,68 @@
       [
         "limits",
         "JSON"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "tenant_offboarding": [
+      [
+        "cancelled_at",
+        "DATETIME"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "grace_days",
+        "INTEGER"
+      ],
+      [
+        "grace_until",
+        "DATETIME"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "purge_act",
+        "JSON"
+      ],
+      [
+        "purged_at",
+        "DATETIME"
+      ],
+      [
+        "reason",
+        "TEXT"
+      ],
+      [
+        "requested_at",
+        "DATETIME"
+      ],
+      [
+        "requested_by_email",
+        "VARCHAR(255)"
+      ],
+      [
+        "requested_by_user_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "status",
+        "VARCHAR(16)"
       ],
       [
         "tenant_id",
@@ -11818,44 +14728,6 @@
       [
         "value",
         "INTEGER"
-      ],
-      [
-        "version",
-        "INTEGER"
-      ]
-    ],
-    "tenant_rate_limits": [
-      [
-        "burst",
-        "INTEGER"
-      ],
-      [
-        "concurrency_limit",
-        "INTEGER"
-      ],
-      [
-        "created_at",
-        "DATETIME"
-      ],
-      [
-        "id",
-        "VARCHAR"
-      ],
-      [
-        "queues",
-        "JSON"
-      ],
-      [
-        "rps",
-        "INTEGER"
-      ],
-      [
-        "tenant_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "updated_at",
-        "DATETIME"
       ],
       [
         "version",
@@ -12102,6 +14974,10 @@
       [
         "description",
         "TEXT"
+      ],
+      [
+        "discipline",
+        "VARCHAR(32)"
       ],
       [
         "duration_hours",
@@ -12522,52 +15398,6 @@
       [
         "validity_months",
         "INTEGER"
-      ],
-      [
-        "version",
-        "INTEGER"
-      ]
-    ],
-    "training_protocol_items": [
-      [
-        "created_at",
-        "DATETIME"
-      ],
-      [
-        "enrollment_id",
-        "VARCHAR"
-      ],
-      [
-        "fio_text",
-        "VARCHAR(255)"
-      ],
-      [
-        "id",
-        "VARCHAR"
-      ],
-      [
-        "person_id",
-        "VARCHAR"
-      ],
-      [
-        "result",
-        "VARCHAR(32)"
-      ],
-      [
-        "score",
-        "NUMERIC(8, 2)"
-      ],
-      [
-        "tenant_id",
-        "VARCHAR(36)"
-      ],
-      [
-        "training_protocol_id",
-        "VARCHAR"
-      ],
-      [
-        "updated_at",
-        "DATETIME"
       ],
       [
         "version",
@@ -13004,6 +15834,230 @@
         "INTEGER"
       ]
     ],
+    "waste_movement": [
+      [
+        "contract_id",
+        "VARCHAR"
+      ],
+      [
+        "counterparty",
+        "VARCHAR(255)"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "happened_on",
+        "DATE"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "kind",
+        "VARCHAR(16)"
+      ],
+      [
+        "notes",
+        "TEXT"
+      ],
+      [
+        "passport_id",
+        "VARCHAR"
+      ],
+      [
+        "quantity_tons",
+        "NUMERIC(14, 3)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "waste_passport": [
+      [
+        "annual_limit_tons",
+        "NUMERIC(14, 3)"
+      ],
+      [
+        "approved_on",
+        "DATE"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "facility_id",
+        "VARCHAR"
+      ],
+      [
+        "fkko_code",
+        "VARCHAR(16)"
+      ],
+      [
+        "hazard_class",
+        "VARCHAR(8)"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "name",
+        "VARCHAR(255)"
+      ],
+      [
+        "notes",
+        "TEXT"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
+    "water_usage_point": [
+      [
+        "annual_limit_cubic_meters",
+        "NUMERIC(16, 3)"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "facility_id",
+        "VARCHAR"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "kind",
+        "VARCHAR(16)"
+      ],
+      [
+        "name",
+        "VARCHAR(255)"
+      ],
+      [
+        "notes",
+        "TEXT"
+      ],
+      [
+        "permit_number",
+        "VARCHAR(64)"
+      ],
+      [
+        "permit_valid_until",
+        "DATE"
+      ],
+      [
+        "point_number",
+        "VARCHAR(32)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ],
+      [
+        "water_body",
+        "VARCHAR(255)"
+      ]
+    ],
+    "water_usage_record": [
+      [
+        "basis",
+        "VARCHAR(16)"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "meter_number",
+        "VARCHAR(64)"
+      ],
+      [
+        "notes",
+        "TEXT"
+      ],
+      [
+        "period_month",
+        "INTEGER"
+      ],
+      [
+        "period_year",
+        "INTEGER"
+      ],
+      [
+        "point_id",
+        "VARCHAR"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ],
+      [
+        "volume_cubic_meters",
+        "NUMERIC(16, 3)"
+      ]
+    ],
     "webhook_deliveries": [
       [
         "attempts",
@@ -13052,6 +16106,10 @@
       [
         "next_attempt_at",
         "DATETIME"
+      ],
+      [
+        "outbox_id",
+        "VARCHAR(36)"
       ],
       [
         "request_headers",
@@ -13820,18 +16878,20 @@
     ]
   },
   "init_all": [
+    "ApiDeprecationUsage",
     "ApiKey",
     "ApprovalDecision",
     "ApprovalDecisionType",
     "ApprovalRequest",
     "ApprovalRequestStatus",
     "ApprovalRoute",
-    "Asset",
     "Attestation",
     "AttestationStatus",
     "AuditLog",
+    "Branch",
     "CalendarPlanTask",
     "CalendarPlanTaskStatus",
+    "ClientChange",
     "Committee",
     "CommitteeAgendaItem",
     "CommitteeDecision",
@@ -13841,17 +16901,18 @@
     "CommitteeMember",
     "CommitteeMemberRole",
     "Company",
+    "ComplianceRequirement",
+    "ComplianceRequirementEvidence",
     "Contract",
     "ContractStatus",
     "DecisionTaskStatus",
     "Department",
+    "DisciplineStatusReport",
     "Document",
     "DocumentBatchItem",
     "DocumentBatchItemStatus",
     "DocumentBatchRun",
     "DocumentBatchStatus",
-    "DocumentGenerationJob",
-    "DocumentJobStatus",
     "DocumentPack",
     "DocumentPackItem",
     "DocumentSnapshot",
@@ -13859,13 +16920,9 @@
     "DocumentVersion",
     "EdoDirection",
     "EdoMessage",
-    "EdoReceipt",
     "EdoStatus",
     "EdoStatusHistory",
-    "Equipment",
     "File",
-    "HazardBinding",
-    "HazardMeasure",
     "InboundWebhookDedup",
     "Incident",
     "IncidentLog",
@@ -13881,9 +16938,11 @@
     "Invoice",
     "InvoiceStatus",
     "JournalEntry",
+    "ManagedClient",
+    "ManagedClientAccess",
+    "ManagedClientContextSession",
     "MedicalExam",
     "MeetingStatus",
-    "NPA",
     "NPABinding",
     "Notification",
     "NotificationChannel",
@@ -13908,8 +16967,6 @@
     "Prescription",
     "PrescriptionStatus",
     "ReminderEntityType",
-    "ReminderRule",
-    "Risk",
     "RiskActionPlan",
     "RiskActionPlanItem",
     "RiskAssessment",
@@ -13945,6 +17002,9 @@
     "Template",
     "TemplateVersion",
     "Tenant",
+    "TenantBranding",
+    "TenantLegalAcceptance",
+    "TenantLegalDocument",
     "TenantSettings",
     "Training",
     "TrainingCertificate",
@@ -13963,110 +17023,269 @@
   ],
   "models_all": [
     "ApiKey",
+    "ApiKey",
+    "ApiToken",
     "ApiToken",
     "ApprovalDecision",
+    "ApprovalDecisionLog",
     "ApprovalDecisionType",
+    "ApprovalInstance",
     "ApprovalInstance",
     "ApprovalInstanceStatus",
     "ApprovalInstanceStep",
+    "ApprovalInstanceStep",
     "ApprovalInstanceStepStatus",
+    "ApprovalProcess",
+    "ApprovalProcessStatus",
     "ApprovalRequest",
     "ApprovalRequestStatus",
     "ApprovalRoute",
     "ApprovalRouteAppliesTo",
     "ApprovalRouteStatus",
     "ApprovalRouteStep",
+    "ApprovalRouteStep",
+    "ApprovalStepType",
+    "ApprovalTask",
+    "ApprovalTaskStatus",
+    "Attestation",
     "Attestation",
     "AttestationStatus",
+    "AttestationStatus",
+    "AuditExportJob",
     "AuditExportJob",
     "AuditLog",
+    "AuditLog",
+    "AuthzBaseModel",
     "AuthzPermission",
+    "AuthzPermission",
+    "AuthzPolicy",
+    "AuthzRole",
     "AuthzRole",
     "AuthzRolePermission",
+    "AuthzRolePermission",
     "AuthzUserRole",
+    "AuthzUserRole",
+    "AutomationRule",
+    "AutomationRuleTrigger",
+    "BillingEvent",
     "BillingEvent",
     "BillingEventType",
+    "BillingEventType",
+    "BillingInvoice",
     "BillingInvoice",
     "BillingInvoiceStatus",
+    "BillingInvoiceStatus",
+    "BillingPlan",
     "BillingPlan",
     "BillingSubscription",
+    "BillingSubscription",
+    "BillingSubscriptionStatus",
     "BillingSubscriptionStatus",
     "BillingUsageCounter",
+    "BillingUsageCounter",
+    "Branch",
+    "BriefingEntry",
+    "BriefingJournal",
+    "BriefingSignature",
+    "BriefingTemplate",
+    "BudgetExpense",
+    "BudgetExpenseArticle",
+    "BudgetReimbursement",
+    "BudgetReimbursementItem",
+    "CalendarEvent",
+    "ClientPackagePreset",
+    "ClientPackageRun",
+    "ClientPortalToken",
+    "ClientRequestTicket",
+    "ClientRequestTicketStatus",
     "Company",
+    "Company",
+    "ComplianceDeadline",
+    "DocumentPack",
     "DocumentPack",
     "DocumentPackItem",
+    "DocumentPackItem",
     "DocumentPackModule",
+    "DocumentPackModule",
+    "DocumentPackScenario",
     "DocumentPackScenario",
     "EdoDirection",
     "EdoMessage",
     "EdoMessageStatus",
-    "EdoReceipt",
     "EdoStatus",
+    "EdoStatusEvent",
     "EdoStatusHistory",
+    "EdoWebhookInbox",
     "EmploymentStatus",
-    "Equipment",
+    "EmploymentStatus",
+    "ExternalRegistryJob",
+    "File",
+    "IdempotencyKey",
     "IdempotencyKey",
     "IdempotencyStatus",
+    "IdempotencyStatus",
+    "Incident",
     "Incident",
     "IncidentLog",
+    "IncidentLog",
+    "IncidentPerson",
     "IncidentPerson",
     "IncidentPersonRole",
+    "IncidentPersonRole",
+    "IncidentSeverity",
+    "IncidentStage",
     "IncidentStage",
     "IncidentStatus",
+    "IncidentStatus",
+    "IncidentType",
     "IncidentType",
     "Inspection",
+    "Inspection",
+    "InspectionResult",
     "InspectionResult",
     "InspectionStatus",
+    "InspectionStatus",
     "InspectionType",
+    "InspectionType",
+    "Journal",
     "Journal",
     "JournalEntry",
     "JournalEntry",
+    "JournalEntry",
     "JournalType",
+    "JournalType",
+    "MarketplaceCatalogItem",
+    "MedicalExam",
     "MedicalExam",
     "MedicalExamKind",
+    "MedicalExamKind",
+    "MedicalFactor",
+    "MedicalFitness",
     "MedicalFitness",
     "MedicalNorm",
+    "MedicalNorm",
+    "MedicalReferral",
     "MedicalReferral",
     "MedicalReferralStatus",
+    "MedicalReferralStatus",
+    "MedicalSuspension",
     "MedicalSuspension",
     "MedicalSuspensionReason",
+    "MedicalSuspensionReason",
     "MedicalSuspensionStatus",
-    "NPA",
+    "MedicalSuspensionStatus",
+    "NPABinding",
     "NPABinding",
     "NpaBindingTarget",
+    "NpaBindingTarget",
+    "OfflineMediaQueue",
+    "OfflineSyncBatch",
+    "Outbox",
     "Outbox",
     "OutboxStatus",
+    "OutboxStatus",
+    "OutputFormat",
+    "PPEInventoryCount",
+    "PPEInventoryCountLine",
     "PPEIssue",
+    "PPEIssue",
+    "PPEIssueStatus",
+    "PPEItem",
     "PPEItem",
     "PPEItemCategory",
+    "PPEItemCategory",
     "PPENorm",
+    "PPENorm",
+    "PPESafetyBudget",
+    "PPEStockBatch",
+    "PPEStockMovement",
+    "PPESupplier",
+    "PackLogLevel",
+    "PackRun",
+    "PackRunItem",
+    "PackRunItemStatus",
+    "PackRunLifecycleStatus",
+    "PackRunLog",
+    "PackageEntityStatus",
+    "PackageEvent",
     "PackagePreset",
+    "PackagePreset",
+    "PackagePresetConfig",
+    "PackagePresetItem",
     "PackageProfile",
+    "PackageProfile",
+    "PackageProfileConfig",
+    "PackageRequirement",
+    "PackageRequirementStatus",
+    "PackageRequirementType",
+    "PackageRunStatus",
+    "PackageSourceType",
     "Permit",
+    "Permit",
+    "PermitStatus",
+    "Person",
     "Person",
     "PipelineRun",
+    "PipelineRun",
+    "PipelineRunStatus",
     "PipelineRunStatus",
     "PlanTask",
+    "PlanTask",
+    "PlanTaskStatus",
+    "Position",
     "Position",
     "PositionHazardLink",
+    "PositionHazardLink",
+    "Prescription",
     "Prescription",
     "PrescriptionStatus",
+    "PrescriptionStatus",
+    "PsychiatricActivityType",
+    "PsychiatricActivityType",
+    "PsychiatricPositionActivity",
+    "PsychiatricPositionActivity",
     "RefreshSession",
+    "RefreshSession",
+    "ReplaceMode",
+    "ReportDefinition",
+    "RiskMap",
     "RiskMap",
     "RiskMethodology",
+    "RiskMethodology",
+    "RoleEnum",
+    "RuleTriggerStatus",
+    "SafetyBudget",
+    "SecurityAuditLog",
+    "SharedModel",
+    "SignatureProviderStatus",
+    "SignatureRequest",
+    "SignatureRequestStatus",
     "SignatureType",
     "Site",
+    "Site",
+    "Template",
     "Template",
     "TemplateStatus",
+    "TemplateStatus",
+    "TemplateUsage",
     "TemplateUsage",
     "TemplateVersion",
+    "TemplateVersion",
+    "TemplateVersionStatus",
     "Tenant",
+    "Tenant",
+    "TenantBaseModel",
+    "TenantCounter",
     "TenantCounter",
     "TenantIntegrationKey",
+    "TenantIntegrationKey",
+    "TenantLimitOverride",
     "TenantLimitOverride",
     "TenantQuota",
+    "TenantQuota",
     "TenantQuotaCounter",
-    "TenantRateLimit",
+    "TenantQuotaCounter",
+    "TenantSettings",
     "TenantSettings",
     "Training",
     "TrainingAttempt",
@@ -14079,19 +17298,26 @@
     "TrainingPlan",
     "TrainingProgram",
     "TrainingProtocol",
-    "TrainingProtocolItem",
     "TrainingSession",
     "TrainingSessionStatus",
     "TrainingStatus",
     "TrainingTest",
     "TrainingTestQuestion",
     "User",
+    "User",
+    "UserAttribute",
     "UserAttribute",
     "UserRole",
+    "UserRole",
+    "WebhookDelivery",
     "WebhookDelivery",
     "WebhookEndpoint",
+    "WebhookEndpoint",
+    "WebhookSubscription",
     "WebhookSubscription",
     "Workplace",
+    "Workplace",
+    "WorkplaceHazardLink",
     "WorkplaceHazardLink"
   ],
   "models_public_types": [
@@ -14115,7 +17341,6 @@
     "ApprovalStepType",
     "ApprovalTask",
     "ApprovalTaskStatus",
-    "Asset",
     "Attestation",
     "AttestationStatus",
     "AuditExportJob",
@@ -14125,6 +17350,8 @@
     "AuthzRole",
     "AuthzRolePermission",
     "AuthzUserRole",
+    "AutomationRule",
+    "AutomationRuleTrigger",
     "BillingEvent",
     "BillingEventType",
     "BillingInvoice",
@@ -14133,11 +17360,21 @@
     "BillingSubscription",
     "BillingSubscriptionStatus",
     "BillingUsageCounter",
+    "Branch",
     "BriefingEntry",
     "BriefingJournal",
     "BriefingSignature",
     "BriefingTemplate",
+    "BudgetExpense",
+    "BudgetExpenseArticle",
+    "BudgetReimbursement",
+    "BudgetReimbursementItem",
     "CalendarEvent",
+    "CivilDefenseDocument",
+    "CivilDefenseDrill",
+    "CivilDefenseFormation",
+    "CivilDefenseFormationMember",
+    "CivilDefenseProfile",
     "ClientPackagePreset",
     "ClientPackageRun",
     "ClientPortalToken",
@@ -14145,23 +17382,29 @@
     "ClientRequestTicketStatus",
     "Company",
     "ComplianceDeadline",
+    "DeviceWorkRecord",
     "DocumentPack",
     "DocumentPackItem",
     "DocumentPackModule",
     "DocumentPackScenario",
+    "EcologyReportingDeadline",
     "EdoDirection",
     "EdoMessage",
     "EdoMessageStatus",
-    "EdoReceipt",
     "EdoStatus",
     "EdoStatusEvent",
     "EdoStatusHistory",
     "EdoWebhookInbox",
+    "EmissionMeasurement",
+    "EmissionMonitoringPlanItem",
+    "EmissionNorm",
+    "EmissionSource",
     "EmploymentStatus",
-    "Equipment",
-    "EquipmentStatus",
+    "EnvironmentalFacility",
     "ExternalRegistryJob",
     "File",
+    "FireSafetyEquipment",
+    "HazardousFacility",
     "IdempotencyKey",
     "IdempotencyStatus",
     "Incident",
@@ -14190,21 +17433,26 @@
     "MedicalSuspension",
     "MedicalSuspensionReason",
     "MedicalSuspensionStatus",
-    "NPA",
     "NPABinding",
-    "NPAStatus",
     "NpaBindingTarget",
+    "NvosFeeLine",
+    "NvosFeeRate",
     "OfflineMediaQueue",
     "OfflineSyncBatch",
     "Outbox",
     "OutboxStatus",
     "OutputFormat",
+    "PPEInventoryCount",
+    "PPEInventoryCountLine",
     "PPEIssue",
     "PPEIssueStatus",
     "PPEItem",
     "PPEItemCategory",
     "PPENorm",
+    "PPESafetyBudget",
     "PPEStockBatch",
+    "PPEStockMovement",
+    "PPESupplier",
     "PackLogLevel",
     "PackRun",
     "PackRunItem",
@@ -14234,11 +17482,18 @@
     "PositionHazardLink",
     "Prescription",
     "PrescriptionStatus",
+    "ProductionControlMeasure",
+    "ProductionControlPlan",
+    "PsychiatricActivityType",
+    "PsychiatricPositionActivity",
     "RefreshSession",
     "ReplaceMode",
+    "ReportDefinition",
     "RiskMap",
     "RiskMethodology",
     "RoleEnum",
+    "RuleTriggerStatus",
+    "SafetyBudget",
     "SecurityAuditLog",
     "SharedModel",
     "SignatureProviderStatus",
@@ -14246,6 +17501,7 @@
     "SignatureRequestStatus",
     "SignatureType",
     "Site",
+    "TechnicalDevice",
     "Template",
     "TemplateStatus",
     "TemplateUsage",
@@ -14258,7 +17514,6 @@
     "TenantLimitOverride",
     "TenantQuota",
     "TenantQuotaCounter",
-    "TenantRateLimit",
     "TenantSettings",
     "Training",
     "TrainingAttempt",
@@ -14271,7 +17526,6 @@
     "TrainingPlan",
     "TrainingProgram",
     "TrainingProtocol",
-    "TrainingProtocolItem",
     "TrainingSession",
     "TrainingSessionStatus",
     "TrainingStatus",
@@ -14280,6 +17534,11 @@
     "User",
     "UserAttribute",
     "UserRole",
+    "Vehicle",
+    "WasteMovement",
+    "WastePassport",
+    "WaterUsagePoint",
+    "WaterUsageRecord",
     "WebhookDelivery",
     "WebhookEndpoint",
     "WebhookSubscription",

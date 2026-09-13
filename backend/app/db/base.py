@@ -10,6 +10,7 @@ from app.models import (
     document,  # noqa: F401
     feature,  # noqa: F401
     file,  # noqa: F401
+    imports,  # noqa: F401  # срез-172: партии и строки импорта данных
     job_engine,  # noqa: F401
     models,  # noqa: F401
     notifications,  # noqa: F401
@@ -21,8 +22,15 @@ from app.models import (
     risk,  # noqa: F401
     safety_ops,  # noqa: F401
 )
+from app.modules.contractors import models as contractors_models  # noqa: F401
+from app.modules.files import models as files_models  # noqa: F401
+from app.modules.headers import models as headers_models  # noqa: F401  # срез-172
+from app.modules.pdf import models as pdf_models  # noqa: F401
 from app.modules.pipelines import models as pipeline_models  # noqa: F401
+from app.modules.projections import models as projections_models  # noqa: F401
 from app.modules.replace import models as replace_models  # noqa: F401
+from app.modules.search import models as search_models  # noqa: F401
+from app.modules.workflow import models as workflow_models  # noqa: F401
 
 Base = TenantBase
 
@@ -37,14 +45,14 @@ def _merge_metadata(*sources: MetaData) -> MetaData:
     return merged
 
 
+# Срез-172. ВНИМАНИЕ: сборка обязана идти ПОСЛЕ всех импортов моделей.
+# Раньше шесть модулей (подрядчики, файлы, PDF, проекции, поиск, рабочие
+# процессы) импортировались НИЖЕ этой строки, а ещё два (импорт данных и
+# колонтитулы) не импортировались вовсе. В итоге в сборке было 262 таблицы из
+# 297: `alembic autogenerate` не видел 35 ЖИВЫХ таблиц и предложил бы их
+# УДАЛИТЬ. Сам файл при этом обещает в первой строке «ensuring all ORM models
+# are imported».
 ALEMBIC_METADATA = _merge_metadata(SharedBase.metadata, TenantBase.metadata)
 TARGET_METADATA = (ALEMBIC_METADATA,)
 
 __all__ = ["Base", "TARGET_METADATA", "ALEMBIC_METADATA", "SharedBase", "TenantBase"]
-
-from app.modules.contractors import models as contractors_models  # noqa: E402, F401
-from app.modules.files import models as files_models  # noqa: E402, F401
-from app.modules.pdf import models as pdf_models  # noqa: E402, F401
-from app.modules.projections import models as projections_models  # noqa: E402, F401
-from app.modules.search import models as search_models  # noqa: E402, F401
-from app.modules.workflow import models as workflow_models  # noqa: E402, F401
