@@ -70,6 +70,64 @@ describe("GeneratePackWizardPage", () => {
     expect(screen.getByRole("button", { name: "Далее" })).toBeDisabled();
   });
 
+  it("проверка без записи не запускает генерацию (срез-164)", async () => {
+    const user = userEvent.setup();
+    getMock.mockResolvedValue({
+      data: [{ id: "p-1", code: "P1", name: "Базовый", status: "active" }],
+    });
+    postMock.mockResolvedValue({
+      data: {
+        ready: false,
+        score: 50,
+        documents_total: 2,
+        rows_total: 2,
+        rows_selected: 2,
+        rows_ready: 1,
+        problems: [
+          {
+            code: "missing_column",
+            message: "Нет колонки «Должность»",
+            blocking: true,
+            rows: [2],
+            rows_total: 2,
+          },
+        ],
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/generate-pack"]}>
+        <Routes>
+          <Route path="/generate-pack" element={<GeneratePackWizardPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await user.click(await screen.findByRole("button", { name: /Базовый/i }));
+    await user.click(screen.getByRole("button", { name: "Далее" }));
+    fireEvent.change(screen.getByLabelText("Массив строк в формате JSON"), {
+      target: { value: "[{}]" },
+    });
+    await user.click(screen.getByRole("button", { name: "Далее" }));
+
+    // Шаг 3 — настройки: здесь живёт галочка «только проверить».
+    await user.click(
+      screen.getByLabelText("Только проверить, ничего не записывать"),
+    );
+    await user.click(screen.getByRole("button", { name: "Далее" }));
+
+    expect(await screen.findByText("Строк для генерации")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Проверить" }));
+
+    // Ушёл запрос именно к проверке, и ни одного — к запуску генерации.
+    expect(postMock).toHaveBeenCalledTimes(1);
+    expect(postMock.mock.calls[0][0]).toBe("/pack-runs:preview");
+    expect(
+      await screen.findByText(/Проверка нашла помехи. Ничего не записано./),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Нет колонки «Должность»/)).toBeInTheDocument();
+  });
+
   it("retries preset loading without forcing a full page reload", async () => {
     const user = userEvent.setup();
     getMock
