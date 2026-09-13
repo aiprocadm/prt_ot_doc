@@ -12,12 +12,12 @@ interface FileFilters {
   tag?: string;
 }
 
+// Срез-157: из хранилища убран `upload` — он звал `POST /files`, ручки с
+// таким путём у сервера нет, и ни один экран его не вызывал. Файлы
+// грузит `FileUploader` по подписанной ссылке (инициация → PUT в
+// хранилище → подтверждение).
 interface FilesState extends PaginatedState<FileDto, FileFilters> {
   list: (params?: Partial<FileFilters>) => Promise<void>;
-  upload: (
-    file: File,
-    meta?: { description?: string; tags?: string[] },
-  ) => Promise<FileDto>;
   remove: (id: string) => Promise<void>;
   setFilters: (filters: Partial<FileFilters>) => void;
   setPage: (page: number) => void;
@@ -87,26 +87,6 @@ export const useFilesStore = create<FilesState>()(
         set((state) => {
           state.loading = false;
         });
-      }
-    },
-    upload: async (file, meta) => {
-      const formData = new FormData();
-      formData.append("file", file);
-      if (meta?.description) formData.append("description", meta.description);
-      if (meta?.tags) meta.tags.forEach((tag) => formData.append("tags", tag));
-      try {
-        // Не передаём Content-Type вручную: браузер выставит multipart/form-data с boundary
-        const { data } = await apiClient.post<FileDto>("/files", formData);
-        set((state) => {
-          state.items.unshift(data);
-          state.pagination.total += 1;
-        });
-        return data;
-      } catch (error) {
-        set((state) => {
-          state.error = normalizeError(error);
-        });
-        throw error;
       }
     },
     remove: async (id) => {
