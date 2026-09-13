@@ -79,6 +79,16 @@ export const EVENT_LABELS: Record<string, string> = {
   "contractor.readiness_warning": "Подрядчик: предупреждение",
   PEPSigned: "ПЭП: подписано",
   PEPDeclined: "ПЭП: отклонено",
+  // Срез-159: эти семь событий конструктор предлагал техническим кодом
+  // латиницей — человек выбирал спусковой крючок, не понимая, что выбирает.
+  // Полноту подписей держит сторож tests/test_rules_event_labels.py.
+  WorkPermitIssued: "Выдан наряд-допуск",
+  "approval.started": "Согласование начато",
+  "approval.decision_made": "Принято решение по согласованию",
+  "approval.completed": "Согласование завершено",
+  "edo.status_changed": "Изменился статус в ЭДО",
+  "managed_clients.change_recorded": "Запись в ленте изменений клиента",
+  "api.deprecation_notice": "Обращение к устаревшему API",
 };
 
 export const eventLabel = (code: string): string => EVENT_LABELS[code] ?? code;
