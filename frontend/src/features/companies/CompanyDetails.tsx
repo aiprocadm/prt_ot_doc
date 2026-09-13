@@ -10,21 +10,11 @@ import { StatusBadge } from "@/components/common/StatusBadge";
 import { fetchPersonsForCompany } from "@/api/personsApi";
 import { usePersonsStore } from "@/stores/persons";
 import { formatDate } from "@/utils/datetime";
-import { usePacksStore } from "@/stores/packs";
 import { useCompaniesStore } from "@/stores/companies";
 import type { CompanyDto } from "@/types/dto/companies";
 import type { PersonDto } from "@/types/dto/persons";
-import type { PackPreset } from "@/types/dto/packs";
-
-const packPresets: { label: string; value: PackPreset }[] = [
-  { label: "Выход на объект", value: "site_entry" },
-  { label: "Несчастный случай", value: "incident_response" },
-  { label: "Пожарная безопасность", value: "fire_safety" },
-  { label: "Экология", value: "environmental" },
-];
 
 export const CompanyDetails = ({ company }: { company: CompanyDto }) => {
-  const { create } = usePacksStore();
   const personsRegistryRevision = usePersonsStore(
     (s) => s.personsRegistryRevision,
   );
@@ -61,10 +51,6 @@ export const CompanyDetails = ({ company }: { company: CompanyDto }) => {
     };
   }, [company.id, company.persons, personsRegistryRevision]);
 
-  const handleGeneratePack = async (preset: PackPreset) => {
-    await create({ company_id: company.id, preset, parameters: {} });
-  };
-
   return (
     <Card>
       <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -84,18 +70,17 @@ export const CompanyDetails = ({ company }: { company: CompanyDto }) => {
             <span>Обновлено {formatDate(company.updated_at)}</span>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {packPresets.map((preset) => (
-            <Button
-              key={preset.value}
-              variant="outline"
-              size="sm"
-              onClick={() => handleGeneratePack(preset.value)}
-            >
-              Сгенерировать: {preset.label}
-            </Button>
-          ))}
-        </div>
+        {/* Срез-153: четыре кнопки «Сгенерировать: …» слали запрос на
+            `POST /packs` — ручки, которой у сервера нет вовсе (есть
+            `/packs/run` с кодом сценария), да ещё и с собственным списком
+            пресетов, не совпадающим ни с одним комплектом продукта. Нажатие
+            всегда кончалось 404. Комплект собирается мастером, который знает
+            сценарии с сервера; отсюда — переход с уже выбранной компанией. */}
+        <Button asChild variant="outline" size="sm">
+          <Link to={`/packs/wizard?company_id=${company.id}`}>
+            Собрать комплект документов
+          </Link>
+        </Button>
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="details">

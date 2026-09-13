@@ -120,6 +120,21 @@ describe("Packs pages operational states", () => {
     expect(await screen.findByText(/пакеты не найдены/i)).toBeInTheDocument();
   });
 
+  it("сбор комплекта ведёт в мастер, а не в несуществующую ручку (срез-153)", async () => {
+    render(
+      <MemoryRouter>
+        <PacksPage />
+      </MemoryRouter>,
+    );
+
+    const link = await screen.findByRole("link", { name: "Открыть мастер" });
+    expect(link).toHaveAttribute("href", "/packs/wizard");
+    // Прежние кнопки-пресеты слали `POST /packs` — ручки у сервера нет.
+    expect(
+      screen.queryByRole("button", { name: /Сгенерировать:/ }),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows empty state on PackagePresetsPage when API returns no data", async () => {
     getMock.mockImplementation((url: string) => {
       if (url === "/package-presets") return Promise.resolve({ data: [] });

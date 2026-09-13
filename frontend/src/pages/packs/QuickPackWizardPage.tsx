@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { listCompanies } from "@/api/companiesApi";
 import {
@@ -50,11 +51,17 @@ const STEPS: readonly WizardStep[] = [
 const POLL_MS = 2000;
 
 export const QuickPackWizardPage = () => {
+  // Срез-153: компанию можно передать адресом (`?company_id=`). Так карточка
+  // компании ведёт сюда с уже выбранным клиентом, вместо того чтобы собирать
+  // комплект своей кнопкой — её ручки (`POST /packs`) у сервера нет вовсе.
+  const [searchParams] = useSearchParams();
   const [step, setStep] = useState(1);
   const [scenarios, setScenarios] = useState<PackScenario[]>([]);
   const [companies, setCompanies] = useState<CompanyDto[]>([]);
   const [scenarioCode, setScenarioCode] = useState("");
-  const [companyId, setCompanyId] = useState("");
+  const [companyId, setCompanyId] = useState(
+    () => searchParams.get("company_id") ?? "",
+  );
   const [sites, setSites] = useState<WizardSite[]>([]);
   const [siteId, setSiteId] = useState("");
   const [persons, setPersons] = useState<WizardPerson[]>([]);
