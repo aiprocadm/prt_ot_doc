@@ -54,7 +54,7 @@ const MedicalPage = () => {
 
   const psych = useAsyncResource({
     loader: useCallback(() => operationsApi.getPsychiatricSnapshot(), []),
-    initialData: { activityTypes: [], contingent: [] },
+    initialData: { denied: [], activityTypes: [], contingent: [] },
     errorMessage: "Не удалось загрузить психиатрическое освидетельствование",
   });
   const [seeding, setSeeding] = useState(false);
@@ -72,6 +72,7 @@ const MedicalPage = () => {
   const oversight = useAsyncResource({
     loader: useCallback(() => operationsApi.getMedicalOversightSnapshot(), []),
     initialData: {
+      denied: [] as string[],
       summary: null as MedicalSummaryDto | null,
       register: [] as ContingentRegisterRowDto[],
       namedList: [] as NamedListRowDto[],

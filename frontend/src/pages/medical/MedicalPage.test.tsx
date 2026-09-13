@@ -68,6 +68,7 @@ beforeEach(() => {
     tasks: [],
   });
   vi.mocked(operationsApi.getPsychiatricSnapshot).mockResolvedValue({
+    denied: [],
     activityTypes: [
       {
         id: "a1",
@@ -82,6 +83,7 @@ beforeEach(() => {
     count: 9,
   });
   vi.mocked(operationsApi.getMedicalOversightSnapshot).mockResolvedValue({
+    denied: [],
     summary: {
       by_status: { ok: 1, overdue: 2 },
       total: 5,
@@ -156,6 +158,7 @@ describe("MedicalPage psychiatric section", () => {
 
   it("calls seedPsychiatricDefaults when the seed button is clicked", async () => {
     vi.mocked(operationsApi.getPsychiatricSnapshot).mockResolvedValue({
+      denied: [],
       activityTypes: [],
       contingent: [],
     });

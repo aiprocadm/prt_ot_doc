@@ -12,6 +12,7 @@ import {
 import { operationsApi } from "@/api/operations";
 import { sitesApi } from "@/api/sites";
 import { EmptyState } from "@/components/common/EmptyState";
+import { deniedNotice } from "@/api/partial";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
@@ -45,7 +46,7 @@ const FireSafetyPage = () => {
 
   const { data, loading, error, reload } = useAsyncResource({
     loader: useCallback(() => operationsApi.getFireSafetySnapshot(), []),
-    initialData: { sites: [], inspections: [], tasks: [] },
+    initialData: { denied: [], sites: [], inspections: [], tasks: [] },
     errorMessage: "Не удалось загрузить объекты ПБ",
   });
 
@@ -210,6 +211,11 @@ const FireSafetyPage = () => {
             error={error ?? undefined}
             onRetry={() => void reload()}
           />
+          {deniedNotice(data.denied) ? (
+            <p className="rounded-md border border-amber-500/40 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-600/50 dark:bg-amber-950/30 dark:text-amber-50">
+              {deniedNotice(data.denied)}
+            </p>
+          ) : null}
           {loading ? <LoadingScreen label="Загрузка объектов защиты" /> : null}
           {!loading && !error && registry.total === 0 ? (
             <EmptyState

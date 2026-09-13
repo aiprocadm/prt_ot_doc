@@ -334,13 +334,25 @@ export const operationsApi = {
   },
 
   getSettingsSnapshot: async () => {
+    const state: PartialLoad = { denied: [] };
     const [tenancyResponse, notificationsResponse, apiTokensResponse] =
       await Promise.all([
         apiClient.get<TenancyContextDto>("/tenancy/context"),
-        apiClient.get<NotificationSettingsDto>("/notifications/settings/me"),
-        apiClient.get<ApiTokenDto[]>("/api-tokens"),
+        allowedOr(
+          state,
+          "настройки уведомлений",
+          apiClient.get<NotificationSettingsDto>("/notifications/settings/me"),
+          { data: null } as never,
+        ),
+        allowedOr(
+          state,
+          "ключи доступа к API",
+          apiClient.get<ApiTokenDto[]>("/api-tokens"),
+          { data: [] } as never,
+        ),
       ]);
     return {
+      denied: state.denied,
       tenancy: tenancyResponse.data,
       notifications: notificationsResponse.data,
       apiTokens: apiTokensResponse.data ?? [],
@@ -412,29 +424,41 @@ export const operationsApi = {
   },
 
   getPsychiatricSnapshot: async () => {
+    const state: PartialLoad = { denied: [] };
     const [typesResponse, contingentResponse] = await Promise.all([
-      apiClient.get<{
-        items: {
-          id: string;
-          code: string;
-          name: string;
-          interval_days: number;
-        }[];
-        total: number;
-      }>("/medical/psychiatric/activity-types", {
-        params: { limit: 200, offset: 0 },
-      }),
-      apiClient.get<{
-        items: {
-          person_id: string;
-          exam_kind: string;
-          status: string;
-          due_at: string | null;
-        }[];
-        total: number;
-      }>("/medical/contingent", { params: {} }),
+      allowedOr(
+        state,
+        "виды деятельности",
+        apiClient.get<{
+          items: {
+            id: string;
+            code: string;
+            name: string;
+            interval_days: number;
+          }[];
+          total: number;
+        }>("/medical/psychiatric/activity-types", {
+          params: { limit: 200, offset: 0 },
+        }),
+        EMPTY_PAGE as never,
+      ),
+      allowedOr(
+        state,
+        "контингент",
+        apiClient.get<{
+          items: {
+            person_id: string;
+            exam_kind: string;
+            status: string;
+            due_at: string | null;
+          }[];
+          total: number;
+        }>("/medical/contingent", { params: {} }),
+        EMPTY_PAGE as never,
+      ),
     ]);
     return {
+      denied: state.denied,
       activityTypes: typesResponse.data.items ?? [],
       contingent: (contingentResponse.data.items ?? []).filter(
         (i) => i.exam_kind === "psychiatric",
@@ -450,17 +474,29 @@ export const operationsApi = {
   },
 
   getMedicalOversightSnapshot: async () => {
+    const state: PartialLoad = { denied: [] };
     const [summaryResponse, registerResponse, namedListResponse] =
       await Promise.all([
         apiClient.get<MedicalSummaryDto>("/medical/summary"),
-        apiClient.get<{ items: ContingentRegisterRowDto[]; total: number }>(
-          "/medical/contingent/register",
+        allowedOr(
+          state,
+          "реестр контингента",
+          apiClient.get<{ items: ContingentRegisterRowDto[]; total: number }>(
+            "/medical/contingent/register",
+          ),
+          EMPTY_PAGE as never,
         ),
-        apiClient.get<{ items: NamedListRowDto[]; total: number }>(
-          "/medical/named-list",
+        allowedOr(
+          state,
+          "поимённый список",
+          apiClient.get<{ items: NamedListRowDto[]; total: number }>(
+            "/medical/named-list",
+          ),
+          EMPTY_PAGE as never,
         ),
       ]);
     return {
+      denied: state.denied,
       summary: summaryResponse.data,
       register: registerResponse.data.items ?? [],
       namedList: namedListResponse.data.items ?? [],
@@ -560,21 +596,38 @@ export const operationsApi = {
   },
 
   getFireSafetySnapshot: async () => {
+    const state: PartialLoad = { denied: [] };
     const [sitesResponse, inspectionsResponse, tasksResponse] =
       await Promise.all([
-        apiClient.get<{ items: SiteDto[]; total: number }>("/sites", {
-          params: { limit: 100, offset: 0 },
-        }),
-        apiClient.get<{ items: InspectionDto[]; total: number }>(
-          "/inspections",
-          { params: { limit: 100, offset: 0 } },
+        allowedOr(
+          state,
+          "площадки",
+          apiClient.get<{ items: SiteDto[]; total: number }>("/sites", {
+            params: { limit: 100, offset: 0 },
+          }),
+          EMPTY_PAGE as never,
         ),
-        apiClient.get<{ items: TaskDto[]; pagination: { total: number } }>(
-          "/tasks",
-          { params: { type: "inspection", page: 1, page_size: 100 } },
+        allowedOr(
+          state,
+          "проверки",
+          apiClient.get<{ items: InspectionDto[]; total: number }>(
+            "/inspections",
+            { params: { limit: 100, offset: 0 } },
+          ),
+          EMPTY_PAGE as never,
+        ),
+        allowedOr(
+          state,
+          "задачи по проверкам",
+          apiClient.get<{ items: TaskDto[]; pagination: { total: number } }>(
+            "/tasks",
+            { params: { type: "inspection", page: 1, page_size: 100 } },
+          ),
+          EMPTY_PAGE as never,
         ),
       ]);
     return {
+      denied: state.denied,
       sites: sitesResponse.data.items ?? [],
       inspections: inspectionsResponse.data.items ?? [],
       tasks: tasksResponse.data.items ?? [],
@@ -582,13 +635,30 @@ export const operationsApi = {
   },
 
   getFireTrainingSnapshot: async () => {
+    const state: PartialLoad = { denied: [] };
     const [templates, journals, overdue, programsResponse] = await Promise.all([
-      briefingsApi.listTemplates(),
-      briefingsApi.listJournals(),
-      briefingsApi.listOverdue(),
-      apiClient.get<{ items: TrainingProgramDto[] }>("/training/programs"),
+      allowedOr(
+        state,
+        "шаблоны инструктажей",
+        briefingsApi.listTemplates(),
+        [],
+      ),
+      allowedOr(state, "журналы инструктажей", briefingsApi.listJournals(), []),
+      allowedOr(
+        state,
+        "просроченные инструктажи",
+        briefingsApi.listOverdue(),
+        [],
+      ),
+      allowedOr(
+        state,
+        "программы обучения",
+        apiClient.get<{ items: TrainingProgramDto[] }>("/training/programs"),
+        EMPTY_PAGE as never,
+      ),
     ]);
     return {
+      denied: state.denied,
       templates,
       journals,
       overdueEntries: overdue,
