@@ -57,7 +57,11 @@ describe("IntegrationsPage", () => {
                 id: "delivery-1",
                 event_type: "approval.started",
                 destination: "webhook://approval",
-                status: "failed",
+                // Срез-161: сервер отдаёт статус доставки ПРОПИСНЫМИ
+                // (перечисление OutboxStatus). Фикстура присылала строчные и
+                // тем скрывала дефект: экран сравнивал со строчными, и в
+                // жизни не совпадало ничего.
+                status: "FAILED",
                 attempts: 2,
                 created_at: "2026-03-24T10:00:00Z",
                 updated_at: "2026-03-24T10:01:00Z",
@@ -160,7 +164,7 @@ describe("IntegrationsPage", () => {
                 id: "delivery-1",
                 event_type: "approval.started",
                 destination: "webhook://approval",
-                status: "failed",
+                status: "FAILED",
                 attempts: 2,
                 created_at: "2026-03-24T10:00:00Z",
                 updated_at: "2026-03-24T10:01:00Z",
@@ -169,7 +173,7 @@ describe("IntegrationsPage", () => {
                 id: "delivery-2",
                 event_type: "approval.completed",
                 destination: "webhook://approval",
-                status: "sent",
+                status: "SENT",
                 attempts: 1,
                 created_at: "2026-03-24T10:02:00Z",
                 updated_at: "2026-03-24T10:03:00Z",

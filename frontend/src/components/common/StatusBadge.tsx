@@ -31,6 +31,11 @@ const statusColors: Record<string, "default" | "secondary" | "destructive"> = {
   approved: "default",
   rejected: "destructive",
   paid: "default",
+  // Срез-161: статусы исходящих доставок (OutboxStatus). Без них значок был
+  // серым и показывал код латиницей.
+  pending: "secondary",
+  sent: "default",
+  dead: "destructive",
 };
 
 /** Подписи для типичных статусов API; неизвестные значения показываем как есть. */
@@ -71,11 +76,19 @@ const statusLabelsRu: Record<string, string> = {
   approved: "Одобрена",
   rejected: "Отклонена",
   paid: "Выплачена",
+  // Срез-161: статусы исходящих доставок (OutboxStatus).
+  pending: "Ожидание",
+  sent: "Отправлено",
+  dead: "Окончательный сбой",
 };
 
 export const StatusBadge = ({ status }: { status?: string | null }) => {
   if (!status) return null;
-  const variant = statusColors[status] ?? "secondary";
-  const label = statusLabelsRu[status] ?? status;
+  // Срез-161: часть ручек отдаёт статус ПРОПИСНЫМИ (`FAILED`, `DEAD` —
+  // перечисление OutboxStatus). Раньше поиск шёл по строке как есть, и такой
+  // статус показывался кодом латиницей серым значком вместо «Сбой» красным.
+  const key = status.toLowerCase();
+  const variant = statusColors[key] ?? "secondary";
+  const label = statusLabelsRu[key] ?? status;
   return <Badge variant={variant}>{label}</Badge>;
 };
