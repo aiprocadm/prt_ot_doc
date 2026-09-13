@@ -12,6 +12,14 @@
 другой стороны: там витрина звала несуществующую ручку, здесь — ведёт на
 несуществующий экран.
 
+СРЕЗ-156 расширил область. Прежняя проверка видела только ссылки в разметке
+(`to=`, `navigate(`) и пропустила пути, записанные ДАННЫМИ: пункты меню
+(`to:` в объектах) и карты переходов рабочего стола
+(`utils/workspaceNavigation.ts`). Именно там нашлись три ссылки на
+`/contracts` — маршрута с таким путём нет, и человек с дашборда молча уезжал
+на посадочную страницу: переход к задаче по договору, карточка договора и
+подсказка блокера «истекли договоры».
+
 КАК СВЕРЯЕТСЯ. Маршруты собираются из `frontend/src/router`: абсолютные
 (`path="/x"`) плюс вложенные относительные (`<Route path="/auth">` с детьми
 `login`/`signup` даёт `/auth/login`, `/auth/signup`). Ссылки приводятся к
@@ -35,6 +43,16 @@ KNOWN_EXTERNAL: dict[str, str] = {}
 
 _ROUTE_RE = re.compile(r'path=(?:"([^"]+)"|\{`([^`]+)`\})')
 _LINK_RE = re.compile(r'(?:\bto=|navigate\()\s*\{?\s*(`[^`]*`|"[^"]*"|\'[^\']*\')')
+
+
+#: Пункт меню и прочая конфигурация: путь записан значением поля `to`.
+_OBJECT_LINK_RE = re.compile(r'\bto:\s*(`[^`]*`|"[^"]*")')
+
+#: Карты переходов: файл целиком про навигацию, поэтому все строки «/…» в нём
+#: — это пути ЭКРАНОВ. В других файлах так считать нельзя: там такие же
+#: строки бывают путями ручек API.
+NAVIGATION_MAPS = ("frontend/src/utils/workspaceNavigation.ts",)
+_MAP_PATH_RE = re.compile(r'(?:return|:)\s*(`/[^`]*`|"/[^"]*")')
 
 
 def _normalize(path: str) -> tuple[str, ...]:
@@ -73,13 +91,19 @@ def _links() -> dict[str, set[str]]:
     for file in list(FRONTEND_SRC.rglob("*.tsx")) + list(FRONTEND_SRC.rglob("*.ts")):
         if ".test." in file.name or "__tests__" in file.parts or "router" in file.parts:
             continue
-        for match in _LINK_RE.finditer(file.read_text(encoding="utf-8")):
-            raw = match.group(1)[1:-1]
-            raw = re.sub(r"\$\{[^}]*\}", "{}", raw)
-            if not raw.startswith("/"):
-                continue
-            target = raw.split("?")[0].split("#")[0] or "/"
-            links.setdefault(target, set()).add(str(file.relative_to(REPO_ROOT)))
+        text = file.read_text(encoding="utf-8")
+        rel = str(file.relative_to(REPO_ROOT))
+        patterns = [_LINK_RE, _OBJECT_LINK_RE]
+        if rel in NAVIGATION_MAPS:
+            patterns.append(_MAP_PATH_RE)
+        for pattern in patterns:
+            for match in pattern.finditer(text):
+                raw = match.group(1)[1:-1]
+                raw = re.sub(r"\$\{[^}]*\}", "{}", raw)
+                if not raw.startswith("/"):
+                    continue
+                target = raw.split("?")[0].split("#")[0] or "/"
+                links.setdefault(target, set()).add(rel)
     return links
 
 
@@ -113,7 +137,15 @@ def test_маршруты_собрались() -> None:
 
 def test_ссылки_витрины_ведут_на_объявленные_маршруты() -> None:
     links = _links()
-    assert len(links) > 20, f"ссылок найдено всего {len(links)} — проверка потеряла область"
+    assert len(links) > 40, f"ссылок найдено всего {len(links)} — проверка потеряла область"
+    # Число ссылок — слабый признак; область держат три источника, и каждый
+    # проверяется своим образцом: разметка, пункт меню, карта переходов.
+    sources = {file for files in links.values() for file in files}
+    assert "/dashboard" in links, "не читаются пункты меню (`to:` в объектах)"
+    assert any(
+        path in sources for path in NAVIGATION_MAPS
+    ), "не читаются карты переходов рабочего стола"
+    assert "/crm-finance" in links, "не читается путь экрана из карты переходов"
 
     broken = _broken()
     assert not broken, (
