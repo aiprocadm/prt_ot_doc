@@ -6,12 +6,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const apiClientMock = vi.hoisted(() => ({
   get: vi.fn(),
   post: vi.fn(),
+  patch: vi.fn(),
 }));
 
 vi.mock("@/api/client", () => ({
   apiClient: {
     get: (...args: unknown[]) => apiClientMock.get(...args),
     post: (...args: unknown[]) => apiClientMock.post(...args),
+    patch: (...args: unknown[]) => apiClientMock.patch(...args),
   },
 }));
 
@@ -28,14 +30,17 @@ import { uxBudgetDelta } from "@/test-utils/uxBudget";
 import type {
   ComplianceRequirementDto,
   ComplianceRequirementListDto,
+  ComplianceRequirementOptionsDto,
 } from "@/types/dto/complianceRequirements";
 import type { NpaDto } from "@/types/dto/npa";
 
 /**
  * Срез-145 (B.18 разд. 19.2): реестр требований — обязательное ядро.
+ * Срез-147: справочники формы (ответственный, площадка, роль) — своей ручкой,
+ * правка требования с экрана.
  *
  * Фикстуры списаны с ответа сервера (`backend/app/schemas/compliance_requirements.py`):
- * «просрочено» и «дней осталось» приходят готовыми, витрина их не считает.
+ * «просрочено», «дней осталось» и имена приходят готовыми, витрина их не считает.
  */
 
 const acts: NpaDto[] = [
@@ -60,8 +65,10 @@ const overdueItem: ComplianceRequirementDto = {
   npa_title: "Приказ Минтруда № 772н об обучении по охране труда",
   clause_id: "c-1",
   clause_code: "п. 4",
-  role_code: null,
-  site_id: null,
+  role_code: "line_manager",
+  role_label: "Линейный руководитель",
+  site_id: "site-1",
+  site_name: "Цех №1",
   process_code: null,
   owner_user_id: "u-1",
   owner_name: "Иванова Мария",
@@ -85,6 +92,10 @@ const dueSoonItem: ComplianceRequirementDto = {
   title: "Специальная оценка условий труда",
   clause_id: null,
   clause_code: null,
+  role_code: null,
+  role_label: null,
+  site_id: null,
+  site_name: null,
   owner_user_id: null,
   owner_name: null,
   periodicity_days: null,
@@ -118,6 +129,33 @@ const tenantDocuments = [
   },
 ];
 
+/** Справочник формы — как его отдаёт `GET /compliance/requirements/options`. */
+const formOptions: ComplianceRequirementOptionsDto = {
+  owners: [
+    {
+      id: "u-1",
+      name: "Иванова Мария",
+      role: "ot_specialist",
+      role_label: "Специалист ОТ",
+    },
+    {
+      id: "u-2",
+      name: "Петров Пётр",
+      role: "worker",
+      role_label: "Рабочий / сотрудник",
+    },
+  ],
+  sites: [
+    { id: "site-1", name: "Цех №1", company_name: "ООО Ромашка" },
+    { id: "site-2", name: "Склад", company_name: "ООО Ромашка" },
+  ],
+  roles: [
+    { code: "ot_specialist", label: "Специалист ОТ" },
+    { code: "line_manager", label: "Линейный руководитель" },
+    { code: "worker", label: "Рабочий / сотрудник" },
+  ],
+};
+
 describe("RequirementsPage", () => {
   const mockRegistry = (
     canManage: boolean,
@@ -130,17 +168,11 @@ describe("RequirementsPage", () => {
       if (url === "/compliance/requirements") {
         return Promise.resolve({ data: listResponse(canManage, items) });
       }
+      if (url === "/compliance/requirements/options") {
+        return Promise.resolve({ data: formOptions });
+      }
       if (url === "/documents") {
         return Promise.resolve({ data: { items: tenantDocuments } });
-      }
-      if (url === "/admin/users") {
-        return Promise.resolve({
-          data: {
-            items: [
-              { id: "u-1", full_name: "Иванова Мария", email: "m@example.com" },
-            ],
-          },
-        });
       }
       throw new Error(`Unexpected GET ${url}`);
     });
@@ -162,6 +194,7 @@ describe("RequirementsPage", () => {
   beforeEach(() => {
     apiClientMock.get.mockReset();
     apiClientMock.post.mockReset();
+    apiClientMock.patch.mockReset();
     useNpaStore.getState().reset();
     mockRegistry(false);
   });
@@ -191,6 +224,11 @@ describe("RequirementsPage", () => {
       within(rows[0]).getByText("15.01.2026 · просрочено на 40 дн."),
     ).toBeInTheDocument();
     expect(within(rows[0]).getByText("критическая")).toBeInTheDocument();
+    // Срез-147: к чему относится — словами, а не кодом и не колонками.
+    expect(within(rows[0]).getByText("площадка: Цех №1")).toBeInTheDocument();
+    expect(
+      within(rows[0]).getByText("роль: Линейный руководитель"),
+    ).toBeInTheDocument();
     expect(within(rows[0]).getByText("доказательств: 1")).toBeInTheDocument();
     expect(within(rows[0]).getByText("ежегодно")).toBeInTheDocument();
     expect(within(rows[0]).getByText("Иванова Мария")).toBeInTheDocument();
@@ -198,6 +236,7 @@ describe("RequirementsPage", () => {
       within(rows[0]).getByRole("link", { name: "772н · п. 4" }),
     ).toHaveAttribute("href", "/npa?selected=npa-1");
     expect(within(rows[1]).getByText("разово")).toBeInTheDocument();
+    expect(within(rows[1]).queryByText(/площадка:/)).not.toBeInTheDocument();
 
     // Право писать приходит с сервера: без него ни кнопки, ни колонки.
     expect(
@@ -207,6 +246,13 @@ describe("RequirementsPage", () => {
     expect(
       screen.queryByRole("button", { name: "Исполнено" }),
     ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Изменить" }),
+    ).not.toBeInTheDocument();
+    // Справочник формы рядовой роли не запрашивается — ей нечего заводить.
+    expect(apiClientMock.get).not.toHaveBeenCalledWith(
+      "/compliance/requirements/options",
+    );
 
     const budget = uxBudgetDelta(document.body, "RequirementsPage");
     expect(budget.unexpected).toEqual([]);
@@ -226,7 +272,7 @@ describe("RequirementsPage", () => {
     ).toHaveAttribute("href", "/npa?selected=npa-1");
   });
 
-  it("специалист заводит требование по акту и пункту (срез-145)", async () => {
+  it("специалист заводит требование: акт, пункт, ответственный, площадка и роль — из справочника (срез-145/147)", async () => {
     mockRegistry(true);
     apiClientMock.post.mockImplementation((url: string, body: unknown) => {
       if (url === "/compliance/requirements") {
@@ -253,8 +299,16 @@ describe("RequirementsPage", () => {
         screen.getByRole("button", { name: "Добавить требование" }),
       );
     });
+    // Справочник формы запрошен своей ручкой, а не админской `/admin/users`.
+    expect(apiClientMock.get).toHaveBeenCalledWith(
+      "/compliance/requirements/options",
+    );
+    expect(apiClientMock.get).not.toHaveBeenCalledWith(
+      "/admin/users",
+      expect.anything(),
+    );
     // Открытая форма — тоже экран: первого уровня полей столько, сколько
-    // разрешает бюджет; ответственный, роль, процесс — под «Дополнительно».
+    // разрешает бюджет; ответственный, площадка, роль, процесс — под «Дополнительно».
     const withDialog = uxBudgetDelta(document.body, "RequirementsPage");
     expect(withDialog.unexpected).toEqual([]);
 
@@ -269,7 +323,19 @@ describe("RequirementsPage", () => {
     await user.type(screen.getByLabelText("Контрольная дата"), "2999-01-01");
     await user.click(screen.getByText("Дополнительно"));
     await user.selectOptions(screen.getByLabelText("Пункт акта"), "c-1");
-    await user.selectOptions(screen.getByLabelText("Ответственный"), "u-1");
+    // Люди, площадки и роли — словами: «Петров Пётр · Рабочий / сотрудник».
+    await user.selectOptions(
+      screen.getByLabelText("Ответственный"),
+      screen.getByRole("option", { name: "Петров Пётр · Рабочий / сотрудник" }),
+    );
+    await user.selectOptions(
+      screen.getByLabelText("Площадка"),
+      screen.getByRole("option", { name: "Склад · ООО Ромашка" }),
+    );
+    await user.selectOptions(
+      screen.getByLabelText("Роль"),
+      screen.getByRole("option", { name: "Рабочий / сотрудник" }),
+    );
 
     await act(async () => {
       await user.click(screen.getByRole("button", { name: "Добавить" }));
@@ -286,9 +352,10 @@ describe("RequirementsPage", () => {
         next_due_at: "2999-01-01",
         severity: "high",
         description: null,
-        role_code: null,
+        role_code: "worker",
+        site_id: "site-2",
         process_code: null,
-        owner_user_id: "u-1",
+        owner_user_id: "u-2",
       },
     );
     // Список перечитан с сервера — новая строка на экране.
@@ -296,6 +363,81 @@ describe("RequirementsPage", () => {
       await screen.findByText("Инструктаж на рабочем месте"),
     ).toBeInTheDocument();
     expect(screen.getAllByTestId("requirement-row")).toHaveLength(3);
+  });
+
+  it("«Изменить» открывает форму с текущими значениями и шлёт PATCH без кода (срез-147)", async () => {
+    mockRegistry(true);
+    apiClientMock.patch.mockImplementation((url: string, body: unknown) => {
+      if (url === "/compliance/requirements/req-1") {
+        const payload = body as { title: string; site_id: string | null };
+        mockRegistry(true, [
+          {
+            ...overdueItem,
+            title: payload.title,
+            site_id: payload.site_id,
+            site_name: payload.site_id ? "Склад" : null,
+          },
+          dueSoonItem,
+        ]);
+        return Promise.resolve({ data: { id: "req-1", ...payload } });
+      }
+      throw new Error(`Unexpected PATCH ${url}`);
+    });
+    const user = userEvent.setup();
+    await renderPage();
+
+    const [first] = screen.getAllByTestId("requirement-row");
+    await act(async () => {
+      await user.click(within(first).getByRole("button", { name: "Изменить" }));
+    });
+    expect(
+      screen.getByRole("heading", { name: "Изменить требование OT-01" }),
+    ).toBeInTheDocument();
+    // Код — ключ: показан, но не правится.
+    const codeInput = screen.getByLabelText("Код");
+    expect(codeInput).toHaveValue("OT-01");
+    expect(codeInput).toHaveAttribute("readonly");
+    expect(screen.getByLabelText("Требование")).toHaveValue(
+      "Обучение по охране труда руководителей",
+    );
+    expect(screen.getByLabelText("Периодичность, дней")).toHaveValue(365);
+    expect(screen.getByLabelText("Контрольная дата")).toHaveValue("2026-01-15");
+    await user.click(screen.getByText("Дополнительно"));
+    expect(screen.getByLabelText("Ответственный")).toHaveValue("u-1");
+    expect(screen.getByLabelText("Площадка")).toHaveValue("site-1");
+    expect(screen.getByLabelText("Роль")).toHaveValue("line_manager");
+
+    await user.clear(screen.getByLabelText("Требование"));
+    await user.type(
+      screen.getByLabelText("Требование"),
+      "Обучение руководителей и специалистов",
+    );
+    await user.selectOptions(screen.getByLabelText("Площадка"), "site-2");
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: "Сохранить" }));
+    });
+
+    expect(apiClientMock.patch).toHaveBeenCalledWith(
+      "/compliance/requirements/req-1",
+      {
+        title: "Обучение руководителей и специалистов",
+        npa_id: "npa-1",
+        clause_id: "c-1",
+        periodicity_days: 365,
+        next_due_at: "2026-01-15",
+        severity: "critical",
+        description: null,
+        role_code: "line_manager",
+        site_id: "site-2",
+        process_code: null,
+        owner_user_id: "u-1",
+      },
+    );
+    expect(apiClientMock.post).not.toHaveBeenCalled();
+    expect(
+      await screen.findByText("Обучение руководителей и специалистов"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("площадка: Склад")).toBeInTheDocument();
   });
 
   it("«Исполнено» шлёт доказательство, «Снять с контроля» — retire (срез-145)", async () => {
@@ -369,6 +511,9 @@ describe("RequirementsPage", () => {
     // У снятой строки действий больше нет.
     expect(
       within(retiredRow).queryByRole("button", { name: "Исполнено" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(retiredRow).queryByRole("button", { name: "Изменить" }),
     ).not.toBeInTheDocument();
   });
 

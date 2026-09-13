@@ -1,11 +1,13 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { toast } from "sonner";
 
-import {
-  complianceRequirementsApi,
-  listOwnerOptions,
-  type OwnerOptionDto,
-} from "@/api/complianceRequirements";
+import { complianceRequirementsApi } from "@/api/complianceRequirements";
 import { listDocumentsForPicker } from "@/api/documents";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,6 +24,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type {
   ComplianceRequirementDto,
+  ComplianceRequirementOptionsDto,
   RequirementSeverity,
 } from "@/types/dto/complianceRequirements";
 import type { DocumentDto } from "@/types/dto/documents";
@@ -34,6 +37,10 @@ import { isApiError } from "@/utils/apiFormErrors";
  * Обе формы показываются только ролям записи (`can_manage` из списка):
  * остальным ручка ответит 403, а кнопка, всегда кончающаяся отказом, хуже
  * отсутствующей.
+ *
+ * Срез-147: ответственный, площадка и роль ВЫБИРАЮТСЯ из справочника формы
+ * (`/compliance/requirements/options`), а не впечатываются кодом; та же форма
+ * с `initialData` правит требование (PATCH) — код остаётся ключом и не меняется.
  */
 
 export const SEVERITY_LABELS: Record<RequirementSeverity, string> = {
@@ -45,6 +52,12 @@ export const SEVERITY_LABELS: Record<RequirementSeverity, string> = {
 
 const selectClassName =
   "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm";
+
+const EMPTY_OPTIONS: ComplianceRequirementOptionsDto = {
+  owners: [],
+  sites: [],
+  roles: [],
+};
 
 const orNull = (value: string): string | null => {
   const trimmed = value.trim();
@@ -64,14 +77,18 @@ const failureMessage = (error: unknown, fallback: string): string => {
 interface RequirementFormDialogProps {
   trigger: ReactNode;
   acts: NpaDto[];
-  onCreated: () => void;
+  /** Есть — форма правит это требование; нет — заводит новое. */
+  initialData?: ComplianceRequirementDto;
+  onSaved: () => void;
 }
 
 export const RequirementFormDialog = ({
   trigger,
   acts,
-  onCreated,
+  initialData,
+  onSaved,
 }: RequirementFormDialogProps) => {
+  const isEdit = Boolean(initialData);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [code, setCode] = useState("");
@@ -83,54 +100,96 @@ export const RequirementFormDialog = ({
   const [severity, setSeverity] = useState<RequirementSeverity>("medium");
   const [description, setDescription] = useState("");
   const [roleCode, setRoleCode] = useState("");
+  const [siteId, setSiteId] = useState("");
   const [processCode, setProcessCode] = useState("");
   const [ownerId, setOwnerId] = useState("");
-  const [users, setUsers] = useState<OwnerOptionDto[]>([]);
+  const [options, setOptions] =
+    useState<ComplianceRequirementOptionsDto>(EMPTY_OPTIONS);
 
   useEffect(() => {
     if (!open) return;
-    void listOwnerOptions().then(setUsers);
+    // Справочник перечитывается при каждом открытии: людей и площадки заводят
+    // между открытиями формы, а устаревший список — это «нет такого человека».
+    void complianceRequirementsApi
+      .options()
+      .then(setOptions)
+      .catch(() => setOptions(EMPTY_OPTIONS));
   }, [open]);
 
-  const clauses = acts.find((act) => act.id === npaId)?.clauses ?? [];
+  // Поля берутся из требования при правке и пустые при создании; при каждом
+  // открытии заново — чтобы брошенная на середине правка не переехала в
+  // следующую строку.
+  const fill = useCallback((data?: ComplianceRequirementDto) => {
+    setCode(data?.code ?? "");
+    setTitle(data?.title ?? "");
+    setNpaId(data?.npa_id ?? "");
+    setClauseId(data?.clause_id ?? "");
+    setPeriodicity(
+      data?.periodicity_days != null ? String(data.periodicity_days) : "",
+    );
+    setNextDueAt(data?.next_due_at ?? "");
+    setSeverity(data?.severity ?? "medium");
+    setDescription(data?.description ?? "");
+    setRoleCode(data?.role_code ?? "");
+    setSiteId(data?.site_id ?? "");
+    setProcessCode(data?.process_code ?? "");
+    setOwnerId(data?.owner_user_id ?? "");
+  }, []);
 
-  const reset = () => {
-    setCode("");
-    setTitle("");
-    setNpaId("");
-    setClauseId("");
-    setPeriodicity("");
-    setNextDueAt("");
-    setSeverity("medium");
-    setDescription("");
-    setRoleCode("");
-    setProcessCode("");
-    setOwnerId("");
-  };
+  useEffect(() => {
+    if (!open) return;
+    fill(initialData);
+  }, [open, initialData, fill]);
+
+  const clauses = acts.find((act) => act.id === npaId)?.clauses ?? [];
+  // Ответственный, роль или площадка, которых в справочнике уже нет (уволен,
+  // снесена): показываем то, что записано, чтобы правка не стирала их молча.
+  const ownerMissing =
+    ownerId && !options.owners.some((owner) => owner.id === ownerId);
+  const siteMissing =
+    siteId && !options.sites.some((site) => site.id === siteId);
+  const roleMissing =
+    roleCode && !options.roles.some((role) => role.code === roleCode);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setSaving(true);
+    const fields = {
+      title: title.trim(),
+      npa_id: orNull(npaId),
+      clause_id: npaId ? orNull(clauseId) : null,
+      periodicity_days: periodicity ? Number(periodicity) : null,
+      next_due_at: orNull(nextDueAt),
+      severity,
+      description: orNull(description),
+      role_code: orNull(roleCode),
+      site_id: orNull(siteId),
+      process_code: orNull(processCode),
+      owner_user_id: orNull(ownerId),
+    };
     try {
-      await complianceRequirementsApi.create({
-        code: code.trim(),
-        title: title.trim(),
-        npa_id: orNull(npaId),
-        clause_id: npaId ? orNull(clauseId) : null,
-        periodicity_days: periodicity ? Number(periodicity) : null,
-        next_due_at: orNull(nextDueAt),
-        severity,
-        description: orNull(description),
-        role_code: orNull(roleCode),
-        process_code: orNull(processCode),
-        owner_user_id: orNull(ownerId),
-      });
-      toast.success("Требование добавлено в реестр");
+      if (initialData) {
+        await complianceRequirementsApi.update(initialData.id, fields);
+        toast.success("Требование обновлено");
+      } else {
+        await complianceRequirementsApi.create({
+          code: code.trim(),
+          ...fields,
+        });
+        toast.success("Требование добавлено в реестр");
+      }
       setOpen(false);
-      reset();
-      onCreated();
+      fill(undefined);
+      onSaved();
     } catch (error) {
-      toast.error(failureMessage(error, "Не удалось добавить требование"));
+      toast.error(
+        failureMessage(
+          error,
+          isEdit
+            ? "Не удалось сохранить требование"
+            : "Не удалось добавить требование",
+        ),
+      );
     } finally {
       setSaving(false);
     }
@@ -141,10 +200,15 @@ export const RequirementFormDialog = ({
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Новое требование</DialogTitle>
+          <DialogTitle>
+            {isEdit
+              ? `Изменить требование ${initialData?.code}`
+              : "Новое требование"}
+          </DialogTitle>
           <DialogDescription>
-            Что арендатор обязан делать по НПА: как часто, до какой даты и
-            насколько серьёзно неисполнение.
+            {isEdit
+              ? "Код не меняется — на него ссылаются доказательства и импорт. Статус меняют «Исполнено» и «Снять с контроля»."
+              : "Что арендатор обязан делать по НПА: как часто, до какой даты и насколько серьёзно неисполнение."}
           </DialogDescription>
         </DialogHeader>
         <form className="space-y-4" onSubmit={(event) => void submit(event)}>
@@ -157,6 +221,8 @@ export const RequirementFormDialog = ({
                 onChange={(event) => setCode(event.target.value)}
                 placeholder="ОТ-12"
                 required
+                readOnly={isEdit}
+                aria-readonly={isEdit || undefined}
               />
             </div>
             <div className="space-y-2">
@@ -262,21 +328,61 @@ export const RequirementFormDialog = ({
                   onChange={(event) => setOwnerId(event.target.value)}
                 >
                   <option value="">— не назначен —</option>
-                  {users.map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.full_name || user.email}
+                  {ownerMissing ? (
+                    <option value={ownerId}>
+                      {initialData?.owner_name ?? "назначенный ранее"} (нет в
+                      списке)
+                    </option>
+                  ) : null}
+                  {options.owners.map((owner) => (
+                    <option key={owner.id} value={owner.id}>
+                      {owner.name} · {owner.role_label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="requirement-site">Площадка</Label>
+                <select
+                  id="requirement-site"
+                  className={selectClassName}
+                  value={siteId}
+                  onChange={(event) => setSiteId(event.target.value)}
+                >
+                  <option value="">— весь арендатор —</option>
+                  {siteMissing ? (
+                    <option value={siteId}>
+                      {initialData?.site_name ?? "выбранная ранее"} (нет в
+                      списке)
+                    </option>
+                  ) : null}
+                  {options.sites.map((site) => (
+                    <option key={site.id} value={site.id}>
+                      {site.name} · {site.company_name}
                     </option>
                   ))}
                 </select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="requirement-role">Роль</Label>
-                <Input
+                <select
                   id="requirement-role"
+                  className={selectClassName}
                   value={roleCode}
                   onChange={(event) => setRoleCode(event.target.value)}
-                  placeholder="ot_specialist"
-                />
+                >
+                  <option value="">— любая роль —</option>
+                  {roleMissing ? (
+                    <option value={roleCode}>
+                      {initialData?.role_label ?? roleCode}
+                    </option>
+                  ) : null}
+                  {options.roles.map((role) => (
+                    <option key={role.code} value={role.code}>
+                      {role.label}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="requirement-process">Процесс</Label>
@@ -284,7 +390,7 @@ export const RequirementFormDialog = ({
                   id="requirement-process"
                   value={processCode}
                   onChange={(event) => setProcessCode(event.target.value)}
-                  placeholder="training"
+                  placeholder="обучение, СОУТ, медосмотры…"
                 />
               </div>
               <div className="space-y-2 md:col-span-2">
@@ -300,7 +406,7 @@ export const RequirementFormDialog = ({
           </details>
           <DialogFooter>
             <Button type="submit" disabled={saving}>
-              {saving ? "Сохранение..." : "Добавить"}
+              {saving ? "Сохранение..." : isEdit ? "Сохранить" : "Добавить"}
             </Button>
           </DialogFooter>
         </form>

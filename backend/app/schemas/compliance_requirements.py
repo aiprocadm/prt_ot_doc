@@ -84,7 +84,11 @@ class ComplianceRequirementRead(BaseModel):
     clause_id: str | None = None
     clause_code: str | None = None
     role_code: str | None = None
+    #: Роль словами (срез-147, словарь ``app.core.role_labels``); код — для машин.
+    role_label: str | None = None
     site_id: str | None = None
+    #: Имя площадки (срез-147): без него привязка к объекту на витрине невидима.
+    site_name: str | None = None
     process_code: str | None = None
     owner_user_id: str | None = None
     owner_name: str | None = None
@@ -117,3 +121,33 @@ class ComplianceRequirementListResponse(BaseModel):
     overdue: int
     #: Может ли пришедший заводить и закрывать требования (роли записи).
     can_manage: bool = False
+
+
+class RequirementOwnerOption(BaseModel):
+    """Кандидат в ответственные: только то, что нужно, чтобы выбрать человека."""
+
+    id: str
+    name: str
+    role: str
+    role_label: str
+
+
+class RequirementSiteOption(BaseModel):
+    id: str
+    name: str
+    #: Компания площадки: у арендатора-аутсорсера «Цех №1» бывает у нескольких клиентов.
+    company_name: str
+
+
+class RequirementRoleOption(BaseModel):
+    code: str
+    label: str
+
+
+class ComplianceRequirementOptions(BaseModel):
+    """Справочники формы требования (срез-147): кого назначить ответственным,
+    к какой площадке и к какой роли отнести. Отдаются ролям записи."""
+
+    owners: list[RequirementOwnerOption] = Field(default_factory=list)
+    sites: list[RequirementSiteOption] = Field(default_factory=list)
+    roles: list[RequirementRoleOption] = Field(default_factory=list)

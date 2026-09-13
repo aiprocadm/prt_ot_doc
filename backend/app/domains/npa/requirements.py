@@ -24,12 +24,14 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.role_labels import role_label
 from app.models.compliance_requirements import (
     ComplianceRequirement,
     ComplianceRequirementEvidence,
 )
 from app.models.document import Document
 from app.models.identity import User
+from app.models.master_data import Company, Site
 from app.models.npa import NpaAct, NpaClause
 
 #: За сколько дней до контрольной даты требование попадает в Центр внимания
@@ -42,15 +44,22 @@ def today() -> date:
     return datetime.now(tz=timezone.utc).date()
 
 
-def is_overdue(row: ComplianceRequirement, today: date | None = None) -> bool:
-    today = today or today()
-    return row.status == "active" and row.next_due_at is not None and row.next_due_at < today
+def is_overdue(row: ComplianceRequirement, reference: date | None = None) -> bool:
+    # Параметр раньше звался ``today`` и затенял функцию: вызов без даты падал
+    # с TypeError (срез-147). Ручки всегда передавали дату, поэтому не всплывало.
+    reference = reference or today()
+    return row.status == "active" and row.next_due_at is not None and row.next_due_at < reference
 
 
-def days_left(row: ComplianceRequirement, today: date | None = None) -> int | None:
+def days_left(row: ComplianceRequirement, reference: date | None = None) -> int | None:
     if row.next_due_at is None:
         return None
-    return (row.next_due_at - (today or today())).days
+    return (row.next_due_at - (reference or today())).days
+
+
+def display_name(user: User) -> str:
+    """Как пользователь зовётся на витринах реестра: имя, без имени — почта."""
+    return (user.full_name or "").strip() or user.email
 
 
 @dataclass(slots=True)
@@ -208,16 +217,29 @@ class RequirementsService:
     async def references(
         self, rows: list[ComplianceRequirement]
     ) -> dict[str, dict[str, dict[str, Any]]]:
-        """Имена для ссылок: акт, пункт, ответственный — одним заходом на список.
+        """Имена для ссылок: акт, пункт, ответственный, площадка — одним заходом на список.
 
-        Возвращает ``{"acts": {id: {...}}, "clauses": {...}, "users": {...}}``.
+        Возвращает ``{"acts": {id: {...}}, "clauses": {...}, "users": {...}, "sites": {...}}``.
         """
         act_ids = {r.npa_id for r in rows if r.npa_id}
         clause_ids = {r.clause_id for r in rows if r.clause_id}
         user_ids = {r.owner_user_id for r in rows if r.owner_user_id}
+        site_ids = {r.site_id for r in rows if r.site_id}
         acts: dict[str, dict[str, Any]] = {}
         clauses: dict[str, dict[str, Any]] = {}
         users: dict[str, dict[str, Any]] = {}
+        sites: dict[str, dict[str, Any]] = {}
+        if site_ids:
+            for site in (
+                (
+                    await self.session.execute(
+                        select(Site).where(Site.tenant_id == self.tenant_id, Site.id.in_(site_ids))
+                    )
+                )
+                .scalars()
+                .all()
+            ):
+                sites[site.id] = {"name": site.name}
         if act_ids:
             for act in (
                 (await self.session.execute(select(NpaAct).where(NpaAct.id.in_(act_ids))))
@@ -242,8 +264,59 @@ class RequirementsService:
                 .scalars()
                 .all()
             ):
-                users[user.id] = {"name": user.full_name or user.email}
-        return {"acts": acts, "clauses": clauses, "users": users}
+                users[user.id] = {"name": display_name(user)}
+        return {"acts": acts, "clauses": clauses, "users": users, "sites": sites}
+
+    async def owner_options(self) -> list[dict[str, str]]:
+        """Кандидаты в ответственные: активные, не удалённые пользователи арендатора.
+
+        Своя выборка, а не ``/admin/users``: та ручка — управление доступом
+        (роли, атрибуты, почта) и открыта только admin/owner, а специалисту по
+        ОТ для назначения ответственного нужны лишь имя и роль (срез-147).
+        """
+        rows = (
+            (
+                await self.session.execute(
+                    select(User)
+                    .where(
+                        User.tenant_id == self.tenant_id,
+                        User.deleted_at.is_(None),
+                        User.is_active.is_(True),
+                    )
+                    .order_by(User.full_name, User.email)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        options: list[dict[str, str]] = []
+        for user in rows:
+            code = str(getattr(user.role, "value", user.role))
+            options.append(
+                {
+                    "id": user.id,
+                    "name": display_name(user),
+                    "role": code,
+                    "role_label": role_label(code) or code,
+                }
+            )
+        return options
+
+    async def site_options(self) -> list[dict[str, str]]:
+        """Площадки арендатора для привязки требования — с компанией, чтобы
+        одноимённые цеха разных клиентов аутсорсера различались."""
+        rows = (
+            await self.session.execute(
+                select(Site, Company.name)
+                .join(Company, Company.id == Site.company_id)
+                .where(Site.tenant_id == self.tenant_id, Site.deleted_at.is_(None))
+                .order_by(Company.name, Site.name)
+            )
+        ).all()
+        return [
+            {"id": site.id, "name": site.name, "company_name": company_name}
+            for site, company_name in rows
+        ]
 
     async def document_titles(self, document_ids: set[str]) -> dict[str, str]:
         """«Шаблон · Компания» — так документы зовутся на всех витринах НПА."""
