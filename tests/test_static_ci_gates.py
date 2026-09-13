@@ -17,6 +17,12 @@ CI выключен вручную с 13.08. Проверка, которую н
 Остальные требуют живую базу, npm или отчёт о покрытии — им место в CI, и
 сюда они не берутся намеренно.
 
+СРЕЗ-176. Одна из пяти — проверка артефактов сборки — читает список файлов у
+git (`git ls-files`), то есть работает только В РЕПОЗИТОРИИ. Полный прогон идёт
+в ВЫГРУЖЕННОЙ копии дерева, где каталога `.git` нет, и там она падала не по
+делу. Теперь такая проверка честно пропускается с причиной: спрашивать git
+там, где его нет, бессмысленно, а прятать это молчанием нельзя.
+
 КАК ЧИТАТЬ ПАДЕНИЕ. Тест печатает вывод самой проверки: там уже написано, что
 именно не так. Запустить вручную:
 ``PYTHONPATH=backend python scripts/ci/<имя>.py``.
@@ -40,6 +46,9 @@ GATES = [
     "check_scoped_queries",
 ]
 
+#: Проверки, которые спрашивают сам git: вне репозитория они бессмысленны.
+NEEDS_GIT = {"check_runtime_artifacts"}
+
 
 def _run_gate(name: str) -> subprocess.CompletedProcess[str]:
     script = REPO_ROOT / "scripts" / "ci" / f"{name}.py"
@@ -57,6 +66,12 @@ def _run_gate(name: str) -> subprocess.CompletedProcess[str]:
 
 @pytest.mark.parametrize("gate", GATES)
 def test_статический_гейт_зелёный(gate: str) -> None:
+    if gate in NEEDS_GIT and not (REPO_ROOT / ".git").exists():
+        pytest.skip(
+            f"{gate} читает список файлов у git, а здесь не репозиторий "
+            "(выгруженная копия дерева) — проверять нечего"
+        )
+
     result = _run_gate(gate)
     assert result.returncode == 0, (
         f"гейт {gate} красный. Он не требует ни базы, ни сети, поэтому его "
