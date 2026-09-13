@@ -11,6 +11,11 @@
 сервера есть отдельной ручкой (`POST /pack-runs:preview`), мастер теперь зовёт
 именно её.
 
+Срез-165 добавил обратную проверку: поле, которое схема ТРЕБУЕТ, а витрина не
+шлёт. Там отказ виден сразу (сохранение всегда кончается 422), но человеку он
+ничего не объясняет. На сегодня таких мест нет — проверка стоит, чтобы не
+появились.
+
 КАК ПРОВЕРЯЕТСЯ. Контракт берётся у живого приложения, из витрины читаются
 вызовы `apiClient.post|put|patch` с телом-ЛИТЕРАЛОМ. Сверяются только поля
 ВЕРХНЕГО уровня: вложенные объекты (`context`, `items`) сервер принимает как
@@ -38,6 +43,22 @@ _CALL_RE = re.compile(
 )
 #: Поле верхнего уровня: ровно один уровень отступа внутри литерала тела.
 _TOP_FIELD_RE = re.compile(r"^\s{8}([a-z_][A-Za-z0-9_]*)\s*:", re.M)
+
+
+def _required_fields(
+    schema: dict[str, Any], components: dict[str, Any], depth: int = 0
+) -> set[str]:
+    """Поля, без которых сервер ответит отказом."""
+
+    if depth > 4 or not isinstance(schema, dict):
+        return set()
+    if "$ref" in schema:
+        name = schema["$ref"].rsplit("/", 1)[-1]
+        return _required_fields(components.get(name, {}), components, depth + 1)
+    fields: set[str] = set(schema.get("required", []))
+    for part in schema.get("allOf", []):
+        fields |= _required_fields(part, components, depth + 1)
+    return fields
 
 
 def _schema_fields(schema: dict[str, Any], components: dict[str, Any], depth: int = 0) -> set[str]:
@@ -68,6 +89,26 @@ def declared() -> dict[tuple[str, str], set[str]]:
                 operation.get("requestBody", {}).get("content", {}).get("application/json", {})
             )
             fields = _schema_fields(content.get("schema", {}), components)
+            if fields:
+                bodies[(path, method)] = fields
+    return bodies
+
+
+@pytest.fixture(scope="module")
+def required() -> dict[tuple[str, str], set[str]]:
+    from app.api.app import create_app
+
+    spec = create_app().openapi()
+    components = spec.get("components", {}).get("schemas", {})
+    bodies: dict[tuple[str, str], set[str]] = {}
+    for path, methods in spec.get("paths", {}).items():
+        for method, operation in methods.items():
+            if method not in {"post", "put", "patch"}:
+                continue
+            content = (
+                operation.get("requestBody", {}).get("content", {}).get("application/json", {})
+            )
+            fields = _required_fields(content.get("schema", {}), components)
             if fields:
                 bodies[(path, method)] = fields
     return bodies
@@ -151,3 +192,32 @@ def test_проверка_комплекта_без_записи_зовёт_св
         "документы будут записаны, а человеку скажут, что это была проверка"
     )
     assert "dry_run" not in live, "в теле запуска снова появилось поле, которого схема не знает"
+
+
+def test_витрина_шлёт_все_обязательные_поля(
+    required: dict[tuple[str, str], set[str]],
+) -> None:
+    """Срез-165: обратная сторона — поле требуют, а витрина его не кладёт.
+
+    Такое сохранение всегда кончается отказом 422. Человеку видно, что «не
+    получилось», но не видно, чего не хватает: поля-то на экране нет.
+    """
+
+    routes = [(_segments(path), (path, method)) for (path, method) in required]
+    problems: list[str] = []
+
+    for file, method, path, keys in _frontend_bodies():
+        call = _segments(path)
+        for route_segments, key in routes:
+            if key[1] != method or not _matches(call, route_segments):
+                continue
+            missing = sorted(required[key] - keys)
+            if missing:
+                problems.append(
+                    f"  {method.upper()} {key[0]} — не хватает {', '.join(missing)} — {file}"
+                )
+
+    assert not problems, (
+        "витрина не кладёт в тело поля, которые схема требует: сохранение будет "
+        "отказано, а чего не хватает — на экране не видно:\n" + "\n".join(problems)
+    )
