@@ -64,12 +64,13 @@ describe("RiskAssessmentForm", () => {
     await waitFor(() => {
       expect(riskState.createAssessment).toHaveBeenCalledWith({
         company_id: "cmp-1",
+        // Срез-152: поля «Мероприятия» в расчёте больше нет — сервер
+        // принимает меры кодами из справочника, а не свободным текстом.
         hazards: [
           {
             hazard_id: "haz-1",
             probability: 1,
             severity: 1,
-            mitigations: "",
           },
         ],
       });
