@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 
 import { operationsApi } from "@/api/operations";
 import { EmptyState } from "@/components/common/EmptyState";
+import { deniedNotice } from "@/api/partial";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
@@ -14,6 +15,7 @@ const ReferencePage = () => {
   const { data, loading, error, reload } = useAsyncResource({
     loader: useCallback(() => operationsApi.getReferenceSnapshot(), []),
     initialData: {
+      denied: [],
       npa: [],
       ppeItems: [],
       programs: [],
@@ -76,6 +78,11 @@ const ReferencePage = () => {
         }
       />
       <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
+      {deniedNotice(data.denied) ? (
+        <p className="rounded-md border border-amber-500/40 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-600/50 dark:bg-amber-950/30 dark:text-amber-50">
+          {deniedNotice(data.denied)}
+        </p>
+      ) : null}
       {loading ? <LoadingScreen label="Загрузка справочников" /> : null}
       {!loading &&
       !error &&
