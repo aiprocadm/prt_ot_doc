@@ -60,6 +60,40 @@ describe("PpePage", () => {
     });
   });
 
+  it("называет разделы, закрытые правами, и не гасит экран (срез-167)", async () => {
+    getPpeOverviewMock.mockResolvedValue({
+      items: [
+        { id: "item-1", name: "Каска", code: "helmet", category: "head" },
+      ],
+      issues: [],
+      expiring: [],
+      persons: [],
+      denied: ["сотрудники"],
+    });
+    useAuthStore.setState({
+      user: baseUser,
+      loading: false,
+      error: null,
+      isAuthenticated: true,
+      initialized: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <PpePage />
+      </MemoryRouter>,
+    );
+
+    // Про закрытую часть сказано словами, а не пустотой.
+    const notice = await screen.findByText(
+      /у вашей роли нет доступа к разделам/i,
+    );
+    expect(notice).toBeInTheDocument();
+    expect(notice.textContent).toContain("сотрудники");
+    // Экран при этом жив: общая ошибка загрузки не показана.
+    expect(screen.queryByText(/Не удалось загрузить/i)).toBeNull();
+  });
+
   it("показывает disabled quick issue action без write permission", async () => {
     useAuthStore.setState({
       user: baseUser,

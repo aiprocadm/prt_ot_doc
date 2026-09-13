@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { opsApi, type AuditPrepSnapshot } from "@/api/ops";
 import { EmptyState } from "@/components/common/EmptyState";
+import { deniedNotice } from "@/api/partial";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
@@ -25,6 +26,7 @@ const AuditPrepPage = () => {
     inspections: [],
     prescriptions: [],
     overdueTasks: [],
+    denied: [],
   });
 
   const load = async () => {
@@ -144,6 +146,11 @@ const AuditPrepPage = () => {
         </CardHeader>
         <CardContent className="space-y-3">
           <ErrorState error={error ?? undefined} onRetry={load} />
+          {deniedNotice(snapshot.denied) ? (
+            <p className="rounded-md border border-amber-500/40 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-600/50 dark:bg-amber-950/30 dark:text-amber-50">
+              {deniedNotice(snapshot.denied)}
+            </p>
+          ) : null}
           {loading ? (
             <LoadingScreen label="Сбор контуров подготовки к проверке" />
           ) : null}

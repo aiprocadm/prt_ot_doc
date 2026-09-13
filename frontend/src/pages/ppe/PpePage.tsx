@@ -4,6 +4,7 @@ import { toast } from "sonner";
 
 import { opsApi, type PpeIssueDto, type PpeItemDto } from "@/api/ops";
 import { EmptyState } from "@/components/common/EmptyState";
+import { deniedNotice } from "@/api/partial";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { Can } from "@/components/permissions/Can";
@@ -46,6 +47,8 @@ const PpePage = () => {
       : "all",
   );
 
+  const [denied, setDenied] = useState<string[]>([]);
+
   const load = async () => {
     setLoading(true);
     setError(null);
@@ -54,6 +57,7 @@ const PpePage = () => {
       setIssues(snapshot.issues);
       setItems(snapshot.items);
       setPersons(snapshot.persons);
+      setDenied(snapshot.denied ?? []);
     } catch (err) {
       setError(
         (err as ApiError) ?? {
@@ -301,6 +305,11 @@ const PpePage = () => {
         </CardHeader>
         <CardContent className="space-y-3">
           <ErrorState error={error ?? undefined} onRetry={load} />
+          {deniedNotice(denied) ? (
+            <p className="rounded-md border border-amber-500/40 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-600/50 dark:bg-amber-950/30 dark:text-amber-50">
+              {deniedNotice(denied)}
+            </p>
+          ) : null}
           {loading ? <LoadingScreen label="Загрузка карточек СИЗ" /> : null}
           {!loading && !error && visibleRows.length === 0 ? (
             <EmptyState
