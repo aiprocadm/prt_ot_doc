@@ -7,8 +7,6 @@ import {
   generateDocument,
   generateDocumentsBatch,
   getGenerationTaskStatus,
-  getReplaceReport,
-  replaceDryRun,
   validateDocumentMapping,
 } from "@/api/documents";
 import { previewBranding } from "@/api/branding";
@@ -89,36 +87,6 @@ export const useWizardStepActions = (deps: ActionDeps) => {
         error instanceof Error
           ? error.message
           : "Не удалось собрать branded preview",
-      );
-    }
-  };
-
-  const handleReplaceMapFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0] ?? null;
-    deps.setReplaceMapFile(file);
-    deps.setPartial({ replaceMapFileName: file?.name ?? "" });
-  };
-
-  const handleReplaceDryRun = async () => {
-    try {
-      if (!deps.docxFile || !deps.replaceMapFile) return;
-      const result = await replaceDryRun({
-        docxFile: deps.docxFile,
-        replaceMapFile: deps.replaceMapFile,
-        idempotencyKey: deps.idempotencyKey,
-      });
-      deps.setPartial({ replaceDryRun: result });
-      const fullReport = await getReplaceReport(result.report_id, {
-        limit: 100,
-      });
-      deps.setPartial({
-        replaceDryRun: { ...result, preview_samples: fullReport.rows },
-      });
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Не удалось выполнить dry-run replace",
       );
     }
   };
@@ -221,8 +189,6 @@ export const useWizardStepActions = (deps: ActionDeps) => {
   return {
     handleSourceFileChange,
     handleBrandingPreview,
-    handleReplaceMapFileChange,
-    handleReplaceDryRun,
     handleValidateMapping,
     handleRunBatch,
     handleRunSinglePipeline,

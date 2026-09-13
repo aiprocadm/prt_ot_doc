@@ -12,8 +12,6 @@ const documentsApiMock = vi.hoisted(() => ({
   generateDocumentsBatch: vi.fn(),
   getDocumentBatch: vi.fn(),
   getGenerationTaskStatus: vi.fn(),
-  getReplaceReport: vi.fn(),
-  replaceDryRun: vi.fn(),
 }));
 
 const pipelinesApiMock = vi.hoisted(() => ({
@@ -58,8 +56,6 @@ vi.mock("@/api/documents", () => ({
   generateDocumentsBatch: documentsApiMock.generateDocumentsBatch,
   getDocumentBatch: documentsApiMock.getDocumentBatch,
   getGenerationTaskStatus: documentsApiMock.getGenerationTaskStatus,
-  getReplaceReport: documentsApiMock.getReplaceReport,
-  replaceDryRun: documentsApiMock.replaceDryRun,
 }));
 
 vi.mock("@/api/pipelines", () => ({
@@ -209,6 +205,33 @@ describe("DocumentsWizardPage", () => {
     expect(
       screen.queryByRole("button", { name: /mvp placeholder/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it("шаг замены объясняет положение и ничего не обещает (срез-154)", async () => {
+    useDocumentsWizardStore.getState().reset();
+    useDocumentsWizardStore.setState({ step: 6 });
+
+    render(
+      <MemoryRouter>
+        <DocumentsWizardPage />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByText("Пробная замена пока недоступна"),
+    ).toBeInTheDocument();
+    // Кнопка звала снятый с сервера контракт и всегда кончалась 404.
+    expect(
+      screen.queryByRole("button", { name: "Выполнить dry-run" }),
+    ).not.toBeInTheDocument();
+    // И сам шаг в навигации больше не обещает пробную замену.
+    expect(screen.queryByText("Dry-run и diff")).not.toBeInTheDocument();
+    // Поля «DOCX для пробной замены» и «CSV карта замен» тоже сняты: просить
+    // файлы, с которыми нечего делать, нельзя.
+    expect(
+      screen.queryByText("DOCX для пробной замены"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/CSV карта замен/i)).not.toBeInTheDocument();
   });
 
   it("renders branding preview controls on step 5 and shows reproducibility snapshot", async () => {

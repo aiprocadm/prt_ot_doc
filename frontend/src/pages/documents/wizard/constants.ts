@@ -4,7 +4,9 @@ export const wizardSteps = [
   { id: 3, title: "Маппинг", description: "Колонки → поля" },
   { id: 4, title: "Шаблон", description: "Template code + version" },
   { id: 5, title: "Колонтитулы", description: "Параметры макета" },
-  { id: 6, title: "Replace", description: "Dry-run и diff" },
+  // Срез-154: шаг больше не делает пробную замену — старый контракт снят
+  // с сервера. Название и описание не должны обещать того, чего нет.
+  { id: 6, title: "Замена", description: "Пока недоступна" },
   { id: 7, title: "Запуск", description: "Batch/queue/idempotency" },
   { id: 8, title: "Контроль", description: "Предпросмотр и ошибки" },
   { id: 9, title: "Экспорт", description: "ZIP/PDF" },
