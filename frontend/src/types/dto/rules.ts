@@ -69,6 +69,17 @@ export interface EventTypePage {
   total: number;
 }
 
+/** Роль-получатель уведомления словами — `GET /rules/recipient-roles` (срез-148). */
+export interface RecipientRoleOption {
+  code: string;
+  label: string;
+}
+
+export interface RecipientRolePage {
+  items: RecipientRoleOption[];
+  total: number;
+}
+
 /** Покрытие одной дисциплины библиотекой правил (BIZ-54-57 срез-4). */
 export interface RuleLibraryDiscipline {
   discipline: string;

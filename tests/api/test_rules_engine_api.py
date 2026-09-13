@@ -261,6 +261,45 @@ async def test_event_types_catalog(async_client, make_auth_headers, sessionmaker
 
 
 @pytest.mark.asyncio
+async def test_роли_получателей_словами_из_единого_словаря(
+    async_client, make_auth_headers, sessionmaker, data_factory
+):
+    """Срез-148: форма берёт роли-получатели с сервера — все роли RoleEnum без
+    псевдонимов, словами; те, кому шлёт сама библиотека правил, в списке есть."""
+    from app.core.role_labels import ROLE_ALIASES, ROLE_LABELS
+
+    await _enable_flag(sessionmaker, data_factory)
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    resp = await async_client.get(f"{BASE}/recipient-roles", headers=headers)
+    assert resp.status_code == status.HTTP_200_OK, resp.text
+    body = resp.json()
+    codes = [item["code"] for item in body["items"]]
+    assert body["total"] == len(codes) == len(set(codes))
+    # До среза форма знала пять ролей; библиотека шлёт экологу и инженеру ПБ.
+    assert {"ecologist", "pb_engineer", "ot_specialist", "hr", "admin"} <= set(codes)
+    assert set(codes) == {role.value for role in RoleEnum} - set(ROLE_ALIASES)
+    assert all(item["label"] == ROLE_LABELS[item["code"]] for item in body["items"])
+
+    # Правило с ролями из этого списка исполнитель принимает.
+    created = await async_client.post(
+        BASE,
+        json={
+            **RULE,
+            "name": f"Экологу и инженеру ПБ {uuid4().hex[:6]}",
+            "actions_json": [{**RULE["actions_json"][0], "roles": ["ecologist", "pb_engineer"]}],
+        },
+        headers=headers,
+    )
+    assert created.status_code == status.HTTP_201_CREATED, created.text
+    assert created.json()["actions_json"][0]["roles"] == ["ecologist", "pb_engineer"]
+
+    # Ручка — для тех, кто правит правила: остальным 403, как всему движку.
+    specialist = await make_auth_headers(RoleEnum.OT_SPECIALIST)
+    forbidden = await async_client.get(f"{BASE}/recipient-roles", headers=specialist)
+    assert forbidden.status_code == status.HTTP_403_FORBIDDEN, forbidden.text
+
+
+@pytest.mark.asyncio
 async def test_dry_run(async_client, make_auth_headers, sessionmaker, data_factory):
     tenant_id = await _enable_flag(sessionmaker, data_factory)
     headers = await make_auth_headers(RoleEnum.ADMIN)

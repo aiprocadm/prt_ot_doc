@@ -470,6 +470,7 @@
     "GET /api/v1/rules",
     "GET /api/v1/rules/event-types",
     "GET /api/v1/rules/library",
+    "GET /api/v1/rules/recipient-roles",
     "GET /api/v1/rules/triggers",
     "GET /api/v1/rules/{rule_id}",
     "GET /api/v1/safety-ops/prescriptions",
@@ -1843,6 +1844,7 @@
     "list_protocols_api_v1_training_protocols_get",
     "list_public_legal_api_v1_public_legal_get",
     "list_recent_searches_api_v1_search_recent_get",
+    "list_recipient_roles_api_v1_rules_recipient_roles_get",
     "list_reimbursements_api_v1_budget_reimbursements_get",
     "list_reporting_deadlines_api_v1_ecology_reporting_deadlines_get",
     "list_requests_api_v1_client_portal_requests_get",
@@ -3036,6 +3038,8 @@
     "ReadinessBlocker",
     "ReadinessProblemRead",
     "ReadinessReportRead",
+    "RecipientRoleOption",
+    "RecipientRolePage",
     "RefreshRequest",
     "ReimbursementCreate",
     "ReimbursementDecision",
@@ -9304,6 +9308,14 @@
     "ReadinessReportRead": {
       "ok": "boolean",
       "violations": "array"
+    },
+    "RecipientRoleOption": {
+      "code": "string",
+      "label": "string"
+    },
+    "RecipientRolePage": {
+      "items": "array",
+      "total": "integer"
     },
     "RefreshRequest": {
       "refresh_token": "null|string"

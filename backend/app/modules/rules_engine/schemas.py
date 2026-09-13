@@ -104,6 +104,18 @@ class EventTypePage(BaseModel):
     total: int
 
 
+class RecipientRoleOption(BaseModel):
+    """Роль-получатель уведомления (срез-148): код — в правило, подпись — в форму."""
+
+    code: str
+    label: str
+
+
+class RecipientRolePage(BaseModel):
+    items: list[RecipientRoleOption]
+    total: int
+
+
 class DryRunEvent(BaseModel):
     event_type: str
     payload: dict[str, Any] = Field(default_factory=dict)

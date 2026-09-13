@@ -19,6 +19,7 @@ from app.api.helpers.etag import (
 )
 from app.core.errors import api_problem_detail
 from app.core.feature_flags import is_module_enabled, raise_for_disabled_module
+from app.core.role_labels import role_options
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.db.session import rearm_session_tenant_context
@@ -36,6 +37,8 @@ from app.modules.rules_engine.schemas import (
     EventFieldMeta,
     EventTypeMeta,
     EventTypePage,
+    RecipientRoleOption,
+    RecipientRolePage,
     RuleLibraryDiscipline,
     RuleLibraryInstallOut,
     RuleLibraryPage,
@@ -161,6 +164,23 @@ async def list_event_types(tenant: TenantDep, access: Access) -> EventTypePage:
         for entry in event_catalog()
     ]
     return EventTypePage(items=items, total=len(items))
+
+
+@router.get("/recipient-roles", response_model=RecipientRolePage, dependencies=[FeatureGate])
+async def list_recipient_roles(tenant: TenantDep, access: Access) -> RecipientRolePage:
+    """Роли, которым правило может адресовать уведомление (срез-148).
+
+    Исполнитель принимает любую роль ``RoleEnum`` (``_KNOWN_ROLES``), а форма
+    до среза держала свой список из пяти ролей со своими подписями: правила
+    самой библиотеки адресованы экологу и инженеру ПБ, которых в форме не было
+    — человек не видел получателя и не мог его выбрать. Список — единый
+    словарь ``app.core.role_labels`` без псевдонимов, в порядке ``RoleEnum``;
+    совпадение с ``_KNOWN_ROLES`` стережёт ``tests/api/test_rules_engine_actions.py``.
+    """
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _ = access
+    items = [RecipientRoleOption(**item) for item in role_options()]
+    return RecipientRolePage(items=items, total=len(items))
 
 
 @router.get("/library", response_model=RuleLibraryPage, dependencies=[FeatureGate])

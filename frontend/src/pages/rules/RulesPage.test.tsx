@@ -12,6 +12,7 @@ import { rulesApi } from "@/api/rules";
 import type {
   AutomationRuleRead,
   EventTypeMeta,
+  RecipientRoleOption,
   TriggerRead,
 } from "@/types/dto/rules";
 
@@ -23,6 +24,7 @@ vi.mock("@/api/rules", async (importOriginal) => {
     ...actual,
     rulesApi: {
       eventTypes: vi.fn(),
+      recipientRoles: vi.fn(),
       list: vi.fn(),
       create: vi.fn(),
       get: vi.fn(),
@@ -66,6 +68,15 @@ const EVENT_TYPES: EventTypeMeta[] = [
       { name: "item_name", kind: "string" },
     ],
   },
+];
+
+/** Срез-148: роли-получатели словами — как их отдаёт `GET /rules/recipient-roles`. */
+const RECIPIENT_ROLES: RecipientRoleOption[] = [
+  { code: "admin", label: "Администратор" },
+  { code: "owner", label: "Владелец арендатора" },
+  { code: "ot_specialist", label: "Специалист ОТ" },
+  { code: "ecologist", label: "Эколог" },
+  { code: "pb_engineer", label: "Инженер ПБ" },
 ];
 
 const RULE: AutomationRuleRead = {
@@ -147,6 +158,10 @@ beforeEach(() => {
     items: EVENT_TYPES,
     total: EVENT_TYPES.length,
   });
+  vi.mocked(rulesApi.recipientRoles).mockResolvedValue({
+    items: RECIPIENT_ROLES,
+    total: RECIPIENT_ROLES.length,
+  });
   vi.mocked(rulesApi.triggers).mockResolvedValue({
     items: [TRIGGER],
     total: 1,
@@ -227,7 +242,8 @@ describe("RulesPage", () => {
     fireEvent.change(within(actionCard).getByLabelText("Получатель"), {
       target: { value: "role" },
     });
-    fireEvent.click(within(actionCard).getByLabelText("Администратор"));
+    // Роли приходят с сервера (срез-148) — ждём галочку, а не берём из кода формы.
+    fireEvent.click(await within(actionCard).findByLabelText("Администратор"));
     fireEvent.change(
       within(actionCard).getByLabelText("Заголовок уведомления"),
       { target: { value: "Заголовок" } },
@@ -254,6 +270,63 @@ describe("RulesPage", () => {
       roles: ["admin"],
       title_template: "Заголовок",
       body_template: "Текст",
+    });
+  });
+
+  it("роли получателей — со словаря сервера, роль правила вне словаря не теряется (срез-148)", async () => {
+    vi.mocked(rulesApi.list).mockResolvedValue({
+      items: [
+        {
+          ...RULE,
+          actions_json: [
+            {
+              ...RULE.actions_json[0],
+              recipient_mode: "role",
+              roles: ["ecologist", "inspector_contractor"],
+            },
+          ],
+        },
+      ],
+      total: 1,
+      limit: 100,
+      offset: 0,
+    });
+    vi.mocked(rulesApi.update).mockResolvedValue(RULE);
+    renderPage();
+    await screen.findAllByText("Критичные инциденты");
+
+    fireEvent.click(
+      (await screen.findAllByRole("button", { name: "Изменить" }))[0],
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(rulesApi.recipientRoles).toHaveBeenCalled();
+    const actionCard = within(dialog).getByTestId("action-card-0");
+    // Получатель библиотечного правила — эколог — виден и отмечен; прежний
+    // список из кода формы его не знал вовсе.
+    expect(await within(actionCard).findByLabelText("Эколог")).toBeChecked();
+    expect(within(actionCard).getByLabelText("Инженер ПБ")).not.toBeChecked();
+    // Роль, которой в словаре нет (псевдоним), показана кодом и не потеряна.
+    expect(
+      within(actionCard).getByLabelText("inspector_contractor"),
+    ).toBeChecked();
+    // Список — только с сервера: роли, которых он не прислал, не рисуются.
+    expect(
+      within(actionCard).queryByLabelText("Линейный руководитель"),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(within(actionCard).getByLabelText("Инженер ПБ"));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(rulesApi.update).toHaveBeenCalled());
+    const [id, payload] = vi.mocked(rulesApi.update).mock.calls[0];
+    expect(id).toBe("r1");
+    expect(payload).toMatchObject({
+      actions_json: [
+        expect.objectContaining({
+          recipient_mode: "role",
+          roles: ["ecologist", "inspector_contractor", "pb_engineer"],
+        }),
+      ],
     });
   });
 
