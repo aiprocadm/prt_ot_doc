@@ -39,15 +39,22 @@ router = APIRouter(prefix="/contractors", tags=["contractors"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 
+# Срез-151: из списков убраны `hse_head` и `hse_specialist` — таких кодов нет
+# в ``RoleEnum``, они не могли совпасть ни с одним пользователем и лишь
+# обещали доступ, которого не было. Фактические права не изменились.
+#
+# ГРАНИЦА (вопрос владельцу, здесь не решался): `inspector_contractor` — это
+# ПСЕВДОНИМ канонического `contractor_inspector` (см. ``core/role_labels.py``),
+# а проверка прав сравнивает коды буквально. Значит проверяющий-подрядчик,
+# заведённый канонической ролью, на свой единственный экран не попадёт.
+# Добавление второго кода расширяет доступ — это решение владельца.
 _CONTRACTOR_READ_ROLES = [
     "admin",
     "owner",
-    "hse_head",
-    "hse_specialist",
     "inspector_contractor",
     "client_admin",
 ]
-_CONTRACTOR_WRITE_ROLES = ["admin", "owner", "hse_head"]
+_CONTRACTOR_WRITE_ROLES = ["admin", "owner"]
 
 _CONTRACTORS_FEATURE_CODE = "contractors"
 
@@ -690,9 +697,7 @@ async def list_contractor_documents(
     return {"items": [_document_body(d, today) for d in items], "total": len(items)}
 
 
-@router.post(
-    "/documents", status_code=status.HTTP_201_CREATED
-)
+@router.post("/documents", status_code=status.HTTP_201_CREATED)
 async def create_contractor_document(
     payload: ContractorDocumentCreate,
     tenant: TenantDep,

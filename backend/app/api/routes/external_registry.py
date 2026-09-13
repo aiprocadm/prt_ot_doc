@@ -16,8 +16,11 @@ router = APIRouter(prefix="/external-registry", tags=["external-registry"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 
-_EXTERNAL_REGISTRY_READ_ROLES = ["admin", "owner", "integrations"]
-_EXTERNAL_REGISTRY_WRITE_ROLES = ["admin", "owner", "integrations"]
+# Срез-151: убран код `integrations` — роли с таким кодом в ``RoleEnum`` нет,
+# совпасть он не мог, и список обещал доступ, которого не существовало.
+# Фактические права не изменились: это по-прежнему admin и owner.
+_EXTERNAL_REGISTRY_READ_ROLES = ["admin", "owner"]
+_EXTERNAL_REGISTRY_WRITE_ROLES = ["admin", "owner"]
 
 ReaderAccess = Annotated[
     AccessContext,
