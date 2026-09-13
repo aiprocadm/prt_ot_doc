@@ -195,41 +195,20 @@ export const getDocumentBatch = async (batchId: string) => {
   return response.data;
 };
 
-export const replaceDryRun = async (payload: {
-  docxFile: File;
-  replaceMapFile: File;
-  idempotencyKey: string;
-  options?: Record<string, unknown>;
-}) => {
-  const form = new FormData();
-  form.append("docx_file", payload.docxFile);
-  form.append("replace_map", payload.replaceMapFile);
-  const response = await apiClient.post<ReplaceDryRunResponse>(
-    "/replace/dry-run",
-    form,
-    {
-      headers: {
-        "Idempotency-Key": payload.idempotencyKey,
-        "X-Replace-Options": JSON.stringify({
-          dry_run: true,
-          ...(payload.options ?? {}),
-        }),
-      },
-    },
-  );
-  return response.data;
-};
-
-export const getReplaceReport = async (
-  reportId: string,
-  params?: { offset?: number; limit?: number },
-) => {
-  const response = await apiClient.get<ReplaceReportResponse>(
-    `/replace/reports/${reportId}`,
-    { params },
-  );
-  return response.data;
-};
+/**
+ * Срез-154: `replaceDryRun` и `getReplaceReport` удалены.
+ *
+ * Они звали `POST /replace/dry-run` и `GET /replace/reports/{id}` — контракт,
+ * которого у сервера нет: пробная замена «принеси свой DOCX и CSV-карту»
+ * снята вместе со старым движком. Сегодня сервер умеет другое — заменить в
+ * УЖЕ СОЗДАННОМ документе платформы по СОХРАНЁННОЙ карте замен
+ * (`POST /documents/{document_version_id}/replace:dry-run` с
+ * `replace_map_id`/`replace_map_code`, отчёт — `GET /replace-runs/{id}/report`).
+ * Перенести старый сценарий на него нельзя: у произвольного файла с диска нет
+ * версии документа, а витрины карт замен в продукте нет вовсе. Возврат шага —
+ * решение владельца (нужна либо ручка для произвольного файла, либо экран
+ * карт замен), поэтому функции убраны, а не «заглушены».
+ */
 
 export const checkDocumentQuality = async (payload: {
   data: Record<string, unknown>;

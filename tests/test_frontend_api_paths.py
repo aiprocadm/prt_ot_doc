@@ -58,18 +58,12 @@ NOT_A_DEFECT: dict[str, str] = {
 
 #: Расхождения, которые ЯВЛЯЮТСЯ дефектом и ждут своего среза. Здесь они
 #: названы поимённо, чтобы не выглядеть нормой: реестр обязан пустеть.
-DEFECTS_IN_QUEUE: dict[str, str] = {
-    "POST /replace/dry-run": (
-        "мастер документов зовёт СТАРЫЙ контракт замены (docx и карта замен "
-        "одним запросом). Сервер принимает `POST /documents/"
-        "{document_version_id}/replace:dry-run` по уже загруженной версии — "
-        "перевод мастера это работа, а не правка пути"
-    ),
-    "GET /replace/reports/{}": (
-        "та же пара: отчёт о замене сервер отдаёт как "
-        "`GET /replace-runs/{replace_run_id}/report`"
-    ),
-}
+#:
+#: Срез-153 убрал отсюда `POST /packs` (страница комплектов и карточка
+#: компании ведут в мастер), срез-154 — старый контракт замены
+#: (`POST /replace/dry-run`, `GET /replace/reports/{id}`): шаг мастера больше
+#: не зовёт снятые ручки. **Реестр пуст — так и должно быть.**
+DEFECTS_IN_QUEUE: dict[str, str] = {}
 
 KNOWN_GAPS: dict[str, str] = {**NOT_A_DEFECT, **DEFECTS_IN_QUEUE}
 

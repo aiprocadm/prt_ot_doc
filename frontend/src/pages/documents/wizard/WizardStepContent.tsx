@@ -53,13 +53,7 @@ export const WizardStepContent = (props: WizardStepContentProps) => {
     );
   }
   if (props.step === 6) {
-    return (
-      <ReplaceStep
-        {...props}
-        onReplaceMapChange={actions.handleReplaceMapFileChange}
-        onDryRun={actions.handleReplaceDryRun}
-      />
-    );
+    return <ReplaceStep />;
   }
   if (props.step === 7) {
     return (

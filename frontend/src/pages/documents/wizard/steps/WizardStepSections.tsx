@@ -14,7 +14,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { ReplaceDiffViewer } from "@/components/wizard/ReplaceDiffViewer";
 import { WizardJobTimeline } from "@/components/wizard/WizardJobTimeline";
 
 import { previewSectionCards } from "../constants";
@@ -346,56 +345,38 @@ export const BrandingStep = ({
   </div>
 );
 
-export const ReplaceStep = memo(
-  ({
-    canCallApi,
-    docxFile,
-    replaceMapFile,
-    replaceDryRunResult,
-    setDocxFile,
-    onReplaceMapChange,
-    onDryRun,
-  }: Pick<
-    SharedProps,
-    | "canCallApi"
-    | "docxFile"
-    | "replaceMapFile"
-    | "replaceDryRunResult"
-    | "setDocxFile"
-  > & {
-    onReplaceMapChange: (event: ChangeEvent<HTMLInputElement>) => void;
-    onDryRun: () => Promise<void>;
-  }) => (
-    <div className="space-y-3">
-      <div className="grid gap-3 md:grid-cols-2">
-        <div className="space-y-2">
-          <Label>DOCX для пробной замены</Label>
-          <Input
-            type="file"
-            accept=".docx"
-            onChange={(event) => setDocxFile(event.target.files?.[0] ?? null)}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label>CSV карта замен (from,to)</Label>
-          <Input type="file" accept=".csv" onChange={onReplaceMapChange} />
-        </div>
-      </div>
-      <Button
-        disabled={!canCallApi || !docxFile || !replaceMapFile}
-        onClick={() => void onDryRun()}
-      >
-        Выполнить dry-run
-      </Button>
-      {replaceDryRunResult ? (
-        <ReplaceDiffViewer
-          items={replaceDryRunResult.preview_samples}
-          summary={replaceDryRunResult.summary}
-        />
-      ) : null}
+/**
+ * Срез-154: шаг пробной замены больше не предлагает действие, которого нет.
+ *
+ * Форма загружала DOCX и CSV-карту и звала `POST /replace/dry-run` — контракт,
+ * снятый вместе со старым движком замены: кнопка «Выполнить dry-run» всегда
+ * кончалась 404 и тостом «Не удалось выполнить dry-run replace». Сегодня
+ * сервер заменяет в УЖЕ СОЗДАННОМ документе платформы по СОХРАНЁННОЙ карте
+ * замен, а произвольный файл с диска в этот контракт не ложится: у него нет
+ * версии документа, и витрины карт замен в продукте нет вовсе.
+ *
+ * Поэтому шаг объясняет положение словами и не обещает работу. Нумерация
+ * шагов сохранена намеренно: у мастера сохраняется текущий шаг, и сдвиг
+ * увёл бы человека не на тот экран.
+ */
+export const ReplaceStep = memo(() => (
+  <div className="space-y-3">
+    <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+      <p className="font-medium text-foreground">
+        Пробная замена пока недоступна
+      </p>
+      <p className="mt-1">
+        Раньше здесь можно было принести свой DOCX и CSV-карту замен. Платформа
+        перешла на замену в уже созданных документах по сохранённой карте, а
+        экрана карт замен пока нет — поэтому шаг ничего не просит и ничего не
+        обещает.
+      </p>
+      <p className="mt-1">
+        Документы собираются дальше: перейдите к шагу «Запуск».
+      </p>
     </div>
-  ),
-);
+  </div>
+));
 
 ReplaceStep.displayName = "ReplaceStep";
 
