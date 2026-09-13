@@ -12,7 +12,9 @@ const { listMock, createMock } = vi.hoisted(() => ({
 const mockIncident = {
   id: "inc-1",
   title: "Падение с высоты",
-  incident_type: "injury",
+  // Срез-150: вид и тяжесть — из словаря сервера (IncidentType/IncidentSeverity);
+  // до среза фикстура повторяла ошибку экрана и писала несуществующий "injury".
+  incident_type: "accident",
   severity: "high",
   status: "open",
   occurred_at: "2024-06-01T10:00:00Z",
@@ -33,6 +35,21 @@ vi.mock("@/api/incidents", () => ({
     closed: "Закрыт",
     cancelled: "Отменён",
   },
+  // Срез-150: словари видов и тяжести — те же значения, что принимает сервер
+  // (их состав стережёт tests/test_incident_inspection_vocab.py).
+  INCIDENT_TYPE_LABELS: {
+    accident: "Несчастный случай",
+    microtrauma: "Микротравма",
+    near_miss: "Опасное событие",
+    unsafe_condition: "Опасное состояние",
+  },
+  INCIDENT_TYPES: ["accident", "microtrauma", "near_miss", "unsafe_condition"],
+  INCIDENT_SEVERITY_LABELS: {
+    low: "Низкая",
+    medium: "Средняя",
+    high: "Высокая",
+  },
+  INCIDENT_SEVERITIES: ["low", "medium", "high"],
   incidentsApi: {
     list: listMock,
     create: createMock,
@@ -97,6 +114,7 @@ vi.mock("@/components/ui/dialog", async () => {
   };
 });
 
+import { INCIDENT_TYPES } from "@/api/incidents";
 import { PERMISSIONS } from "@/permissions/permissions";
 import IncidentsPage from "@/pages/incidents/IncidentsPage";
 import { uxBudgetDelta } from "@/test-utils/uxBudget";
@@ -148,7 +166,7 @@ describe("IncidentsPage", () => {
     await waitFor(() => {
       expect(screen.getByText("Падение с высоты")).toBeInTheDocument();
     });
-    expect(screen.getByText("Травма")).toBeInTheDocument();
+    expect(screen.getByText("Несчастный случай")).toBeInTheDocument();
     expect(listMock).toHaveBeenCalledOnce();
   });
 
@@ -277,6 +295,50 @@ describe("IncidentsPage", () => {
 
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByLabelText(/заголовок/i)).toBeInTheDocument();
+  });
+
+  it("виды и тяжесть — словами и только те, что принимает сервер (срез-150)", async () => {
+    listMock.mockResolvedValue({ items: [], total: 0 });
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <IncidentsPage />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /зарегистрировать инцидент/i }),
+      ).toBeInTheDocument();
+    });
+    await user.click(
+      screen.getByRole("button", { name: /зарегистрировать инцидент/i }),
+    );
+
+    const dialog = screen.getByRole("dialog");
+    // Основной вид записи по охране труда — до среза его не было в списке вовсе.
+    expect(
+      within(dialog).getByRole("option", { name: "Несчастный случай" }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("option", { name: "Опасное состояние" }),
+    ).toBeInTheDocument();
+    // Выдуманных видов больше нет: сервер отвечал на них 422.
+    for (const gone of ["Травма", "Смертельный случай", "Пожар", "Прочее"]) {
+      expect(
+        within(dialog).queryByRole("option", { name: gone }),
+      ).not.toBeInTheDocument();
+    }
+    // Ни одна подпись не показывается латинским кодом.
+    for (const code of INCIDENT_TYPES) {
+      expect(
+        within(dialog).queryByRole("option", { name: code }),
+      ).not.toBeInTheDocument();
+    }
+    // Тяжести «Критическая» у сервера нет.
+    expect(
+      within(dialog).queryByRole("option", { name: "Критическая" }),
+    ).not.toBeInTheDocument();
   });
 
   it("дисциплина показывается словами под событием, неразмеченное — молчит (срез-44)", async () => {

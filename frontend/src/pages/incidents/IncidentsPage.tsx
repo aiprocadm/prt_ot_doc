@@ -4,7 +4,11 @@ import { Link, useSearchParams } from "react-router-dom";
 import {
   incidentsApi,
   type Incident,
+  INCIDENT_SEVERITIES,
+  INCIDENT_SEVERITY_LABELS,
   INCIDENT_STATUS_LABELS,
+  INCIDENT_TYPE_LABELS,
+  INCIDENT_TYPES,
   OPEN_STATUS_FILTER,
   UNMARKED_DISCIPLINE_FILTER,
 } from "@/api/incidents";
@@ -41,31 +45,9 @@ import { formatDate } from "@/utils/datetime";
 import { toast } from "sonner";
 import { useCompaniesStore } from "@/stores/companies";
 
-const INCIDENT_TYPES = [
-  "near_miss",
-  "micro_trauma",
-  "injury",
-  "fatal",
-  "fire",
-  "environmental",
-  "other",
-];
-const SEVERITY_LEVELS = ["low", "medium", "high", "critical"];
-const INCIDENT_TYPE_LABELS: Record<string, string> = {
-  near_miss: "Почти-несчастный случай",
-  micro_trauma: "Микротравма",
-  injury: "Травма",
-  fatal: "Смертельный случай",
-  fire: "Пожар",
-  environmental: "Экологический инцидент",
-  other: "Прочее",
-};
-const SEVERITY_LABELS: Record<string, string> = {
-  low: "Низкая",
-  medium: "Средняя",
-  high: "Высокая",
-  critical: "Критическая",
-};
+// Срез-150: виды и тяжесть — общий словарь сервера (`@/api/incidents`), а не
+// свой список: прежние семь видов сервер отвергал, кроме одного.
+const SEVERITY_LABELS = INCIDENT_SEVERITY_LABELS;
 
 const IncidentsPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -318,7 +300,7 @@ const IncidentsPage = () => {
                       >
                         {INCIDENT_TYPES.map((t) => (
                           <option key={t} value={t}>
-                            {t}
+                            {INCIDENT_TYPE_LABELS[t] ?? t}
                           </option>
                         ))}
                       </select>
@@ -336,7 +318,7 @@ const IncidentsPage = () => {
                           }))
                         }
                       >
-                        {SEVERITY_LEVELS.map((s) => (
+                        {INCIDENT_SEVERITIES.map((s) => (
                           <option key={s} value={s}>
                             {SEVERITY_LABELS[s] ?? s}
                           </option>
