@@ -38,10 +38,11 @@ from app.models.notifications import (
 )
 from app.services.audit import AuditService
 from app.services.celery_app import celery_app
+from app.services.events import EventType
 from app.services.idempotency import cleanup_idempotency_keys
 from app.services.notifications import send_notification
 from app.services.obligations import process_task_reminders
-from app.services.outbox import OutboxProcessor
+from app.services.outbox import OutboxProcessor, OutboxService
 
 # ARCH-4: shared helpers moved to app.tasks._shared; domain ticks to app.tasks.domain_ticks;
 # document-generation tasks to app.tasks.document_jobs.
@@ -640,10 +641,40 @@ async def _process_inbound_webhook(
             object_type="EdoMessage",
             object_id=message.id,
             actor_type="service",
+            # Срез-158. Здесь не хватало обязательного `user_id`, и вызов падал
+            # с TypeError — а значит, ВЕСЬ разбор вебхука оператора ЭДО падал
+            # вместе с ним: статус сообщения не сохранялся никогда. Тестом путь
+            # не был закрыт вовсе, поэтому поломка держалась молча. Действующее
+            # лицо тут не человек, а служба, поэтому `None`.
+            user_id=None,
             ip="system",
             request_id=str(payload.get("correlation_id") or payload.get("event_id") or uuid4()),
             changed_fields=None,
             details={"source": source, "status": message_target.value, "external_id": external_id},
+        )
+
+        # Срез-158. Здесь и только здесь статус в ЭДО меняется по-настоящему, а
+        # события «edo.status_changed» отсюда не уходило НИ РАЗУ: в ленту его
+        # клала задача индексации файла (см. tasks/file_jobs.py) — то есть
+        # правило «когда изменился статус в ЭДО» срабатывало на чужое действие
+        # и молчало на своё. Ключ — сообщение плюс новый статус: повторный
+        # вебхук с тем же статусом сюда не доходит (выше стоит выход по
+        # совпадению), а вот повтор доставки того же перехода обязан
+        # схлопнуться в одну запись.
+        await OutboxService(session).enqueue(
+            tenant_id=tenant_id,
+            event_type=EventType.EDO_STATUS_CHANGED.value,
+            idempotency_key=f"edo-status:{message.id}:{message_target.value}",
+            payload={
+                "tenant_id": tenant_id,
+                "metadata": {
+                    "edo_message_id": message.id,
+                    "external_id": external_id,
+                    "status": message_target.value,
+                    "provider_code": str(payload.get("provider_code") or ""),
+                    "document_version_id": message.document_version_id,
+                },
+            },
         )
         return 1
 

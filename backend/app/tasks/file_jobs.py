@@ -36,9 +36,7 @@ from app.models.models import Tenant
 from app.modules.headers.engine import apply_headers_to_docx
 from app.modules.headers.repo import get_preset_by_code
 from app.services.celery_app import celery_app
-from app.services.events import EventType
 from app.services.file_storage import FileStorageService
-from app.services.outbox import OutboxService
 from app.tasks._shared import DOCX_MIME, RETRYABLE_EXCEPTIONS, _run_coroutine
 
 logger = logging.getLogger(__name__)
@@ -321,20 +319,14 @@ def index_file_content_job(
                 if file_id:
                     await index_file_record(session, tenant_id=tenant_id, file_id=file_id)
                 await session.flush()
-                outbox = OutboxService(session)
-                await outbox.enqueue(
-                    tenant_id=tenant_id,
-                    event_type=EventType.EDO_STATUS_CHANGED.value,
-                    payload={
-                        "tenant_id": tenant_id,
-                        "occurred_at": datetime.now(timezone.utc),
-                        "metadata": {
-                            "event": "FileIndexed",
-                            "version_id": version_id,
-                            "file_id": file_id,
-                        },
-                    },
-                )
+                # Срез-158. Отсюда уходило событие «edo.status_changed» с
+                # пометкой «FileIndexed» — обратный адрес был чужой. В ЭДО
+                # ничего не происходило: индексация просто раскладывает
+                # содержимое файла для поиска. Правило «когда изменился статус
+                # в ЭДО» срабатывало на это и молчало на настоящую смену
+                # статуса — её теперь публикует обработчик вебхука оператора
+                # (``app/tasks/_core.py``). Своего события у индексации нет и
+                # не заводим: подписчиков у неё не было.
                 return {"status": "ok", "version_id": version_id or "", "file_id": file_id or ""}
 
     try:
