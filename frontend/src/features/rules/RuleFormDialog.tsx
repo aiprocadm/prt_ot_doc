@@ -26,6 +26,7 @@ import type {
   AutomationRuleCreate,
   AutomationRuleRead,
   EventTypeMeta,
+  RecipientRoleOption,
   RuleAction,
   RuleActionType,
   RuleCondition,
@@ -61,14 +62,6 @@ const TASK_PRIORITY_OPTIONS: Array<[string, string]> = [
   ["medium", "Средний"],
   ["high", "Высокий"],
   ["critical", "Критический"],
-];
-
-const ROLE_OPTIONS: Array<[string, string]> = [
-  ["admin", "Администратор"],
-  ["owner", "Владелец"],
-  ["ot_specialist", "Специалист по ОТ"],
-  ["line_manager", "Линейный руководитель"],
-  ["hr", "HR"],
 ];
 
 /** Поле события, по которому доступен получатель «работник из события». */
@@ -152,7 +145,33 @@ export const RuleFormDialog = ({
   const [match, setMatch] = useState<"all" | "any">("all");
   const [conditions, setConditions] = useState<ConditionRow[]>([]);
   const [actions, setActions] = useState<ActionRow[]>([]);
+  // Срез-148: роли-получатели — единый словарь сервера, а не список в коде
+  // формы: правила библиотеки адресованы экологу и инженеру ПБ, которых
+  // прежний список из пяти ролей не показывал и не давал выбрать.
+  const [recipientRoles, setRecipientRoles] = useState<RecipientRoleOption[]>(
+    [],
+  );
   const isEdit = Boolean(initialData);
+
+  useEffect(() => {
+    if (!open) return;
+    void rulesApi
+      .recipientRoles()
+      .then((page) => setRecipientRoles(page.items))
+      .catch(() => setRecipientRoles([]));
+  }, [open]);
+
+  /**
+   * Роли для галочек: словарь сервера плюс роли, уже записанные в правиле,
+   * но не пришедшие в словаре (псевдоним, снятая роль, словарь не загрузился)
+   * — такие показываются кодом и не теряются молча при сохранении.
+   */
+  const roleOptionsFor = (selected: string[]): RecipientRoleOption[] => [
+    ...recipientRoles,
+    ...selected
+      .filter((code) => !recipientRoles.some((role) => role.code === code))
+      .map((code) => ({ code, label: code })),
+  ];
 
   useEffect(() => {
     if (!open) return;
@@ -744,27 +763,36 @@ export const RuleFormDialog = ({
                     {row.recipient_mode === "role" ? (
                       <div className="space-y-1 md:col-span-2">
                         <Label>Роли</Label>
+                        {recipientRoles.length === 0 &&
+                        row.roles.length === 0 ? (
+                          <p className="text-xs text-muted-foreground">
+                            Список ролей не загрузился — закройте и откройте
+                            форму ещё раз.
+                          </p>
+                        ) : null}
                         <div className="flex flex-wrap gap-3">
-                          {ROLE_OPTIONS.map(([value, label]) => (
-                            <label
-                              key={value}
-                              className="flex items-center gap-1 text-sm"
-                            >
-                              <input
-                                type="checkbox"
-                                aria-label={label}
-                                checked={row.roles.includes(value)}
-                                onChange={(e) =>
-                                  setAction(idx, {
-                                    roles: e.target.checked
-                                      ? [...row.roles, value]
-                                      : row.roles.filter((r) => r !== value),
-                                  })
-                                }
-                              />
-                              {label}
-                            </label>
-                          ))}
+                          {roleOptionsFor(row.roles).map(
+                            ({ code: value, label }) => (
+                              <label
+                                key={value}
+                                className="flex items-center gap-1 text-sm"
+                              >
+                                <input
+                                  type="checkbox"
+                                  aria-label={label}
+                                  checked={row.roles.includes(value)}
+                                  onChange={(e) =>
+                                    setAction(idx, {
+                                      roles: e.target.checked
+                                        ? [...row.roles, value]
+                                        : row.roles.filter((r) => r !== value),
+                                    })
+                                  }
+                                />
+                                {label}
+                              </label>
+                            ),
+                          )}
                         </div>
                       </div>
                     ) : null}

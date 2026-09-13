@@ -8,6 +8,7 @@ import type {
   DryRunIn,
   DryRunOut,
   EventTypePage,
+  RecipientRolePage,
   RuleLibraryInstallOut,
   RuleLibraryPage,
   RuleTestOut,
@@ -26,6 +27,15 @@ export const isFeatureDisabledError = (error: unknown): boolean => {
 export const rulesApi = {
   async eventTypes(): Promise<EventTypePage> {
     return (await apiClient.get<EventTypePage>(`${BASE}/event-types`)).data;
+  },
+  /**
+   * Роли-получатели уведомлений словами — единый словарь сервера (срез-148).
+   * Раньше форма держала свой список из пяти ролей и не показывала получателей
+   * библиотечных правил (эколог, инженер ПБ).
+   */
+  async recipientRoles(): Promise<RecipientRolePage> {
+    return (await apiClient.get<RecipientRolePage>(`${BASE}/recipient-roles`))
+      .data;
   },
   /** Библиотека предустановленных правил по дисциплинам (BIZ-54-57 срез-4). */
   async library(): Promise<RuleLibraryPage> {

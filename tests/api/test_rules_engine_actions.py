@@ -713,3 +713,20 @@ def test_recipient_mode_titles_match_rules_screen() -> None:
     assert block is not None, "RECIPIENT_MODE_LABELS не найден на экране правил"
     frontend = dict(re.findall(r'(\w+): "([^"]+)"', block.group(1)))
     assert frontend == RECIPIENT_MODE_TITLES
+
+
+def test_известные_роли_исполнителя_совпадают_со_словарём_ролей_ядра() -> None:
+    """Сторож (срез-148): исполнитель и словарь подписей знают одни и те же роли.
+
+    Форма берёт роли из ``/rules/recipient-roles`` (``role_options``). Разойдись
+    наборы — форма предложила бы роль, которую исполнитель отвергнет 422, или
+    исполнитель принимал бы роль без человеческой подписи.
+    """
+    from app.core.role_labels import ROLE_ALIASES, ROLE_CODES, role_options
+    from app.modules.rules_engine.actions import _KNOWN_ROLES
+
+    assert _KNOWN_ROLES == ROLE_CODES
+    offered = {item["code"] for item in role_options()}
+    assert offered == _KNOWN_ROLES - set(ROLE_ALIASES)
+    # Подписи есть у всех предлагаемых ролей и ни одна не равна коду.
+    assert all(item["label"] and item["label"] != item["code"] for item in role_options())
