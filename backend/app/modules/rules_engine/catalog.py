@@ -12,11 +12,20 @@ from app.services.events import _PAYLOADS, EventType
 # rule.triggered исключён (guard от каскада); Signed/Exported — legacy-алиасы
 # webhook-фильтров: enqueue всегда персистит канонические DocumentSigned/DocumentExported,
 # правило на алиас никогда бы не сработало.
+#
+# Срез-158: `edo.sent` («документ отправлен в ЭДО») исключён по той же причине,
+# но с другим корнем. Отправки в ЭДО в продукте пока нет вовсе: все три пути
+# отправки (`POST /edo/send`, подписание и оркестрация согласования) заканчиваются
+# ответом «провайдер ЭДО не настроен». Значит, событие не может родиться, а
+# конструктор предлагал его наравне с рабочими: человек собирал правило, оно
+# никогда не срабатывало, и понять почему было нельзя. Когда появится настоящий
+# оператор ЭДО — строку отсюда убрать, и правило заработает без других правок.
 EXCLUDED_EVENT_TYPES = frozenset(
     {
         EventType.RULE_TRIGGERED.value,
         EventType.SIGNED.value,
         EventType.EXPORTED.value,
+        EventType.EDO_SENT.value,
     }
 )
 
