@@ -1,12 +1,13 @@
 import { useEffect } from "react";
+import { Link } from "react-router-dom";
 
 import { ListStateGuard } from "@/components/common/ListStateGuard";
 import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ROUTES } from "@/router/routes";
 import { PackTable } from "@/features/packs/PackTable";
-import { PackWizard } from "@/features/packs/PackWizard";
 import { usePacksStore } from "@/stores/packs";
 
 const PacksPage = () => {
@@ -32,7 +33,24 @@ const PacksPage = () => {
           { label: "На странице", value: items.length },
         ]}
       />
-      <PackWizard />
+      {/* Срез-153: встроенный мастер слал запрос на `POST /packs` — ручки,
+          которой у сервера нет вовсе, и предлагал собственные пресеты, не
+          совпадающие ни с одним комплектом продукта: кнопка «Запустить»
+          всегда кончалась 404. Комплект собирается мастером на отдельной
+          странице — он берёт сценарии с сервера и шлёт их в `/packs/run`. */}
+      <Card>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 py-6">
+          <div>
+            <div className="font-medium">Собрать комплект документов</div>
+            <p className="text-sm text-muted-foreground">
+              Мастер спросит сценарий, клиента и только недостающие данные.
+            </p>
+          </div>
+          <Button asChild>
+            <Link to="/packs/wizard">Открыть мастер</Link>
+          </Button>
+        </CardContent>
+      </Card>
       <Card>
         <CardContent className="py-6">
           <ListStateGuard

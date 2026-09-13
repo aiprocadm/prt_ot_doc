@@ -4,11 +4,7 @@ import { apiClient } from "@/api/client";
 import { defaultPagination } from "@/stores/helpers";
 import type { PaginatedState } from "@/stores/types";
 import type { ApiError, PaginatedResponse } from "@/types/dto/common";
-import type {
-  PackDto,
-  PackGenerationPayload,
-  PackPreset,
-} from "@/types/dto/packs";
+import type { PackDto, PackPreset } from "@/types/dto/packs";
 
 interface PackFilters {
   search?: string;
@@ -16,10 +12,12 @@ interface PackFilters {
   status?: PackDto["status"];
 }
 
+// Срез-153: из хранилища убраны `create` и `getById` — они звали
+// `POST /packs` и `GET /packs/{id}`, которых у сервера нет. Комплект
+// собирает мастер (`/packs/wizard` → `POST /packs/run`), карточка одного
+// комплекта отдельной ручки не имеет.
 interface PacksState extends PaginatedState<PackDto, PackFilters> {
   list: (params?: Partial<PackFilters>) => Promise<void>;
-  getById: (id: string) => Promise<PackDto | null>;
-  create: (payload: PackGenerationPayload) => Promise<PackDto>;
   setFilters: (filters: Partial<PackFilters>) => void;
   setPage: (page: number) => void;
   setPageSize: (size: number) => void;
@@ -125,28 +123,6 @@ export const usePacksStore = create<PacksState>()(
           state.loading = false;
         });
       }
-    },
-    getById: async (id) => {
-      try {
-        const { data } = await apiClient.get<PackDto>(`/packs/${id}`);
-        set((state) => {
-          state.item = data;
-        });
-        return data;
-      } catch (error) {
-        set((state) => {
-          state.error = error as ApiError;
-        });
-        return null;
-      }
-    },
-    create: async (payload) => {
-      const { data } = await apiClient.post<PackDto>("/packs", payload);
-      set((state) => {
-        state.items.unshift(data);
-        state.pagination.total += 1;
-      });
-      return data;
     },
   })),
 );
