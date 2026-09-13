@@ -64,6 +64,17 @@ type ReadinessResponse = {
 const formatDateTime = (value?: string | null) =>
   value ? new Date(value).toLocaleString() : "—";
 
+/**
+ * Срез-161: статус доставки сервер отдаёт ПРОПИСНЫМИ (`PENDING`, `FAILED`,
+ * `DEAD` — перечисление `OutboxStatus`), а экран сравнивал со строчными. Ни
+ * один фильтр не совпадал: таблица пустела при любом выборе, счётчики «сбои»
+ * и «доставлено» показывали ноль, кнопка «Повторить» не появлялась никогда.
+ * Статус событий (`OutboxEventStatus`) наоборот строчный — поэтому приводим к
+ * одному виду здесь, а не правим сравнения по одному. Состав значений держит
+ * сторож tests/test_integrations_delivery_statuses.py.
+ */
+const deliveryStatus = (value?: string | null) => (value ?? "").toLowerCase();
+
 const IntegrationsPage = () => {
   const loadIntegrations = useCallback(async () => {
     const [outboxResponse, eventResponse, readinessResponse] =
@@ -92,23 +103,15 @@ const IntegrationsPage = () => {
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("all");
 
-  const filteredDeliveries = useMemo(
-    () =>
-      statusFilter === "all"
-        ? data.deliveries
-        : data.deliveries.filter((item) => item.status === statusFilter),
-    [data.deliveries, statusFilter],
-  );
-
   const summary = useMemo(() => {
-    const failedDeliveries = data.deliveries.filter(
-      (item) => item.status === "failed" || item.status === "dead",
+    const failedDeliveries = data.deliveries.filter((item) =>
+      ["failed", "dead"].includes(deliveryStatus(item.status)),
     ).length;
     const failedEvents = data.events.filter(
       (item) => item.status === "failed" || item.status === "poisoned",
     ).length;
     const sent = data.deliveries.filter(
-      (item) => item.status === "sent",
+      (item) => deliveryStatus(item.status) === "sent",
     ).length;
     return {
       deliveries: data.deliveries.length,
@@ -117,6 +120,16 @@ const IntegrationsPage = () => {
       sent,
     };
   }, [data.deliveries, data.events]);
+
+  const filteredDeliveries = useMemo(
+    () =>
+      statusFilter === "all"
+        ? data.deliveries
+        : data.deliveries.filter(
+            (item) => deliveryStatus(item.status) === statusFilter,
+          ),
+    [data.deliveries, statusFilter],
+  );
 
   const retryDelivery = async (id: string) => {
     setRetryingId(id);
@@ -271,9 +284,10 @@ const IntegrationsPage = () => {
             >
               <option value="all">Все статусы</option>
               <option value="pending">ожидание</option>
+              <option value="in_progress">в работе</option>
+              <option value="sent">отправлено</option>
               <option value="failed">сбой</option>
               <option value="dead">окончательный сбой</option>
-              <option value="sent">отправлено</option>
             </select>
           </div>
           <Button
@@ -324,7 +338,9 @@ const IntegrationsPage = () => {
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
-                    {item.status === "failed" || item.status === "dead" ? (
+                    {["failed", "dead"].includes(
+                      deliveryStatus(item.status),
+                    ) ? (
                       <Can permission={PERMISSIONS.ADMIN_OUTBOX_MANAGE}>
                         <Button
                           size="sm"
