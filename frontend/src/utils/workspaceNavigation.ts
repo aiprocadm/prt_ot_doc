@@ -36,8 +36,11 @@ export const entityContextPath = (entityType: string | null | undefined) => {
       return "/training";
     case "ppe_issue":
       return "/ppe";
+    // Срез-156: было `/contracts` — маршрута с таким путём нет, и человек с
+    // дашборда молча уезжал на посадочную страницу по catch-all. Договоры
+    // живут на экране финансов («реальные договоры, заказы, счета»).
     case "contract":
-      return "/contracts";
+      return "/crm-finance";
     case "template_version":
     case "document":
     case "document_version":
@@ -74,9 +77,13 @@ export const entityCardLink = (
       });
       return `/documents?${params.toString()}`;
     }
+    // Срез-156: `contract` убран из этой ветки. Она открывает карточку на
+    // экране ПОДРЯДЧИКОВ, а договор — сущность финансов; экран подрядчиков
+    // параметров `entity_type`/`entity_id` не читает вовсе, то есть карточка
+    // договора там не открылась бы. Ссылки «карточка» для договора нет, а
+    // переход в контекст (`entityContextPath`) ведёт на экран финансов.
     case "company":
-    case "site":
-    case "contract": {
+    case "site": {
       const params = new URLSearchParams({
         entity_type: entityType,
         entity_id: entityId,
@@ -102,7 +109,10 @@ const BLOCKER_LINKS: Record<string, string> = {
   templates_not_ready: "/templates",
   training_overdue: "/tasks?type=training_plan&overdue=true",
   ppe_expired: "/ppe",
-  contracts_expired: "/contracts",
+  // Срез-156: тот же несуществующий `/contracts`, что и выше. Блокер
+  // «истекли договоры» вёл человека на посадочную страницу вместо
+  // экрана, где договоры видны.
+  contracts_expired: "/crm-finance",
 };
 
 /** Подпись ссылки «куда исправлять» — понятнее общего «Открыть рабочий экран». */
