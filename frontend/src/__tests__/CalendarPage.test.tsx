@@ -379,6 +379,43 @@ describe("CalendarPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("требование по НПА: подпись источника и переход в реестр (срез-149)", async () => {
+    getEventsMock.mockResolvedValueOnce({
+      generated_at: "2026-03-05T00:00:00Z",
+      total: 1,
+      overdue_count: 1,
+      by_source: [
+        { source_type: "compliance_requirement", count: 1, overdue_count: 1 },
+      ],
+      items: [
+        {
+          id: "compliance_requirement:req-1",
+          source_type: "compliance_requirement",
+          source_id: "req-1",
+          title: "Требование ОТ-01: Обучение руководителей",
+          starts_at: "2026-03-01T00:00:00Z",
+          ends_at: null,
+          status: "overdue",
+          is_overdue: true,
+          person_id: null,
+          site_id: null,
+          company_id: null,
+          assigned_user_id: null,
+          extra: { code: "ОТ-01", severity: "critical" },
+        },
+      ],
+    } as CalendarEventsResponseDto);
+
+    renderPage();
+
+    // Источник назван словами, а не кодом: в фильтрах и в счётчике.
+    expect(await screen.findAllByText("Требования по НПА")).not.toHaveLength(0);
+    const link = await screen.findByRole("link", {
+      name: "Требование ОТ-01: Обучение руководителей",
+    });
+    expect(link).toHaveAttribute("href", "/npa/requirements?focus=req-1");
+  });
+
   it("applies person_id filter when Apply is clicked", async () => {
     const user = userEvent.setup();
     getEventsMock.mockResolvedValueOnce(sampleResponse);

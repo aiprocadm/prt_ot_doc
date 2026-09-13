@@ -47,6 +47,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.disciplines import BRIEFING_TYPE_TITLES
 from app.models.civil_defense import CivilDefenseDrill
+from app.models.compliance_requirements import ComplianceRequirement
 from app.models.ecology import (
     REPORTING_KINDS,
     EcologyReportingDeadline,
@@ -153,6 +154,11 @@ ALL_SOURCES: tuple[str, ...] = (
     # ``overdue_drills`` и ``overdue_documents``, календарь их не знал.
     "fire_safety_drill",
     "fire_safety_document",
+    # B.18 разд. 19.2 (срез-149): контрольная дата требования реестра. Сроки
+    # завёл срез-145, но видны они были только на своём экране и в Центре
+    # внимания (горизонт 3 дня) — в общем календаре, где планируют месяц
+    # вперёд, обязанностей по НПА не было вовсе.
+    "compliance_requirement",
 )
 
 #: Сроки документов ТС: колонка → (код вида, подпись). Порядок — порядок
@@ -224,6 +230,9 @@ _SLA_THRESHOLDS: dict[str, tuple[int, int]] = {
     "fire_safety_drill": (7, 30),
     # пересмотр инструкции или плана эвакуации — недели работы, не день
     "fire_safety_document": (14, 30),
+    # требование по НПА: исполнить и собрать доказательство — не день работы,
+    # полоса как у пересмотра документов, а не как у поимённых сроков
+    "compliance_requirement": (14, 30),
 }
 
 
@@ -451,6 +460,22 @@ class CalendarAggregatorService:
             by_source.append(
                 CalendarSourceCount(
                     source_type="fire_safety_document", count=total, overdue_count=overdue
+                )
+            )
+
+        if "compliance_requirement" in sources:
+            collected, total, overdue = await self._build_compliance_requirements(
+                from_at=from_at,
+                to_at=to_at,
+                site_id=site_id,
+                now=now,
+                include_fact=include_fact,
+                include_sla=include_sla,
+            )
+            items.extend(collected)
+            by_source.append(
+                CalendarSourceCount(
+                    source_type="compliance_requirement", count=total, overdue_count=overdue
                 )
             )
 
@@ -2035,6 +2060,123 @@ class CalendarAggregatorService:
         )
         total = await self._count(base)
         overdue = await self._count(base.where(FireSafetyDocument.review_due < today))
+        return items, total, overdue
+
+    async def _build_compliance_requirements(
+        self,
+        *,
+        from_at: datetime | None,
+        to_at: datetime | None,
+        site_id: str | None,
+        now: datetime,
+        include_fact: bool = False,
+        include_sla: bool = False,
+    ) -> tuple[list[CalendarEventItem], int, int]:
+        """Контрольная дата требования реестра (B.18 разд. 19.2, срез-149).
+
+        Правила «что такое срок требования» взяты из самого реестра
+        (``domains/npa/requirements.py``), а не написаны здесь заново:
+
+        * срок есть только у требования **на контроле** — исполненное разовое
+          (``fulfilled``) и снятое с контроля (``retired``) сроков не имеют, и
+          в календаре их быть не должно (то же правило, что у ``is_overdue``);
+        * требование без контрольной даты в календарь не попадает: события без
+          даты не бывает, а выдумывать её — враньё (правило бессрочного
+          документа ПБ, срез-80);
+        * подтверждение исполнения двигает ``next_due_at`` само — «факта»
+          отдельно от плана у требования нет, поэтому ``expected_at`` равен
+          дате, а ``actual_at`` пуст.
+
+        Фильтр по человеку здесь не применяется намеренно: ответственный за
+        требование — пользователь системы (``owner_user_id``), а ``person_id``
+        календаря — карточка сотрудника; это разные сущности, и подменять одну
+        другой значило бы выдать чужое. Поэтому источника нет в
+        ``PERSON_SCOPED_SOURCES``.
+        """
+
+        today = now.date()
+        stmt = (
+            select(ComplianceRequirement)
+            .where(
+                # Мягкого удаления у требования нет: снятое с контроля остаётся
+                # в реестре (``retired``) вместе с доказательствами, и из
+                # календаря его убирает условие по статусу, а не ``deleted_at``.
+                ComplianceRequirement.tenant_id == self.tenant_id,
+                ComplianceRequirement.status == "active",
+                ComplianceRequirement.next_due_at.is_not(None),
+            )
+            .order_by(ComplianceRequirement.next_due_at.asc())
+            .limit(self._limit)
+        )
+        if site_id:
+            stmt = stmt.where(ComplianceRequirement.site_id == site_id)
+        if from_at is not None:
+            stmt = stmt.where(ComplianceRequirement.next_due_at >= from_at.date())
+        if to_at is not None:
+            stmt = stmt.where(ComplianceRequirement.next_due_at <= to_at.date())
+
+        items: list[CalendarEventItem] = []
+        for requirement in (await self.db.execute(stmt)).scalars().all():
+            due = requirement.next_due_at
+            anchor = _coerce_dt(due)
+            if anchor is None or due is None:
+                continue
+            is_overdue = due < today
+            days_to_due = _days_to_due(anchor, now) if include_sla else None
+            items.append(
+                CalendarEventItem(
+                    id=f"compliance_requirement:{requirement.id}",
+                    source_type="compliance_requirement",
+                    source_id=str(requirement.id),
+                    title=f"Требование {requirement.code}: {requirement.title}",
+                    starts_at=anchor,
+                    ends_at=None,
+                    status="overdue" if is_overdue else "valid",
+                    is_overdue=is_overdue,
+                    expected_at=anchor if include_fact else None,
+                    actual_at=None,
+                    variance_days=None,
+                    days_to_due=days_to_due,
+                    sla_band=(
+                        _sla_band(
+                            "compliance_requirement",
+                            days_to_due=days_to_due,
+                            is_overdue=is_overdue,
+                        )
+                        if include_sla
+                        else None
+                    ),
+                    site_id=str(requirement.site_id) if requirement.site_id else None,
+                    extra={
+                        "code": requirement.code,
+                        "severity": requirement.severity,
+                        "npa_id": requirement.npa_id,
+                        "role_code": requirement.role_code,
+                        "process_code": requirement.process_code,
+                        "owner_user_id": requirement.owner_user_id,
+                        "periodicity_days": requirement.periodicity_days,
+                        "last_confirmed_at": (
+                            requirement.last_confirmed_at.isoformat()
+                            if requirement.last_confirmed_at
+                            else None
+                        ),
+                        "next_due_at": due.isoformat(),
+                    },
+                )
+            )
+
+        base = self._apply_window(
+            self._scoped_count(ComplianceRequirement, site_id=site_id).where(
+                ComplianceRequirement.status == "active",
+                ComplianceRequirement.next_due_at.is_not(None),
+            ),
+            ComplianceRequirement.next_due_at,
+            from_at,
+            to_at,
+            as_date=True,
+        )
+        total = await self._count(base)
+        overdue = await self._count(base.where(ComplianceRequirement.next_due_at < today))
         return items, total, overdue
 
     async def _build_ppe(
