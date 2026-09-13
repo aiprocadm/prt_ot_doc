@@ -66,9 +66,15 @@ const PERMIT_STATUS_LABELS: Record<string, string> = {
   revoked: "Отозван",
 };
 
+// Срез-160: не хватало «Списано» и «Заменено» — карточка показывала их
+// техническим кодом (`written_off`, `replaced`). Оба статуса живые: списание
+// идёт ручкой снятия СИЗ, замена — при истечении срока носки. Состав словаря
+// сверяется с перечислением сервера (tests/test_ppe_issue_status_vocab.py).
 const PPE_ISSUE_STATUS_LABELS: Record<string, string> = {
   issued: "Выдано",
   returned: "Возвращено",
+  written_off: "Списано",
+  replaced: "Заменено",
   lost: "Утрачено",
 };
 
