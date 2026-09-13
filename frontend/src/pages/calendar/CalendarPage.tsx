@@ -78,6 +78,8 @@ const SOURCE_LABELS: Record<CalendarSourceType, string> = {
   // Срез-80.
   fire_safety_drill: "ПБ: тренировки",
   fire_safety_document: "ПБ: документы",
+  // Срез-149: обязанность по НПА со сроком исполнения (B.18 разд. 19.2).
+  compliance_requirement: "Требования по НПА",
 };
 
 const DRILL_DOWN: Partial<Record<CalendarSourceType, string>> = {
@@ -100,6 +102,7 @@ const DRILL_DOWN: Partial<Record<CalendarSourceType, string>> = {
   fire_safety_equipment: "/fire-safety",
   fire_safety_drill: "/fire-safety",
   fire_safety_document: "/fire-safety",
+  compliance_requirement: "/npa/requirements",
 };
 
 const SLA_BAND_LABELS: Record<CalendarSlaBand, string> = {
