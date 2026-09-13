@@ -2,13 +2,10 @@ import { type ColumnDef } from "@tanstack/react-table";
 import { useMemo } from "react";
 
 import { DataTable } from "@/components/common/DataTable";
-import { ActionButton } from "@/components/permissions/ActionButton";
-import { PERMISSIONS } from "@/permissions/permissions";
 import { useCompaniesStore } from "@/stores/companies";
 import { useRiskStore } from "@/stores/risk";
 import type { RiskAssessmentDto } from "@/types/dto/risk";
 import { formatDate } from "@/utils/datetime";
-import { downloadBlob } from "@/utils/download";
 
 const RISK_STATUS_LABELS: Record<RiskAssessmentDto["status"], string> = {
   draft: "Черновик",
@@ -23,8 +20,10 @@ const resolveRiskLevel = (score: number) => {
 };
 
 export const RiskAssessmentsTable = () => {
-  const { assessments, listAssessments, exportAssessment, loading } =
-    useRiskStore();
+  // Срез-152: колонка «Экспорт» снята — ручки выгрузки расчёта
+  // (`GET /risk/assessments/{id}/export`) в контракте сервера нет вовсе,
+  // и кнопка всегда кончалась 404. Возврат — вместе с ручкой выгрузки.
+  const { assessments, listAssessments, loading } = useRiskStore();
   const companies = useCompaniesStore((state) => state.items);
 
   const columns = useMemo<ColumnDef<RiskAssessmentDto>[]>(
@@ -58,30 +57,8 @@ export const RiskAssessmentsTable = () => {
         header: "Обновлено",
         cell: ({ row }) => formatDate(row.original.updated_at),
       },
-      {
-        id: "export",
-        header: "Экспорт",
-        cell: ({ row }) => (
-          <ActionButton
-            permission={PERMISSIONS.RISK_EXPORT}
-            abilityResource={{
-              status: row.original.status,
-              company_id: row.original.company_id,
-            }}
-            variant="ghost"
-            size="sm"
-            disabledReason="Экспорт доступен после утверждения расчёта"
-            onClick={async () => {
-              const blob = await exportAssessment(row.original.id);
-              downloadBlob(blob, `risk-${row.original.id}.pdf`);
-            }}
-          >
-            Скачать
-          </ActionButton>
-        ),
-      },
     ],
-    [companies, exportAssessment],
+    [companies],
   );
 
   return (

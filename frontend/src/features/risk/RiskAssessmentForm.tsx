@@ -42,7 +42,6 @@ export const RiskAssessmentForm = () => {
       hazard_id: hazardId,
       probability: 1,
       severity: 1,
-      mitigations: "",
     });
   };
 
@@ -168,14 +167,6 @@ export const RiskAssessmentForm = () => {
                     form.watch(`hazards.${index}.probability`),
                     form.watch(`hazards.${index}.severity`),
                   )}
-                </div>
-                <div className="md:col-span-4">
-                  <Label htmlFor={`mitigations-${index}`}>Мероприятия</Label>
-                  <Input
-                    id={`mitigations-${index}`}
-                    disabled={!canAssess}
-                    {...form.register(`hazards.${index}.mitigations`)}
-                  />
                 </div>
                 <div className="md:col-span-4">
                   <Button
