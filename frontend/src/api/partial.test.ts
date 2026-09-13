@@ -94,4 +94,31 @@ describe("частичная загрузка сводных экранов", ()
     expect(snapshot.denied).toContain("проверки");
     expect(snapshot.inspections).toEqual([]);
   });
+
+  it("пожарная безопасность: закрытые площадки не гасят экран (срез-169)", async () => {
+    const { operationsApi } = await import("@/api/operations");
+    getMock.mockImplementation((url: string) => {
+      if (url === "/sites") return Promise.reject(forbidden);
+      return Promise.resolve(page([]));
+    });
+
+    const snapshot = await operationsApi.getFireSafetySnapshot();
+
+    expect(snapshot.denied).toContain("площадки");
+  });
+
+  it("настройки: закрытые ключи доступа не гасят экран (срез-169)", async () => {
+    const { operationsApi } = await import("@/api/operations");
+    getMock.mockImplementation((url: string) => {
+      if (url === "/api-tokens") return Promise.reject(forbidden);
+      if (url === "/tenancy/context")
+        return Promise.resolve({ data: { tenant: { id: "t", slug: "t" } } });
+      return Promise.resolve({ data: {} });
+    });
+
+    const snapshot = await operationsApi.getSettingsSnapshot();
+
+    expect(snapshot.denied).toEqual(["ключи доступа к API"]);
+    expect(snapshot.apiTokens).toEqual([]);
+  });
 });

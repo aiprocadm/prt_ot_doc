@@ -13,6 +13,7 @@ const SettingsPage = () => {
   const { data, loading, error, reload } = useAsyncResource({
     loader: useCallback(() => operationsApi.getSettingsSnapshot(), []),
     initialData: {
+      denied: [],
       tenancy: { tenant: { id: "", slug: "" } },
       notifications: {},
       apiTokens: [],
