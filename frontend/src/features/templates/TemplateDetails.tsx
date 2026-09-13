@@ -90,8 +90,10 @@ export const TemplateDetails = ({ template }: { template: TemplateDto }) => {
           {template.status && (
             <Badge variant="outline">{template.status}</Badge>
           )}
-          {template.scope?.type && (
-            <Badge variant="outline">scope: {template.scope.type}</Badge>
+          {(template.scope?.level ?? template.scope?.type) && (
+            <Badge variant="outline">
+              scope: {template.scope?.level ?? template.scope?.type}
+            </Badge>
           )}
           {template.tags?.map((tag) => (
             <Badge key={tag}>{tag}</Badge>
