@@ -575,7 +575,10 @@ export const ArchiveStep = ({
         <Link to="/archive">Перейти в архив</Link>
       </Button>
       <Button asChild variant="outline">
-        <Link to="/approvals">Открыть согласование / подпись</Link>
+        {/* Срез-155: было `/approvals` — такого маршрута нет (объявлены
+            только `/approvals/inbox` и `/approvals/outbox`), и человек
+            молча уезжал на посадочную страницу по catch-all. */}
+        <Link to="/approvals/inbox">Открыть согласование / подпись</Link>
       </Button>
     </div>
   </div>
