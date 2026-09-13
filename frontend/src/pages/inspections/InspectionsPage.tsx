@@ -5,6 +5,10 @@ import {
   inspectionsApi,
   type Inspection,
   type InspectionResult,
+  INSPECTION_STATUS_LABELS,
+  INSPECTION_STATUSES,
+  INSPECTION_TYPE_LABELS,
+  INSPECTION_TYPES,
 } from "@/api/inspections";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
@@ -42,30 +46,16 @@ import { useCompaniesStore } from "@/stores/companies";
 import { entityCardLink } from "@/utils/workspaceNavigation";
 import { emitSyncTelemetry, resolveSyncState } from "@/pwa/sync";
 
-const INSPECTION_TYPES = [
-  "planned",
-  "unplanned",
-  "documentary",
-  "on_site",
-  "counter",
-];
-const INSPECTION_TYPE_LABELS: Record<string, string> = {
-  planned: "Плановая",
-  unplanned: "Внеплановая",
-  documentary: "Документарная",
-  on_site: "Выездная",
-  counter: "Встречная",
-};
-const INSPECTION_STATUS_LABELS: Record<string, string> = {
-  planned: "Запланирована",
-  in_progress: "В работе",
-  completed: "Завершена",
-};
+// Срез-150: виды и статусы — общий словарь сервера (`@/api/inspections`).
+// Прежний список видов не пересекался с серверным ни одним значением, а
+// «Отменена» не знал вовсе — отменённая проверка показывалась кодом и не
+// отбиралась фильтром.
 const INSPECTION_STATUS_OPTIONS = [
   { value: "", label: "Все статусы" },
-  { value: "planned", label: "Запланирована" },
-  { value: "in_progress", label: "В работе" },
-  { value: "completed", label: "Завершена" },
+  ...INSPECTION_STATUSES.map((value) => ({
+    value,
+    label: INSPECTION_STATUS_LABELS[value] ?? value,
+  })),
 ];
 
 const InspectionsPage = () => {
@@ -93,7 +83,7 @@ const InspectionsPage = () => {
   const [form, setForm] = useState({
     company_id: "",
     site_id: "",
-    inspection_type: "planned",
+    inspection_type: "internal",
     authority: "",
     purpose: "",
     scheduled_at: new Date().toISOString().slice(0, 10),
@@ -179,7 +169,7 @@ const InspectionsPage = () => {
       setForm({
         company_id: "",
         site_id: "",
-        inspection_type: "planned",
+        inspection_type: "internal",
         authority: "",
         purpose: "",
         scheduled_at: new Date().toISOString().slice(0, 10),
@@ -327,7 +317,7 @@ const InspectionsPage = () => {
                       >
                         {INSPECTION_TYPES.map((t) => (
                           <option key={t} value={t}>
-                            {t}
+                            {INSPECTION_TYPE_LABELS[t] ?? t}
                           </option>
                         ))}
                       </select>

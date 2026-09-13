@@ -23,6 +23,38 @@ export const INCIDENT_STATUS_LABELS: Record<string, string> = {
   cancelled: "Отменён",
 };
 
+/**
+ * Виды происшествия — ровно те, что принимает сервер (`IncidentType` в
+ * `backend/app/models/incidents.py`), и в том же порядке (срез-150).
+ *
+ * До среза экран происшествий держал собственный список из семи значений
+ * («Травма», «Смертельный случай», «Пожар», «Экологический инцидент»…), из
+ * которых сервер принимал ровно одно: остальные приводили к 422, а
+ * «Несчастный случай» — основной вид записи — завести было нельзя вовсе.
+ * Словарь один на все экраны (реестр происшествий, карточка сотрудника), и
+ * его состав сверяет сторож `tests/test_incident_inspection_vocab.py`.
+ */
+export const INCIDENT_TYPE_LABELS: Record<string, string> = {
+  accident: "Несчастный случай",
+  microtrauma: "Микротравма",
+  near_miss: "Опасное событие",
+  unsafe_condition: "Опасное состояние",
+};
+
+export const INCIDENT_TYPES: readonly string[] =
+  Object.keys(INCIDENT_TYPE_LABELS);
+
+/** Тяжесть происшествия — словарь сервера (`IncidentSeverity`); `critical` у него нет. */
+export const INCIDENT_SEVERITY_LABELS: Record<string, string> = {
+  low: "Низкая",
+  medium: "Средняя",
+  high: "Высокая",
+};
+
+export const INCIDENT_SEVERITIES: readonly string[] = Object.keys(
+  INCIDENT_SEVERITY_LABELS,
+);
+
 export type Incident = {
   id: string;
   title: string;
