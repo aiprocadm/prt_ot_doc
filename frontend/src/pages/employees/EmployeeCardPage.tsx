@@ -3,6 +3,10 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { employeesApi } from "@/api/employees";
+import {
+  INCIDENT_SEVERITY_LABELS,
+  INCIDENT_TYPE_LABELS,
+} from "@/api/incidents";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { Badge } from "@/components/ui/badge";
@@ -68,18 +72,8 @@ const PPE_ISSUE_STATUS_LABELS: Record<string, string> = {
   lost: "Утрачено",
 };
 
-const INCIDENT_TYPE_LABELS: Record<string, string> = {
-  accident: "Несчастный случай",
-  microtrauma: "Микротравма",
-  near_miss: "Опасное событие",
-  unsafe_condition: "Опасное состояние",
-};
-
-const INCIDENT_SEVERITY_LABELS: Record<string, string> = {
-  low: "Низкая",
-  medium: "Средняя",
-  high: "Высокая",
-};
+// Срез-150: словарь видов происшествия один на продукт («@/api/incidents»);
+// копия здесь и список на экране происшествий успели разойтись.
 
 const INCIDENT_STATUS_LABELS: Record<string, string> = {
   reported: "Зарегистрирован",

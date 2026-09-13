@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,7 +10,8 @@ const { listMock, createMock } = vi.hoisted(() => ({
 
 const mockInspection = {
   id: "insp-1",
-  inspection_type: "planned",
+  // Срез-150: вид проверки — из словаря сервера (InspectionType).
+  inspection_type: "internal",
   authority: "Роструд",
   status: "planned",
   company_id: "c-1",
@@ -22,6 +23,20 @@ const mockInspection = {
 };
 
 vi.mock("@/api/inspections", () => ({
+  // Срез-150: виды и статусы — те же значения, что принимает сервер
+  // (их состав стережёт tests/test_incident_inspection_vocab.py).
+  INSPECTION_TYPE_LABELS: {
+    internal: "Внутренняя",
+    external: "Внешняя (надзорная)",
+  },
+  INSPECTION_TYPES: ["internal", "external"],
+  INSPECTION_STATUS_LABELS: {
+    planned: "Запланирована",
+    in_progress: "В работе",
+    completed: "Завершена",
+    cancelled: "Отменена",
+  },
+  INSPECTION_STATUSES: ["planned", "in_progress", "completed", "cancelled"],
   inspectionsApi: {
     list: listMock,
     create: createMock,
@@ -77,7 +92,7 @@ describe("InspectionsPage", () => {
     await waitFor(() => {
       expect(screen.getByText("Роструд")).toBeInTheDocument();
     });
-    expect(screen.getByText("Плановая")).toBeInTheDocument();
+    expect(screen.getByText("Внутренняя")).toBeInTheDocument();
     expect(screen.getAllByText("Запланирована").length).toBeGreaterThan(0);
     expect(listMock).toHaveBeenCalledOnce();
   });
@@ -133,6 +148,60 @@ describe("InspectionsPage", () => {
 
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByLabelText(/орган/i)).toBeInTheDocument();
+  });
+
+  it("виды проверки — словами и только те, что принимает сервер (срез-150)", async () => {
+    listMock.mockResolvedValue({ items: [], total: 0 });
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <InspectionsPage />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /создать проверку/i }),
+      ).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole("button", { name: /создать проверку/i }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(
+      within(dialog).getByRole("option", { name: "Внутренняя" }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("option", { name: "Внешняя (надзорная)" }),
+    ).toBeInTheDocument();
+    // Прежние пять видов сервер не принимал ни одного — их больше нет.
+    for (const gone of [
+      "Плановая",
+      "Внеплановая",
+      "Документарная",
+      "Выездная",
+      "Встречная",
+      "internal",
+      "external",
+    ]) {
+      expect(
+        within(dialog).queryByRole("option", { name: gone }),
+      ).not.toBeInTheDocument();
+    }
+  });
+
+  it("фильтр статусов знает отменённую проверку (срез-150)", async () => {
+    listMock.mockResolvedValue({ items: [], total: 0 });
+
+    render(
+      <MemoryRouter>
+        <InspectionsPage />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(listMock).toHaveBeenCalled());
+
+    expect(
+      screen.getByRole("option", { name: "Отменена" }),
+    ).toBeInTheDocument();
   });
 
   it("shows disabled create action without create permission", async () => {
