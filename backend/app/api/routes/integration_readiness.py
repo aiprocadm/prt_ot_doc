@@ -58,7 +58,9 @@ async def _provider_health(provider_name: str) -> dict[str, Any]:
 
 @router.get("")
 async def get_integration_readiness(
-    _: AccessContext = Depends(rbac(["admin", "owner", "integrations"])),
+    # Срез-151: код `integrations` в ``RoleEnum`` отсутствует — убран как
+    # мёртвый; фактические права (admin/owner) не изменились.
+    _: AccessContext = Depends(rbac(["admin", "owner"])),
     tenant: Tenant = Depends(get_tenant_record),
     session: AsyncSession = Depends(get_session),
 ):

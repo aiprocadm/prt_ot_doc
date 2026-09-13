@@ -61,7 +61,9 @@ _WEBHOOK_DELIVERY_ALREADY_SUCCEEDED = api_problem_detail(
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
-AdminAccess = Annotated[AccessContext, Depends(rbac(["admin", "owner", "integrations"]))]
+# Срез-151: код `integrations` в ``RoleEnum`` отсутствует — убран как мёртвый;
+# фактические права (admin/owner) не изменились.
+AdminAccess = Annotated[AccessContext, Depends(rbac(["admin", "owner"]))]
 
 
 class WebhookEndpointIn(BaseModel):
