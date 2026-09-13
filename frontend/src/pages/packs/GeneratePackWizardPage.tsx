@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { packsApi } from "@/api/packs";
+import { packsApi, type PackRunPreview } from "@/api/packs";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
@@ -58,6 +58,7 @@ const GeneratePackWizardPage = () => {
   const [rowsCount, setRowsCount] = useState<number | null>(null);
   const [idempotencyKey, setIdempotencyKey] = useState(initialIdempotencyKey);
   const [dryRun, setDryRun] = useState(false);
+  const [preview, setPreview] = useState<PackRunPreview | null>(null);
   const [running, setRunning] = useState(false);
   const [packRunId, setPackRunId] = useState<string | null>(null);
   const [runError, setRunError] = useState<ApiError | null>(null);
@@ -136,14 +137,29 @@ const GeneratePackWizardPage = () => {
     setRunning(true);
     setRunError(null);
     try {
+      // Срез-164: раньше обе ветки звали обычный запуск и отличались только
+      // подписью — «Dry-run» писал документы точно так же, как реальный
+      // прогон. Проверка без записи — отдельная ручка сервера.
+      if (dryRun) {
+        const result = await packsApi.previewRun(selectedPresetId, rows);
+        setPreview(result);
+        setPackRunId(null);
+        toast.success(
+          result.ready
+            ? "Проверка прошла: всё готово к генерации"
+            : "Проверка нашла, что мешает генерации",
+        );
+        setStep(5);
+        return;
+      }
       const response = await packsApi.createRun(
         selectedPresetId,
         rows,
-        dryRun,
         idempotencyKey,
       );
+      setPreview(null);
       setPackRunId(response.pack_run_id);
-      toast.success(dryRun ? "Dry-run запущен" : "Пакет поставлен в очередь");
+      toast.success("Пакет поставлен в очередь");
       setStep(5);
     } catch (err) {
       setRunError(
@@ -321,7 +337,7 @@ const GeneratePackWizardPage = () => {
                 onChange={(e) => setDryRun(e.target.checked)}
               />
               <Label htmlFor="dry-run" className="cursor-pointer">
-                Dry-run (предварительная проверка без записи результатов)
+                Только проверить, ничего не записывать
               </Label>
             </div>
             <div className="flex gap-2">
@@ -364,7 +380,7 @@ const GeneratePackWizardPage = () => {
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Режим</span>
                 <span className="font-medium">
-                  {dryRun ? "Dry-run (проверка)" : "Реальный запуск"}
+                  {dryRun ? "Только проверка" : "Реальный запуск"}
                 </span>
               </div>
               <div className="flex justify-between">
@@ -392,9 +408,9 @@ const GeneratePackWizardPage = () => {
                 onClick={() => void runPack()}
               >
                 {running
-                  ? "Запуск…"
+                  ? "Выполняем…"
                   : dryRun
-                    ? "Запустить Dry-run"
+                    ? "Проверить"
                     : "Запустить генерацию"}
               </Button>
             </div>
@@ -409,14 +425,50 @@ const GeneratePackWizardPage = () => {
             <CardTitle>Готово</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center gap-3 text-green-600">
+            <div
+              className={
+                preview && !preview.ready
+                  ? "flex items-center gap-3 text-amber-600"
+                  : "flex items-center gap-3 text-green-600"
+              }
+            >
               <CheckCircle className="h-6 w-6" />
               <span className="font-medium">
-                {dryRun
-                  ? "Dry-run запущен."
+                {preview
+                  ? preview.ready
+                    ? "Проверка прошла. Ничего не записано."
+                    : "Проверка нашла помехи. Ничего не записано."
                   : "Пакет поставлен в очередь генерации."}
               </span>
             </div>
+            {preview && (
+              <div className="space-y-2 rounded-md border p-3 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Строк выбрано</span>
+                  <span className="font-medium">{preview.rows_selected}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Строк без помех</span>
+                  <span className="font-medium">{preview.rows_ready}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">
+                    Документов получится
+                  </span>
+                  <span className="font-medium">{preview.documents_total}</span>
+                </div>
+                {preview.problems.length > 0 && (
+                  <ul className="list-disc space-y-1 pl-5">
+                    {preview.problems.map((problem) => (
+                      <li key={`${problem.code}-${problem.message}`}>
+                        {problem.blocking ? "Мешает: " : "Обратите внимание: "}
+                        {problem.message}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
             {packRunId && (
               <p className="text-sm text-muted-foreground">
                 ID запуска: <span className="font-mono">{packRunId}</span>
@@ -454,6 +506,7 @@ const GeneratePackWizardPage = () => {
                   setRowsCount(null);
                   setRowsError(null);
                   setPackRunId(null);
+                  setPreview(null);
                   setRunError(null);
                   setDryRun(false);
                   setInitialIdempotencyKey(nextIdempotencyKey);
