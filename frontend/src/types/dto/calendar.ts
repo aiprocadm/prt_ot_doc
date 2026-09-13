@@ -34,7 +34,9 @@ export type CalendarSourceType =
   | "fire_safety_equipment"
   // Срез-80: тренировки по ПБ и пересмотр документов ПБ.
   | "fire_safety_drill"
-  | "fire_safety_document";
+  | "fire_safety_document"
+  // Срез-149 (B.18 разд. 19.2): контрольная дата требования реестра.
+  | "compliance_requirement";
 
 export const CALENDAR_SOURCE_TYPES: readonly CalendarSourceType[] = [
   "medical_exam",
@@ -58,6 +60,7 @@ export const CALENDAR_SOURCE_TYPES: readonly CalendarSourceType[] = [
   "fire_safety_equipment",
   "fire_safety_drill",
   "fire_safety_document",
+  "compliance_requirement",
 ] as const;
 
 export type CalendarSlaBand = "overdue" | "critical" | "warning" | "ok";
