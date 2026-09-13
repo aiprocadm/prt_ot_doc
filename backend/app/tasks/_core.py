@@ -318,6 +318,55 @@ async def _active_tenant_slugs() -> list[str]:
 
 
 @celery_app.task(
+    name="workflow.sweep.tick",
+    autoretry_for=RETRYABLE_EXCEPTIONS,
+    retry_backoff=settings.celery.retry_backoff_seconds,
+    retry_backoff_max=settings.celery.retry_backoff_max_seconds,
+    retry_jitter=True,
+    retry_kwargs={"max_retries": settings.celery.task_max_retries},
+)
+def workflow_sweep_tick() -> dict[str, int]:
+    """Срез-170: обход просроченных задач и созревших таймеров по всем арендаторам.
+
+    ЧТО БЫЛО. Обе работы написаны давно и покрыты тестами: ``workflow.sla.tick``
+    помечает просроченные задачи согласования и пишет событие эскалации,
+    ``workflow.timers.tick`` исполняет созревшие таймеры процесса. Обе принимают
+    арендатора параметром — и поэтому НИ ОДНА не стояла в расписании: расписание
+    здесь умеет только задачи без аргументов. Вызовов из кода тоже нет. То есть
+    механизм существовал, а запускать его было некому: сроки согласований не
+    эскалировались никогда, таймеры не срабатывали никогда.
+
+    КАК СДЕЛАНО. Точно так же, как веерный слив ленты рядом: задача без
+    аргументов сама обходит активных арендаторов. Сбой у одного не должен
+    лишать обхода остальных, поэтому каждый арендатор изолирован — ошибка
+    записывается в журнал и считается, а цикл продолжается.
+    """
+
+    async def _run() -> dict[str, int]:
+        from app.modules.workflow.service import WorkflowService
+
+        totals = {"tenants": 0, "sla": 0, "timers": 0, "failed_tenants": 0}
+        for slug in await _active_tenant_slugs():
+            totals["tenants"] += 1
+            try:
+                with tenant_context(slug):
+                    ensure_tenant_schema(slug)
+                    async with session_scope(tenant=slug) as session:
+                        tenant_id, _scope = await _resolve_task_tenant_scope(session, slug)
+                        service = WorkflowService(session, tenant_id)
+                        totals["sla"] += await service.sweep_task_sla()
+                        totals["timers"] += await service.run_due_timers()
+                        await session.commit()
+            except Exception:
+                totals["failed_tenants"] += 1
+                logger.exception("workflow.sweep.tenant_failed", extra={"tenant": slug})
+        logger.info("workflow.sweep.done", extra=totals)
+        return totals
+
+    return _run_coroutine(_run())
+
+
+@celery_app.task(
     name="outbox.dispatch_all",
     autoretry_for=RETRYABLE_EXCEPTIONS,
     retry_backoff=settings.celery.retry_backoff_seconds,
