@@ -6596,6 +6596,60 @@
         "INTEGER"
       ]
     ],
+    "import_profiles": [
+      [
+        "code",
+        "VARCHAR(64)"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "description",
+        "TEXT"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "mapping",
+        "JSON"
+      ],
+      [
+        "signature",
+        "JSON"
+      ],
+      [
+        "splits",
+        "JSON"
+      ],
+      [
+        "target",
+        "VARCHAR(64)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "title",
+        "VARCHAR(255)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
     "import_row": [
       [
         "action",

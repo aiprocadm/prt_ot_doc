@@ -432,3 +432,53 @@ class ResellerPrice(SharedModel, SoftDeleteMixin):
             "valid_from",
         ),
     )
+
+
+class SavedImportProfile(SharedModel, SoftDeleteMixin):
+    """Профиль сопоставления колонок, заведённый САМИМ арендатором (OPS-71, срез-192).
+
+    ЧТО БЫЛО. Профили источников лежали константами в коде, и остаток строки
+    звучал так: «профили конкурентов (нужны образцы их выгрузок — вопрос
+    владельцу)». То есть поддержка каждого нового формата упиралась в две вещи
+    сразу: достать чужой файл и написать под него код.
+
+    РЕШЕНИЕ. Образцы конкурентов НЕ НУЖНЫ. У клиента, который переезжает, уже
+    есть его собственная выгрузка. Он один раз сопоставляет колонки руками — и
+    сохраняет это сопоставление профилем. В следующий раз файл той же формы
+    опознаётся сам.
+
+    Так система учится у того, у кого файл действительно есть, а не ждёт, пока
+    кто-то раздобудет образец.
+
+    ТАБЛИЦА ОБЩАЯ, СТРОКА — АРЕНДАТОРА: формат выгрузки это его знание о своей
+    прошлой системе, и делиться им между арендаторами нельзя (в заголовках
+    встречаются названия подразделений и фамилии).
+    """
+
+    __tablename__ = "import_profiles"
+
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenant.id"), nullable=False, index=True
+    )
+    code: Mapped[str] = mapped_column(String(64), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    #: Код цели импорта (люди, площадки, нормы СИЗ…).
+    target: Mapped[str] = mapped_column(String(64), nullable=False)
+    #: «поле модели -> заголовок в файле источника».
+    mapping: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
+    #: Разбор составных колонок: «ФИО» -> фамилия/имя/отчество.
+    splits: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
+    #: Заголовки-подписи: по ним файл опознаётся. Требуются ВСЕ.
+    signature: Mapped[list[str]] = mapped_column(
+        MutableList.as_mutable(JSON), nullable=False, default=list
+    )
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "code", name="uq_import_profiles_tenant_code"),
+        Index("ix_import_profiles_tenant_target", "tenant_id", "target"),
+    )

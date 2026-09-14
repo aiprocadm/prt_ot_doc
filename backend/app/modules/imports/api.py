@@ -37,7 +37,9 @@ from app.core.errors import api_problem_detail
 from app.core.feature_flags import is_module_enabled
 from app.core.security import AccessContext, abac
 from app.models.imports import ImportBatch
+from app.models.tenant_billing import SavedImportProfile
 from app.models.tenanting import Tenant
+from app.modules.imports import saved_profiles
 from app.modules.imports.parsers import (
     MAX_IMPORT_ROWS,
     SUPPORTED_EXTENSIONS,
@@ -836,3 +838,145 @@ async def rollback_batch(
         raise _problem(status.HTTP_409_CONFLICT, exc.code.upper(), str(exc)) from exc
     await session.commit()
     return _batch_out(batch)
+
+
+# ---------------------------------------------------------------------------
+# OPS-71 разд. 71.2 (срез-192): профиль, который арендатор заводит из СВОЕГО файла.
+# ---------------------------------------------------------------------------
+#
+# Остаток строки требовал «профили конкурентов» и упирался в образцы их выгрузок.
+# Образцы не нужны: у клиента, который переезжает, его выгрузка уже есть. Он
+# один раз сопоставляет колонки руками и сохраняет сопоставление профилем.
+
+
+class SavedProfileIn(BaseModel):
+    code: str = Field(min_length=1, max_length=64)
+    title: str = Field(min_length=1, max_length=255)
+    target: str = Field(min_length=1, max_length=64)
+    #: «поле модели -> заголовок в файле источника».
+    mapping: dict[str, str]
+    #: «составная колонка -> части»: ФИО -> [фамилия, имя, отчество].
+    splits: dict[str, list[str]] = Field(default_factory=dict)
+    description: str = ""
+
+
+class DetectProfileIn(BaseModel):
+    target: str = Field(min_length=1, max_length=64)
+    headers: list[str] = Field(default_factory=list)
+
+
+def _saved_out(profile) -> ImportProfileOut:
+    return ImportProfileOut(
+        code=profile.code,
+        title=profile.title,
+        target=profile.target,
+        source=profile.source,
+        description=profile.description,
+        mapping=dict(profile.mapping),
+        split_columns=[split.source for split in profile.splits],
+    )
+
+
+@router.post("/profiles", response_model=ImportProfileOut, status_code=201)
+@audit_operation("import.profile_save", "import_profile")
+async def save_import_profile(
+    payload: SavedProfileIn,
+    session: SessionDep,
+    tenant: TenantDep,
+    _access: ImportAccess,
+) -> ImportProfileOut:
+    """Сохранить своё сопоставление колонок как профиль.
+
+    Подпись файла (по каким заголовкам его узнавать) считается САМА из
+    сопоставленных заголовков: просить человека выбрать её вручную значит
+    задать вопрос, на который он не знает ответа.
+    """
+
+    await _require_enabled(session, tenant)
+    draft = saved_profiles.ProfileDraft(
+        code=payload.code,
+        title=payload.title,
+        target=payload.target,
+        mapping=payload.mapping,
+        splits=payload.splits,
+        description=payload.description,
+    )
+    try:
+        saved_profiles.validate_draft(draft, known_targets={t.code for t in list_targets()})
+    except saved_profiles.SavedProfileError as exc:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=api_problem_detail(
+                code="IMPORT_PROFILE_INVALID", message=str(exc), error_type="import"
+            ),
+        ) from exc
+
+    existing = (
+        await session.execute(
+            select(SavedImportProfile).where(
+                SavedImportProfile.tenant_id == str(tenant.id),
+                SavedImportProfile.code == draft.code,
+            )
+        )
+    ).scalar_one_or_none()
+
+    signature = saved_profiles.build_signature(draft.mapping)
+    if existing is not None:
+        # Повторное сохранение того же кода — правка, а не вторая строка:
+        # два профиля с одним кодом сделали бы опознание неопределённым.
+        existing.title = draft.title
+        existing.target = draft.target
+        existing.mapping = dict(draft.mapping)
+        existing.splits = dict(draft.splits)
+        existing.signature = signature
+        existing.description = draft.description or None
+        await session.flush()
+        return _saved_out(saved_profiles.to_import_profile(existing))
+
+    row = SavedImportProfile(
+        tenant_id=str(tenant.id),
+        code=draft.code,
+        title=draft.title,
+        target=draft.target,
+        mapping=dict(draft.mapping),
+        splits=dict(draft.splits),
+        signature=signature,
+        description=draft.description or None,
+    )
+    session.add(row)
+    await session.flush()
+    return _saved_out(saved_profiles.to_import_profile(row))
+
+
+@router.post("/profiles/detect", response_model=ImportProfileOut | None)
+async def detect_import_profile(
+    payload: DetectProfileIn,
+    session: SessionDep,
+    tenant: TenantDep,
+    _access: ImportAccess,
+) -> ImportProfileOut | None:
+    """Опознать файл по его заголовкам.
+
+    Свои профили сильнее встроенных: арендатор знает свою прошлую систему
+    лучше, чем догадка платформы.
+    """
+
+    await _require_enabled(session, tenant)
+    rows = (
+        (
+            await session.execute(
+                select(SavedImportProfile).where(
+                    SavedImportProfile.tenant_id == str(tenant.id),
+                    SavedImportProfile.target == payload.target,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    merged = saved_profiles.merge_profiles(
+        list_profiles(payload.target),
+        [saved_profiles.to_import_profile(row) for row in rows],
+    )
+    found = saved_profiles.detect(merged, payload.headers)
+    return _saved_out(found) if found else None
