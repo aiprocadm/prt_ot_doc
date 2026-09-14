@@ -4638,6 +4638,7 @@
       "site_id": "null|string",
       "site_name": "null|string",
       "process_code": "null|string",
+      "process_label": "null|string",
       "owner_user_id": "null|string",
       "owner_name": "null|string",
       "periodicity_days": "integer|null",
@@ -4665,7 +4666,8 @@
     "ComplianceRequirementOptions": {
       "owners": "array",
       "sites": "array",
-      "roles": "array"
+      "roles": "array",
+      "processes": "array"
     },
     "ComplianceRequirementRead": {
       "id": "string",
@@ -4682,6 +4684,7 @@
       "site_id": "null|string",
       "site_name": "null|string",
       "process_code": "null|string",
+      "process_label": "null|string",
       "owner_user_id": "null|string",
       "owner_name": "null|string",
       "periodicity_days": "integer|null",

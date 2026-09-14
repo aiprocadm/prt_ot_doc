@@ -32,6 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
+from app.core.disciplines import PROCESS_CODES, process_label, process_options
 from app.core.role_labels import ROLE_CODES, role_label, role_options
 from app.core.security import AccessContext, abac, rbac
 from app.core.tenant_validation import TenantContextValidator
@@ -132,6 +133,7 @@ def _read(
         "site_id": row.site_id,
         "site_name": site.get("name"),
         "process_code": row.process_code,
+        "process_label": process_label(row.process_code),
         "owner_user_id": row.owner_user_id,
         "owner_name": owner.get("name"),
         "periodicity_days": row.periodicity_days,
@@ -160,6 +162,15 @@ async def _validate_links(session: AsyncSession, tenant_id: str, payload: dict[s
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             f"Роли «{role_code}» нет в системе — выберите роль из справочника",
+        )
+    # Срез-196: процесс — тоже закрытый словарь. Пока он был свободной строкой,
+    # «обучение», «Обучение» и «обучение по ОТ» были тремя разными процессами,
+    # и сроки требований не попадали ни в один дисциплинарный отчёт.
+    process_code = payload.get("process_code")
+    if process_code and process_code not in PROCESS_CODES:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            f"Процесса «{process_code}» нет в справочнике — выберите из списка",
         )
     npa_id = payload.get("npa_id")
     if npa_id and await session.get(NpaAct, npa_id) is None:
@@ -330,7 +341,8 @@ async def requirement_options(
     ``/admin/users`` и ``/sites`` — административные (управление доступом и
     объектами) и отвечают специалисту по ОТ 403: без своей ручки поле
     «Ответственный» у него было пустым, а площадку нельзя было выбрать вовсе
-    (ограничение среза-145). Отдаётся ровно то, что нужно для выбора: имя и
+    (ограничение среза-145). Срез-196 добавил сюда ПРОЦЕССЫ: до него это была
+    свободная строка с подсказкой-жаргоном, и выбрать было не из чего. Отдаётся ровно то, что нужно для выбора: имя и
     роль пользователя, имя площадки с компанией, роли словами — без почты,
     атрибутов и прав. Объявлена раньше ``/{requirement_id}``: иначе слово
     «options» читалось бы как идентификатор требования.
@@ -342,6 +354,7 @@ async def requirement_options(
         owners=await service.owner_options(),
         sites=await service.site_options(),
         roles=role_options(),
+        processes=process_options(),
     )
 
 

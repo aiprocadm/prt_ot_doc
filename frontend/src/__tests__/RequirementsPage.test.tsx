@@ -161,6 +161,12 @@ const formOptions: ComplianceRequirementOptionsDto = {
     { code: "line_manager", label: "Линейный руководитель" },
     { code: "worker", label: "Рабочий / сотрудник" },
   ],
+  // Срез-196: процесс выбирается из словаря дисциплин, а не впечатывается.
+  processes: [
+    { code: "training", label: "Обучение" },
+    { code: "fire_safety", label: "Пожарная безопасность" },
+    { code: "occupational_safety", label: "Общая охрана труда" },
+  ],
 };
 
 describe("RequirementsPage", () => {
@@ -346,6 +352,14 @@ describe("RequirementsPage", () => {
       screen.getByLabelText("Роль"),
       screen.getByRole("option", { name: "Рабочий / сотрудник" }),
     );
+    // Срез-196: процесс ВЫБИРАЕТСЯ из словаря дисциплин. До среза это было
+    // поле для ввода с подсказкой-жаргоном, и «обучение» с «Обучение» были
+    // разными процессами — сроки требований не попадали ни в один
+    // дисциплинарный отчёт.
+    await user.selectOptions(
+      screen.getByLabelText("Процесс"),
+      screen.getByRole("option", { name: "Обучение" }),
+    );
 
     await act(async () => {
       await user.click(screen.getByRole("button", { name: "Добавить" }));
@@ -364,7 +378,7 @@ describe("RequirementsPage", () => {
         description: null,
         role_code: "worker",
         site_id: "site-2",
-        process_code: null,
+        process_code: "training",
         owner_user_id: "u-2",
       },
     );

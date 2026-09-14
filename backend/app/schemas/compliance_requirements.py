@@ -90,6 +90,10 @@ class ComplianceRequirementRead(BaseModel):
     #: Имя площадки (срез-147): без него привязка к объекту на витрине невидима.
     site_name: str | None = None
     process_code: str | None = None
+    #: Подпись процесса словами (срез-196). Неизвестный код возвращается как
+    #: есть: у требований до среза в поле лежит свободный текст, и стереть его
+    #: значило бы потерять единственное, что человек про процесс написал.
+    process_label: str | None = None
     owner_user_id: str | None = None
     owner_name: str | None = None
     periodicity_days: int | None = None
@@ -159,3 +163,6 @@ class ComplianceRequirementOptions(BaseModel):
     owners: list[RequirementOwnerOption] = Field(default_factory=list)
     sites: list[RequirementSiteOption] = Field(default_factory=list)
     roles: list[RequirementRoleOption] = Field(default_factory=list)
+    #: Процессы (срез-196): дисциплины ТЗ + общая охрана труда. До среза это
+    #: была свободная строка с подсказкой-жаргоном, и выбрать было не из чего.
+    processes: list[RequirementRoleOption] = Field(default_factory=list)

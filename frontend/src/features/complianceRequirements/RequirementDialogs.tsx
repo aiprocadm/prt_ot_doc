@@ -57,6 +57,7 @@ const EMPTY_OPTIONS: ComplianceRequirementOptionsDto = {
   owners: [],
   sites: [],
   roles: [],
+  processes: [],
 };
 
 const orNull = (value: string): string | null => {
@@ -150,6 +151,10 @@ export const RequirementFormDialog = ({
     siteId && !options.sites.some((site) => site.id === siteId);
   const roleMissing =
     roleCode && !options.roles.some((role) => role.code === roleCode);
+  // Срез-196: до него процесс был свободной строкой. У требований, заведённых
+  // раньше, в поле лежит текст — показываем его, а не стираем молча.
+  const processMissing =
+    processCode && !options.processes.some((item) => item.code === processCode);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -386,12 +391,24 @@ export const RequirementFormDialog = ({
               </div>
               <div className="space-y-2">
                 <Label htmlFor="requirement-process">Процесс</Label>
-                <Input
+                <select
                   id="requirement-process"
+                  className={selectClassName}
                   value={processCode}
                   onChange={(event) => setProcessCode(event.target.value)}
-                  placeholder="обучение, СОУТ, медосмотры…"
-                />
+                >
+                  <option value="">— не указан —</option>
+                  {processMissing ? (
+                    <option value={processCode}>
+                      {initialData?.process_label ?? processCode} (нет в списке)
+                    </option>
+                  ) : null}
+                  {options.processes.map((item) => (
+                    <option key={item.code} value={item.code}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="space-y-2 md:col-span-2">
                 <Label htmlFor="requirement-description">Описание</Label>
