@@ -1,3 +1,4 @@
+import { statusLabel } from "@/components/common/StatusBadge";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -88,7 +89,7 @@ export const TemplateDetails = ({ template }: { template: TemplateDto }) => {
             <Badge variant="secondary">{template.category}</Badge>
           )}
           {template.status && (
-            <Badge variant="outline">{template.status}</Badge>
+            <Badge variant="outline">{statusLabel(template.status)}</Badge>
           )}
           {(template.scope?.level ?? template.scope?.type) && (
             <Badge variant="outline">
@@ -124,7 +125,8 @@ export const TemplateDetails = ({ template }: { template: TemplateDto }) => {
                   <div>
                     <div className="font-medium">Версия {version.version}</div>
                     <div className="text-xs text-muted-foreground">
-                      {formatDate(version.created_at)} • {version.status}
+                      {formatDate(version.created_at)} •{" "}
+                      {statusLabel(version.status)}
                     </div>
                     {version.document_type && (
                       <div className="text-xs text-muted-foreground">
@@ -182,7 +184,7 @@ export const TemplateDetails = ({ template }: { template: TemplateDto }) => {
               </option>
               {(template.versions ?? []).map((version) => (
                 <option key={version.id} value={version.id}>
-                  Версия {version.version} · {version.status}
+                  Версия {version.version} · {statusLabel(version.status)}
                 </option>
               ))}
             </select>

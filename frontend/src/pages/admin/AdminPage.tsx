@@ -1,3 +1,4 @@
+import { priorityLabel, statusLabel } from "@/components/common/StatusBadge";
 import { useCallback } from "react";
 import { Link } from "react-router-dom";
 
@@ -156,7 +157,8 @@ const AdminPage = () => {
             <CardContent className="space-y-2 text-sm">
               {data.outbox.slice(0, 5).map((item) => (
                 <p key={item.id}>
-                  {item.event_type} · {item.status} · попыток {item.attempts}
+                  {item.event_type} · {statusLabel(item.status)} · попыток{" "}
+                  {item.attempts}
                 </p>
               ))}
             </CardContent>
@@ -266,7 +268,7 @@ const AdminPage = () => {
                   <p>Просрочено: {data.taskInbox.overdue}</p>
                   {data.taskInbox.items.slice(0, 3).map((item) => (
                     <p key={item.id}>
-                      {item.title} · {item.priority} ·{" "}
+                      {item.title} · {priorityLabel(item.priority)} ·{" "}
                       {item.overdue ? "просрочено" : "открыта"}
                     </p>
                   ))}
