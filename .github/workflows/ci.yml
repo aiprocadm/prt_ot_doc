@@ -166,6 +166,16 @@ jobs:
       - name: Validate security exception registry
         run: python scripts/ci/check_security_exceptions.py --exceptions-file .github/security-exceptions.yml
 
+      # SEC-69 разд. 69.3 (срез-183): «седьмой вопрос» стал гейтом. Спрашивает
+      # только там, где изменения трогают поверхности атаки; на PR без них молчит.
+      - name: Security DoD (седьмой вопрос)
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          PYTHONPATH=backend python scripts/ci/check_security_dod.py --base "origin/${{ github.base_ref }}"
+
   lint-and-static:
     runs-on: ubuntu-latest
     steps:

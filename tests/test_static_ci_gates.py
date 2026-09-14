@@ -96,6 +96,9 @@ def test_список_гейтов_не_отстал_от_папки() -> None:
         "check_openapi_snapshot",  # закрыт своим тестом
         "check_rls_runtime_role",
         "check_scoped_coverage",
+        # Спрашивает описание PR (PR_BODY) — вне PR спрашивать нечего.
+        # Закрыт своим тестом: tests/test_security_dod_gate.py (срез-183).
+        "check_security_dod",
     }
 
     unclaimed = sorted(present - set(GATES) - NEEDS_ENVIRONMENT)
