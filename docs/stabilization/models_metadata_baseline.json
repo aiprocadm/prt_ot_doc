@@ -2502,6 +2502,10 @@
         "DATETIME"
       ],
       [
+        "otp_phone",
+        "VARCHAR(32)"
+      ],
+      [
         "package_run_id",
         "VARCHAR"
       ],

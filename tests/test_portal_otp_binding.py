@@ -54,7 +54,9 @@ def sent_letters(monkeypatch):
         return SimpleNamespace(delivered=True, reason="Код отправлен")
 
     monkeypatch.setattr(routes, "send_otp_code", _fake_send)
-    monkeypatch.setattr(routes, "mail_channel_ready", lambda: True)
+    # Срез-186: готовность спрашивается у ОБЩЕГО шва доставки — каналов стало
+    # два, и проверка «настроена ли почта» переехала за выбор канала.
+    monkeypatch.setattr(routes.otp_delivery, "channel_ready", lambda channel: True)
     return letters
 
 

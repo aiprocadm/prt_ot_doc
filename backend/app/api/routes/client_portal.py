@@ -40,8 +40,10 @@ from app.models.models import (
 )
 from app.modules.packs.definitions import PACK_DEFINITIONS_BY_CODE
 from app.modules.packs.operations import resolve_pipeline_profile
+from app.services import portal_otp_delivery as otp_delivery
+from app.services import sms_gateway
 from app.services.file_storage import FileStorageService
-from app.services.portal_otp_mail import mail_channel_ready, send_otp_code
+from app.services.portal_otp_delivery import send_otp_code
 
 router = APIRouter(prefix="/portal", tags=["client-portal"])
 internal_router = APIRouter(prefix="/packages", tags=["packages"])
@@ -722,23 +724,58 @@ async def create_portal_link(
             ),
         ),
     ] = None,
+    otp_phone: Annotated[
+        str | None,
+        Query(
+            max_length=32,
+            description=(
+                "Привязать ссылку к получателю по SMS: войти можно будет только с кодом, "
+                "пришедшим на этот номер. Указывается вместо адреса, не вместе с ним"
+            ),
+        ),
+    ] = None,
     _: AccessContext = StaffWriteAccess,
 ):
     run = await _get_run_for_tenant(session, run_id=run_id, tenant_id=str(tenant.id))
-    recipient = (otp_email or "").strip()
+    email_recipient = (otp_email or "").strip()
+    phone_recipient = (otp_phone or "").strip()
+
+    # Срез-186: два канала, но получатель ОДИН. Указать оба значило бы задать
+    # противоречие — на какой из них слать код, ответа нет.
+    if email_recipient and phone_recipient:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Укажите либо адрес, либо номер телефона получателя, но не оба",
+        )
+
+    normalized_phone: str | None = None
+    if phone_recipient:
+        normalized_phone = sms_gateway.normalize_phone(phone_recipient)
+        if normalized_phone is None:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "Номер телефона выглядит неверным",
+            )
+
+    recipient = email_recipient or normalized_phone or ""
     if recipient:
-        if "@" not in recipient:
+        if email_recipient and "@" not in email_recipient:
             raise HTTPException(
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
                 "Адрес получателя выглядит неверным",
             )
         # Проверяем ЗДЕСЬ, а не при входе: выдать ссылку с привязкой там, где
-        # письмо уйти не может, значит запереть клиента снаружи — и узнает он
+        # сообщение уйти не может, значит запереть клиента снаружи — и узнает он
         # об этом позже специалиста, уже получив ссылку.
-        if not mail_channel_ready():
+        channel = otp_delivery.channel_for(recipient)
+        if not otp_delivery.channel_ready(channel):
             raise HTTPException(
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
-                "Привязка к получателю требует настроенной почты: без неё код не дойдёт",
+                (
+                    "Привязка по SMS требует настроенного поставщика: без него код не дойдёт"
+                    if channel == otp_delivery.SMS
+                    else "Привязка к получателю требует настроенной почты: без неё код не дойдёт"
+                ),
             )
     # 24 байта = 192 бита энтропии (разд. 68.1 требует >= 128).
     plain = secrets.token_urlsafe(24)
@@ -753,7 +790,8 @@ async def create_portal_link(
             package_run_id=run.id,
             expires_at=expires_at,
             max_uses=max_uses,
-            otp_email=recipient or None,
+            otp_email=email_recipient or None,
+            otp_phone=normalized_phone,
             scope_json={
                 "package_run_ids": [run.id],
                 "download": True,
@@ -806,7 +844,8 @@ async def request_portal_otp(
 
     settings = get_settings()
     ttl = max(1, int(settings.portal_otp_ttl_minutes))
-    if record.otp_email:
+    otp_recipient = record.otp_email or record.otp_phone
+    if otp_recipient:
         # Каждый запрос выдаёт НОВЫЙ код и обнуляет счётчик попыток: иначе
         # исчерпав попытки, легитимный получатель остался бы без входа.
         code = f"{secrets.randbelow(1_000_000):06d}"
@@ -816,7 +855,7 @@ async def request_portal_otp(
         await session.commit()
         outcome = await send_otp_code(
             tenant_id=str(record.tenant_id),
-            recipient=record.otp_email,
+            recipient=otp_recipient,
             code=code,
             ttl_minutes=ttl,
         )

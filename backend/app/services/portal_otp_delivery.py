@@ -8,9 +8,16 @@
 
 ## Решения
 
-**1. Канал уже есть — почта.** Заводить SMS ради одного сценария значило бы
-завести второго внешнего поставщика и второй набор ключей. Письмо продукт
-отправлять умеет, бренд арендатора подставляется сам (BIZ-52 срез-10).
+**1. Изначально канал был один — почта.** Заводить SMS ради одного сценария
+значило бы завести второго внешнего поставщика. Письмо продукт отправлять умеет,
+бренд арендатора подставляется сам (BIZ-52 срез-10).
+
+**1а. СРЕЗ-186: каналов стало два.** Строка матрицы держала в остатке «SMS как
+второй канал — внешний поставщик, вне кода». Поставщика выбирает владелец, но
+ВЫБОР КАНАЛА и шов к поставщику — код (``services/sms_gateway``). Канал
+определяется тем, что указали при выдаче ссылки: адрес — письмо, телефон — SMS.
+Заполнено ровно одно из двух; спрашивать у специалиста «каким каналом слать»
+отдельным полем значило бы задать вопрос, ответ на который уже дан.
 
 **2. Клиент портала — НЕ пользователь системы.** У него нет учётной записи,
 поэтому обычный контур уведомлений (он адресуется по ``user_id``) не годится:
@@ -34,19 +41,31 @@ from types import SimpleNamespace
 
 from app.core.config import get_settings
 from app.modules.notifications.providers import EmailProvider, NotificationContact
+from app.services import sms_gateway
 
 __all__ = [
+    "EMAIL",
+    "SMS",
     "OtpSendOutcome",
     "OtpSendStatus",
     "build_otp_letter",
+    "build_otp_sms",
+    "channel_for",
+    "channel_ready",
     "mail_channel_ready",
     "send_otp_code",
 ]
+
+EMAIL = "email"
+SMS = "sms"
 
 
 class OtpSendStatus(str, enum.Enum):
     SENT = "sent"
     MAIL_DISABLED = "mail_disabled"
+    #: Срез-186: канал SMS выбран, но поставщик не настроен. Отдельно от
+    #: MAIL_DISABLED: специалисту важно знать, КАКОЙ канал чинить.
+    SMS_DISABLED = "sms_disabled"
     FAILED = "failed"
 
 
@@ -94,10 +113,47 @@ def build_otp_letter(code: str, *, ttl_minutes: int) -> tuple[str, str]:
     return subject, body
 
 
+def build_otp_sms(code: str, *, ttl_minutes: int) -> str:
+    """Текст сообщения. Коротко: SMS считают по знакам, а длинное режут."""
+
+    return f"Код для входа в личный кабинет: {code}. Действует {ttl_minutes} мин."
+
+
+def channel_for(recipient: str) -> str:
+    """Канал определяется тем, что указали: адрес — письмо, номер — SMS.
+
+    Отдельного поля «каким каналом слать» намеренно нет: оно задавало бы
+    вопрос, ответ на который уже дан видом получателя, и позволяло бы задать
+    противоречие (адрес + канал SMS).
+    """
+
+    return EMAIL if "@" in (recipient or "") else SMS
+
+
+def channel_ready(channel: str) -> bool:
+    """Настроен ли КОНКРЕТНЫЙ канал. Спрашивается при выдаче ссылки."""
+
+    if channel == SMS:
+        return sms_gateway.channel_ready(get_settings())
+    return mail_channel_ready()
+
+
 async def send_otp_code(
     *, tenant_id: str, recipient: str, code: str, ttl_minutes: int
 ) -> OtpSendOutcome:
-    """Отправить код на указанный при выдаче ссылки адрес."""
+    """Отправить код тем каналом, который следует из вида получателя."""
+
+    if channel_for(recipient) == SMS:
+        outcome = await sms_gateway.send_sms(
+            phone=recipient,
+            text=build_otp_sms(code, ttl_minutes=ttl_minutes),
+            settings=get_settings(),
+        )
+        if outcome.delivered:
+            return OtpSendOutcome(OtpSendStatus.SENT, "Код отправлен")
+        if outcome.status is sms_gateway.SmsStatus.DISABLED:
+            return OtpSendOutcome(OtpSendStatus.SMS_DISABLED, outcome.reason)
+        return OtpSendOutcome(OtpSendStatus.FAILED, outcome.reason)
 
     if not mail_channel_ready():
         return OtpSendOutcome(
