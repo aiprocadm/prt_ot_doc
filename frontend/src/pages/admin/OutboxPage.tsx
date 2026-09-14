@@ -1,3 +1,4 @@
+import { statusLabel } from "@/components/common/StatusBadge";
 import { FormEvent, useEffect, useState } from "react";
 
 import { integrationsApi } from "@/api/integrations";
@@ -203,8 +204,8 @@ const OutboxPage = () => {
             <ul className="space-y-1 text-sm">
               {deliveries.slice(0, 20).map((item) => (
                 <li key={item.id}>
-                  {item.event_id} → {item.endpoint_id} — <b>{item.status}</b>{" "}
-                  (попыток: {item.attempts})
+                  {item.event_id} → {item.endpoint_id} —{" "}
+                  <b>{statusLabel(item.status)}</b> (попыток: {item.attempts})
                 </li>
               ))}
             </ul>
@@ -225,8 +226,8 @@ const OutboxPage = () => {
             <ul className="space-y-1 text-sm">
               {items.map((item) => (
                 <li key={item.id}>
-                  {item.event_type} — <b>{item.status}</b> (попыток:{" "}
-                  {item.attempts})
+                  {item.event_type} — <b>{statusLabel(item.status)}</b>{" "}
+                  (попыток: {item.attempts})
                 </li>
               ))}
             </ul>

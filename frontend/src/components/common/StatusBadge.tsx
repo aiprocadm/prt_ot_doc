@@ -82,6 +82,36 @@ const statusLabelsRu: Record<string, string> = {
   dead: "Окончательный сбой",
 };
 
+/**
+ * Срез-180: важность задачи и письма (`TaskPriority`, `NotificationPriority` —
+ * значения совпадают). Рядом со статусами, потому что печатается там же.
+ */
+const priorityLabelsRu: Record<string, string> = {
+  low: "Низкая",
+  medium: "Средняя",
+  high: "Высокая",
+  critical: "Критическая",
+};
+
+/**
+ * Подпись статуса ДЛЯ ТЕКСТА (не значка).
+ *
+ * Срез-180: тот же словарь, что у значка, нужен в местах, где компонент
+ * поставить нельзя — строка списка, пункт выпадающего списка, предложение.
+ * Раньше там печатали сам код, и человек видел латиницу вроде `draft` или
+ * `PENDING`. Неизвестное значение возвращается как есть: молчать о нём нельзя.
+ */
+export const statusLabel = (status?: string | null): string => {
+  if (!status) return "—";
+  return statusLabelsRu[status.toLowerCase()] ?? status;
+};
+
+/** Подпись важности для текста; неизвестное значение — как есть. */
+export const priorityLabel = (priority?: string | null): string => {
+  if (!priority) return "—";
+  return priorityLabelsRu[priority.toLowerCase()] ?? priority;
+};
+
 export const StatusBadge = ({ status }: { status?: string | null }) => {
   if (!status) return null;
   // Срез-161: часть ручек отдаёт статус ПРОПИСНЫМИ (`FAILED`, `DEAD` —
