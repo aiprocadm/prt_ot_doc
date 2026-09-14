@@ -110,12 +110,19 @@ const dueSoonItem: ComplianceRequirementDto = {
 const listResponse = (
   canManage: boolean,
   items: ComplianceRequirementDto[] = [overdueItem, dueSoonItem],
+  // Срез-195: счётчики приходят по ВСЕЙ выборке, а не по странице. Умолчание
+  // «сколько отдали» годится для проверок, где страница одна; проверка самого
+  // листателя передаёт число больше длины списка — именно так это и выглядит
+  // на второй странице.
+  totals: { total?: number; limit?: number; offset?: number } = {},
 ): ComplianceRequirementListDto => ({
   items,
-  total: items.length,
+  total: totals.total ?? items.length,
   active: items.filter((item) => item.status === "active").length,
   overdue: items.filter((item) => item.overdue).length,
   can_manage: canManage,
+  limit: totals.limit ?? 50,
+  offset: totals.offset ?? 0,
 });
 
 const tenantDocuments = [
@@ -262,8 +269,11 @@ describe("RequirementsPage", () => {
   it("ссылка с экрана НПА `?npa_id=` фильтрует по акту и ведёт обратно", async () => {
     await renderPage("/npa/requirements?npa_id=npa-1");
 
+    // Срез-195: к фильтру добавились страницы. Проверка сравнивает ПОЛНЫЙ
+    // набор параметров намеренно — так видно, если запрос однажды потеряет
+    // фильтр или уедет не на ту страницу.
     expect(apiClientMock.get).toHaveBeenCalledWith("/compliance/requirements", {
-      params: { npa_id: "npa-1" },
+      params: { npa_id: "npa-1", limit: 50, offset: 0 },
     });
     expect(
       within(screen.getByTestId("requirements-summary")).getByRole("link", {
@@ -530,5 +540,92 @@ describe("RequirementsPage", () => {
     expect(
       screen.getByText(/Реестр требований ведёт специалист по охране труда/),
     ).toBeInTheDocument();
+  });
+
+  it("реестр листается, а счётчики остаются по всей выборке (срез-195)", async () => {
+    // Сервер отдал ДВЕ строки из ста: так выглядит первая страница большого
+    // реестра. Счётчики при этом про все сто — иначе человек, увидев «Всего: 2»,
+    // решил бы, что требований всего два.
+    apiClientMock.get.mockImplementation((url: string) => {
+      if (url === "/npa") {
+        return Promise.resolve({ data: { items: acts, can_manage: false } });
+      }
+      if (url === "/compliance/requirements") {
+        return Promise.resolve({
+          data: listResponse(false, [overdueItem, dueSoonItem], { total: 100 }),
+        });
+      }
+      if (url === "/compliance/requirements/options") {
+        return Promise.resolve({ data: formOptions });
+      }
+      if (url === "/documents") {
+        return Promise.resolve({ data: { items: tenantDocuments } });
+      }
+      throw new Error(`Unexpected GET ${url}`);
+    });
+
+    await renderPage();
+
+    expect(screen.getByTestId("requirements-summary")).toHaveTextContent(
+      "Всего: 100",
+    );
+    const pager = screen.getByTestId("requirements-pager");
+    expect(pager).toHaveTextContent("Показано 1–2 из 100");
+    // На первой странице «Назад» недоступна: нажатие увело бы в минус.
+    expect(screen.getByRole("button", { name: "Назад" })).toBeDisabled();
+
+    await act(async () => {
+      await userEvent.click(screen.getByRole("button", { name: "Дальше" }));
+    });
+
+    const calls = apiClientMock.get.mock.calls.filter(
+      (call) => call[0] === "/compliance/requirements",
+    );
+    const last = calls[calls.length - 1][1];
+    expect(last.params.offset).toBe(50);
+    expect(last.params.limit).toBe(50);
+  });
+
+  it("листателя нет, когда всё уместилось на одной странице", async () => {
+    // Кнопки «Дальше» на реестре из двух строк — лишний шум: экран под
+    // UX-бюджетом, и каждый элемент должен быть заслужен.
+    await renderPage();
+    expect(screen.queryByTestId("requirements-pager")).toBeNull();
+  });
+
+  it("смена фильтра возвращает на первую страницу", async () => {
+    // Иначе человек, отфильтровавший до трёх строк, оставшись на пятой
+    // странице, увидел бы пусто и решил, что ничего не нашлось.
+    apiClientMock.get.mockImplementation((url: string) => {
+      if (url === "/npa") {
+        return Promise.resolve({ data: { items: acts, can_manage: false } });
+      }
+      if (url === "/compliance/requirements") {
+        return Promise.resolve({
+          data: listResponse(false, [overdueItem, dueSoonItem], { total: 100 }),
+        });
+      }
+      if (url === "/compliance/requirements/options") {
+        return Promise.resolve({ data: formOptions });
+      }
+      if (url === "/documents") {
+        return Promise.resolve({ data: { items: tenantDocuments } });
+      }
+      throw new Error(`Unexpected GET ${url}`);
+    });
+    await renderPage();
+
+    await act(async () => {
+      await userEvent.click(screen.getByRole("button", { name: "Дальше" }));
+    });
+    await act(async () => {
+      await userEvent.click(screen.getByLabelText(/только просроченные/i));
+    });
+
+    const calls = apiClientMock.get.mock.calls.filter(
+      (call) => call[0] === "/compliance/requirements",
+    );
+    const last = calls[calls.length - 1][1];
+    expect(last.params.offset).toBe(0);
   });
 });

@@ -16,10 +16,15 @@ export const complianceRequirementsApi = {
   list: async (
     filters: ComplianceRequirementFiltersDto = {},
   ): Promise<ComplianceRequirementListDto> => {
-    const params: Record<string, string | boolean> = {};
+    const params: Record<string, string | boolean | number> = {};
     if (filters.npa_id) params.npa_id = filters.npa_id;
     if (filters.status) params.status = filters.status;
     if (filters.overdue) params.overdue = true;
+    // Срез-195: страница. Ноль — законное смещение, поэтому проверяется
+    // ОПРЕДЕЛЁННОСТЬ, а не истинность: `if (filters.offset)` молча терял бы
+    // возврат на первую страницу.
+    if (filters.limit !== undefined) params.limit = filters.limit;
+    if (filters.offset !== undefined) params.offset = filters.offset;
     const { data } = await apiClient.get<ComplianceRequirementListDto>(BASE, {
       params,
     });

@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -80,14 +80,20 @@ class RequirementsService:
     session: AsyncSession
     tenant_id: str
 
-    async def list(
+    def _filtered(
         self,
         *,
-        npa_id: str | None = None,
-        status: str | None = None,
-        only_overdue: bool = False,
-        owner_user_id: str | None = None,
-    ) -> list[ComplianceRequirement]:
+        npa_id: str | None,
+        status: str | None,
+        only_overdue: bool,
+        owner_user_id: str | None,
+    ):
+        """Общий отбор для страницы и для счётчиков.
+
+        Один источник условий, а не два: разойдись они — и экран показывал бы
+        «просрочено: 3» над страницей, где просроченных пять.
+        """
+
         stmt = select(ComplianceRequirement).where(
             ComplianceRequirement.tenant_id == self.tenant_id
         )
@@ -102,18 +108,98 @@ class RequirementsService:
                 ComplianceRequirement.status == "active",
                 ComplianceRequirement.next_due_at < today(),
             )
-        # Сначала то, что горит: активные по контрольной дате (без даты — в
-        # конец), потом закрытые и снятые; внутри — по коду.
-        rows = list((await self.session.execute(stmt)).scalars().all())
-        rows.sort(
-            key=lambda r: (
-                0 if r.status == "active" else 1,
-                r.next_due_at is None,
-                r.next_due_at or date.max,
-                r.code,
-            )
+        return stmt
+
+    @staticmethod
+    def _ordering():
+        """Сначала то, что горит: активные по контрольной дате (без даты — в
+        конец), потом закрытые и снятые; внутри — по коду.
+
+        СРЕЗ-195: порядок переехал из памяти в базу. Сортировка после выборки
+        означает, что выбрать надо ВСЁ, — то есть страницы невозможны в
+        принципе: вторая страница по порядку, посчитанному в памяти, зависела бы
+        от того, что уже прочитано.
+        """
+
+        status_rank = case((ComplianceRequirement.status == "active", 0), else_=1)
+        return (
+            status_rank,
+            # NULLS LAST переносимо: булев признак «даты нет» сортируется первым
+            # ключом, а сама дата — вторым. `nulls_last()` в SQLite не работает.
+            ComplianceRequirement.next_due_at.is_(None),
+            ComplianceRequirement.next_due_at,
+            ComplianceRequirement.code,
         )
-        return rows
+
+    async def list(
+        self,
+        *,
+        npa_id: str | None = None,
+        status: str | None = None,
+        only_overdue: bool = False,
+        owner_user_id: str | None = None,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[ComplianceRequirement]:
+        """Страница реестра. ``limit=None`` — всё (внутренние вызовы).
+
+        Страничность добавлена срезом-195: до него ручка отдавала ВСЮ таблицу
+        требований арендатора на каждое открытие экрана, а порядок считался в
+        памяти после выборки.
+        """
+
+        stmt = self._filtered(
+            npa_id=npa_id,
+            status=status,
+            only_overdue=only_overdue,
+            owner_user_id=owner_user_id,
+        ).order_by(*self._ordering())
+        if limit is not None:
+            stmt = stmt.limit(limit).offset(max(0, offset))
+        return list((await self.session.execute(stmt)).scalars().all())
+
+    async def counts(
+        self,
+        *,
+        npa_id: str | None = None,
+        status: str | None = None,
+        only_overdue: bool = False,
+        owner_user_id: str | None = None,
+    ) -> dict[str, int]:
+        """Счётчики по ВСЕЙ выборке, а не по выданной странице.
+
+        Это главное требование среза. Счётчик, посчитанный по странице, — класс
+        ошибки, который в проекте ловили дважды: человек видит «просрочено: 0»
+        над первой страницей и считает, что просроченных нет вовсе.
+
+        ``total`` считается при тех же фильтрах, ``active`` и ``overdue`` — при
+        тех же фильтрах плюс своё условие: иначе «на контроле» на экране с
+        фильтром «снятые» показывало бы число из другого мира.
+        """
+
+        base = self._filtered(
+            npa_id=npa_id,
+            status=status,
+            only_overdue=only_overdue,
+            owner_user_id=owner_user_id,
+        ).subquery()
+
+        total = await self.session.scalar(select(func.count()).select_from(base)) or 0
+        active = (
+            await self.session.scalar(
+                select(func.count()).select_from(base).where(base.c.status == "active")
+            )
+            or 0
+        )
+        overdue = (
+            await self.session.scalar(
+                select(func.count())
+                .select_from(base)
+                .where(base.c.status == "active", base.c.next_due_at < today())
+            )
+            or 0
+        )
+        return {"total": int(total), "active": int(active), "overdue": int(overdue)}
 
     async def get(self, requirement_id: str) -> ComplianceRequirement | None:
         return await self.session.scalar(

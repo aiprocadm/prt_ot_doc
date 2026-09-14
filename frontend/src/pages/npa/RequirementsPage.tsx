@@ -43,6 +43,11 @@ import type { ApiError } from "@/types/dto/common";
  * их не пересчитывает — вечером по Москве «сегодня» другое.
  */
 
+//: Сколько требований показываем за раз. Пятьдесят — столько помещается в
+//: один взгляд при прокрутке; больше означало бы вернуть прежнюю выдачу «всё
+//: сразу», только под другим именем.
+const PAGE_SIZE = 50;
+
 const STATUS_LABELS: Record<RequirementStatus, string> = {
   active: "на контроле",
   fulfilled: "исполнено",
@@ -98,6 +103,10 @@ const RequirementsPage = () => {
   const npaFilter = searchParams.get("npa_id") ?? undefined;
   const [status, setStatus] = useState<StatusFilter>("");
   const [onlyOverdue, setOnlyOverdue] = useState(false);
+  // Срез-195: реестр листается страницами. Смена любого фильтра возвращает на
+  // первую: иначе человек, отфильтровавший до трёх строк, оставшись на пятой
+  // странице, увидел бы пусто и решил, что ничего не нашлось.
+  const [offset, setOffset] = useState(0);
   const [data, setData] = useState<ComplianceRequirementListDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
@@ -110,10 +119,16 @@ const RequirementsPage = () => {
         npa_id: npaFilter,
         status: status || undefined,
         overdue: onlyOverdue,
+        limit: PAGE_SIZE,
+        offset,
       })
       .then((response) => setData(response))
       .catch((failure: ApiError) => setError(failure))
       .finally(() => setLoading(false));
+  }, [npaFilter, status, onlyOverdue, offset]);
+
+  useEffect(() => {
+    setOffset(0);
   }, [npaFilter, status, onlyOverdue]);
 
   useEffect(() => {
@@ -332,6 +347,34 @@ const RequirementsPage = () => {
                 ))}
               </TableBody>
             </Table>
+            {data && data.total > items.length ? (
+              <div
+                className="flex flex-wrap items-center justify-between gap-3 pt-4 text-sm text-muted-foreground"
+                data-testid="requirements-pager"
+              >
+                <span>
+                  Показано {offset + 1}–{offset + items.length} из {data.total}
+                </span>
+                <span className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={offset === 0 || loading}
+                    onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
+                  >
+                    Назад
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={offset + items.length >= data.total || loading}
+                    onClick={() => setOffset(offset + PAGE_SIZE)}
+                  >
+                    Дальше
+                  </Button>
+                </span>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       ) : null}

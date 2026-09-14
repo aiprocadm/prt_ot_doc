@@ -116,11 +116,19 @@ class ComplianceRequirementDetail(ComplianceRequirementRead):
 
 class ComplianceRequirementListResponse(BaseModel):
     items: list[ComplianceRequirementRead]
+    #: Счётчики по ВСЕЙ выборке при текущих фильтрах, а не по выданной странице
+    #: (срез-195). Счётчик по странице — класс ошибки, который в проекте ловили
+    #: дважды: человек видит «просрочено: 0» над первой страницей и считает,
+    #: что просроченных нет вовсе.
     total: int
     active: int
     overdue: int
     #: Может ли пришедший заводить и закрывать требования (роли записи).
     can_manage: bool = False
+    #: Какая часть выдана. Клиент не должен вычислять это из длины списка:
+    #: пустая последняя страница неотличима от «ничего не найдено».
+    limit: int = 0
+    offset: int = 0
 
 
 class RequirementOwnerOption(BaseModel):

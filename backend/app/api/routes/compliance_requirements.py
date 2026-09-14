@@ -250,15 +250,30 @@ async def list_requirements(
     npa_id: str | None = Query(default=None),
     status_filter: str | None = Query(default=None, alias="status"),
     overdue: bool = Query(default=False),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
 ) -> ComplianceRequirementListResponse:
+    """Реестр требований по НПА страницами (B.18 разд. 19.2, срез-195).
+
+    До этого среза ручка отдавала ВСЮ таблицу требований арендатора на каждое
+    открытие экрана, а порядок считался в памяти после выборки — то есть
+    страницы были невозможны в принципе.
+
+    Счётчики берутся по ВСЕЙ выборке при тех же фильтрах, а не по выданной
+    странице: счётчик по странице — класс ошибки, который в проекте ловили
+    дважды, и человек по нему делает ложный вывод «просроченных нет».
+    """
+
     TenantContextValidator.ensure_tenant_context(tenant)
     service = RequirementsService(session, str(tenant.id))
-    rows = await service.list(
-        npa_id=npa_id,
-        status=status_filter,
-        only_overdue=overdue,
-        owner_user_id=_owner_scope(access),
-    )
+    scope = {
+        "npa_id": npa_id,
+        "status": status_filter,
+        "only_overdue": overdue,
+        "owner_user_id": _owner_scope(access),
+    }
+    rows = await service.list(**scope, limit=limit, offset=offset)
+    totals = await service.counts(**scope)
     refs = await service.references(rows)
     counts = await service.evidence_counts(rows)
     reference = today()
@@ -268,10 +283,12 @@ async def list_requirements(
     ]
     return ComplianceRequirementListResponse(
         items=items,
-        total=len(items),
-        active=sum(1 for item in items if item.status == "active"),
-        overdue=sum(1 for item in items if item.overdue),
+        total=totals["total"],
+        active=totals["active"],
+        overdue=totals["overdue"],
         can_manage=_role_of(access) in _WRITE_ROLES,
+        limit=limit,
+        offset=offset,
     )
 
 

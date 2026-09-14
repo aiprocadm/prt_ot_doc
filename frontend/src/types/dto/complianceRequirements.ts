@@ -62,9 +62,18 @@ export interface ComplianceRequirementDetailDto
 
 export interface ComplianceRequirementListDto {
   items: ComplianceRequirementDto[];
+  /**
+   * Счётчики по ВСЕЙ выборке при текущих фильтрах, а не по выданной странице
+   * (срез-195): счётчик по странице заставил бы человека сделать ложный вывод
+   * «просроченных нет», увидев «просрочено: 0» над первой страницей.
+   */
   total: number;
   active: number;
   overdue: number;
+  /** Какая часть выдана. Длина списка этого не заменяет: пустая последняя
+   * страница неотличима от «ничего не найдено». */
+  limit: number;
+  offset: number;
   /** Право заводить, подтверждать и снимать с контроля (admin/owner/ot_specialist). */
   can_manage: boolean;
 }
@@ -100,6 +109,9 @@ export interface ComplianceRequirementFiltersDto {
   npa_id?: string;
   status?: RequirementStatus;
   overdue?: boolean;
+  /** Срез-195: реестр листается страницами (по умолчанию сервер отдаёт 50). */
+  limit?: number;
+  offset?: number;
 }
 
 /** Кандидат в ответственные: только то, что нужно, чтобы выбрать человека. */

@@ -87,17 +87,31 @@ SURFACES: tuple[tuple[str, tuple[str, ...]], ...] = (
         "секреты и ключи",
         ("backend/app/core/secret_cipher.py", "backend/app/core/key_provider.py"),
     ),
-    (
-        "зависимости",
-        (
-            "requirements",
-            "backend/requirements",
-            "pyproject.toml",
-            "frontend/package.json",
-            "frontend/package-lock.json",
-        ),
-    ),
 )
+
+#: Поверхность «зависимости» отбирается ИНАЧЕ — по ИМЕНИ ФАЙЛА целиком, а не по
+#: куску пути.
+#:
+#: ПОЧЕМУ. Первая версия искала подстроку «requirements», и любой файл раздела
+#: «требования по НПА» (`compliance_requirements.py`, `test_..._requirements...`)
+#: срабатывал как «изменены зависимости». Нашлось это применением гейта к
+#: собственному PR среза-195: он честно потребовал ответ про зависимости там, где
+#: не менялся ни один манифест. Сторож, который кричит не по делу, перестают
+#: читать — ровно то, от чего этот гейт и защищает.
+DEPENDENCY_FILES: frozenset[str] = frozenset(
+    {
+        "requirements.txt",
+        "requirements-dev.txt",
+        "pyproject.toml",
+        "poetry.lock",
+        "uv.lock",
+        "package.json",
+        "package-lock.json",
+        "pnpm-lock.yaml",
+        "yarn.lock",
+    }
+)
+DEPENDENCY_SURFACE = "зависимости"
 
 #: Осознанный ответ «поверхностей нет». Дословность не требуется — важно, чтобы
 #: человек написал это словами, а не молча пропустил пункт.
@@ -145,13 +159,14 @@ def _changed_files(base: str, files_from: str | None) -> list[str]:
 def touched_surfaces(paths: list[str]) -> list[str]:
     """Какие поверхности атаки затронуты изменёнными файлами."""
 
+    normalized = [path.replace("\\", "/") for path in paths]
     found: list[str] = []
     for name, rules in SURFACES:
-        for path in paths:
-            normalized = path.replace("\\", "/")
-            if any(rule in normalized for rule in rules):
-                found.append(name)
-                break
+        if any(rule in path for path in normalized for rule in rules):
+            found.append(name)
+    # Манифесты зависимостей — по имени файла целиком (см. DEPENDENCY_FILES).
+    if any(path.rsplit("/", 1)[-1] in DEPENDENCY_FILES for path in normalized):
+        found.append(DEPENDENCY_SURFACE)
     return found
 
 
