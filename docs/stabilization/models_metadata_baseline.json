@@ -16266,6 +16266,10 @@
         "VARCHAR(255)"
       ],
       [
+        "schema_version",
+        "VARCHAR(8)"
+      ],
+      [
         "secret",
         "VARCHAR(512)"
       ],

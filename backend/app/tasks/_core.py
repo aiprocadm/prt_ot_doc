@@ -18,7 +18,13 @@ from app.core.config import get_settings
 from app.core.metrics import get_metrics
 from app.core.secret_cipher import decrypt_secret
 from app.core.tenant import tenant_context
-from app.core.webhook_contract import WEBHOOK_SCHEMA_VERSION, WEBHOOK_SCHEMA_VERSION_HEADER
+from app.core.webhook_contract import (
+    WEBHOOK_SCHEMA_VERSION,
+    WEBHOOK_SCHEMA_VERSION_HEADER,
+    WEBHOOK_SCHEMA_VERSION_V2,
+    build_envelope_v2,
+    resolve_schema_version,
+)
 from app.db import AsyncSessionLocal, ensure_tenant_schema, session_scope
 from app.models.job_engine import (
     OutboxEvent,
@@ -549,6 +555,24 @@ async def _dispatch_outbox_events(
                 ]
                 success = not bool((event.payload or {}).get("force_fail"))
                 for ep in matching:
+                    # OPS-73 срез-191: схема выбирается ПОШТУЧНО, тело собирается
+                    # под подписчика. В версии 1 тело общее для всех — ровно как
+                    # было, иначе переключение сломало бы всех разом.
+                    ep_version = resolve_schema_version(getattr(ep, "schema_version", None))
+                    if ep_version == WEBHOOK_SCHEMA_VERSION_V2:
+                        ep_body = build_envelope_v2(
+                            event_id=event.event_id,
+                            event_type=event.event_type,
+                            tenant_id=event.tenant_id,
+                            occurred_at=datetime.now(tz=timezone.utc).isoformat(),
+                            correlation_id=correlation_id,
+                            payload=event.payload or {},
+                        )
+                        ep_raw_body = json.dumps(
+                            ep_body, separators=(",", ":"), ensure_ascii=False
+                        ).encode("utf-8")
+                    else:
+                        ep_raw_body = raw_body
                     delivered = WebhookDelivery(
                         # the resolved tenant UUID, not event.tenant_id — legacy
                         # outbox rows may carry the tenant slug, which the RLS
@@ -573,7 +597,7 @@ async def _dispatch_outbox_events(
                             decrypt_secret(ep.secret, tenant_id=str(ep.tenant_id or "") or None)
                             or ""
                         ).encode("utf-8"),
-                        f"{ts}.".encode("utf-8") + raw_body,
+                        f"{ts}.".encode("utf-8") + ep_raw_body,
                         hashlib.sha256,
                     ).hexdigest()
                     headers = {
@@ -584,12 +608,12 @@ async def _dispatch_outbox_events(
                         "X-Correlation-Id": correlation_id,
                         "X-Signature": f"v1={signature}",
                         "X-Signature-Ts": ts,
-                        WEBHOOK_SCHEMA_VERSION_HEADER: WEBHOOK_SCHEMA_VERSION,
+                        WEBHOOK_SCHEMA_VERSION_HEADER: ep_version,
                     }
                     try:
                         resp = await client.post(
                             ep.url,
-                            content=raw_body,
+                            content=ep_raw_body,
                             headers=headers,
                             timeout=max(ep.timeout_ms / 1000, 0.1),
                         )
