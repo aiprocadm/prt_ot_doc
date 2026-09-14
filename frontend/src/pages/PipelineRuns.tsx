@@ -1,3 +1,4 @@
+import { statusLabel } from "@/components/common/StatusBadge";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -109,7 +110,7 @@ const PipelineRuns = () => {
                 {run.run_id}
               </Link>
             </label>
-            <span>{run.status}</span>
+            <span>{statusLabel(run.status)}</span>
           </div>
         ))}
       </div>

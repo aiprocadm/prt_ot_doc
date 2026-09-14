@@ -36,6 +36,21 @@ const statusColors: Record<string, "default" | "secondary" | "destructive"> = {
   pending: "secondary",
   sent: "default",
   dead: "destructive",
+  // Срез-181: прогоны комплектов и конвейера, рабочие процессы, подписи.
+  running: "secondary",
+  success: "default",
+  skipped: "secondary",
+  waiting: "secondary",
+  canceled: "destructive",
+  reassigned: "secondary",
+  delegated: "secondary",
+  escalated: "destructive",
+  created: "secondary",
+  requested: "secondary",
+  signed: "default",
+  awaiting_code: "secondary",
+  declined: "destructive",
+  expired: "destructive",
 };
 
 /** Подписи для типичных статусов API; неизвестные значения показываем как есть. */
@@ -80,6 +95,25 @@ const statusLabelsRu: Record<string, string> = {
   pending: "Ожидание",
   sent: "Отправлено",
   dead: "Окончательный сбой",
+  // Срез-181. Прогон комплекта и конвейера (PackRunItemStatus,
+  // PipelineRunStatus), рабочие процессы (WorkflowInstanceStatus,
+  // WorkflowTaskStatus), подписи (SignatureRequestStatus).
+  running: "Выполняется",
+  success: "Успешно",
+  skipped: "Пропущено",
+  waiting: "Ожидает",
+  // У сервера `canceled` с одной «l»; соседнее `cancelled` оставлено — оно
+  // приходит из других перечислений.
+  canceled: "Отменено",
+  reassigned: "Переназначена",
+  delegated: "Передана",
+  escalated: "Эскалирована",
+  created: "Создан",
+  requested: "Запрошена",
+  signed: "Подписано",
+  awaiting_code: "Ждёт код",
+  declined: "Отклонено",
+  expired: "Истёк срок",
 };
 
 /**

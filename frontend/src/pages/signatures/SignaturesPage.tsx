@@ -1,3 +1,4 @@
+import { statusLabel } from "@/components/common/StatusBadge";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -87,7 +88,7 @@ const SignaturesPage = () => {
                 >
                   <div>
                     <div>
-                      {it.id.slice(0, 8)} — {it.status}
+                      {it.id.slice(0, 8)} — {statusLabel(it.status)}
                     </div>
                     <div className="text-muted-foreground">
                       provider: {it.provider}

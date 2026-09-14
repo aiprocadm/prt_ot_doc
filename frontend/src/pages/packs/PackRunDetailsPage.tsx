@@ -1,3 +1,4 @@
+import { statusLabel } from "@/components/common/StatusBadge";
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 
@@ -84,7 +85,7 @@ const PackRunDetailsPage = () => {
           ) : (
             items.map((item) => (
               <div key={item.id}>
-                {item.row_no}. {item.file_name} — {item.status}
+                {item.row_no}. {item.file_name} — {statusLabel(item.status)}
                 {/* Причина отказа приходит с сервера, но раньше не
                     показывалась: строка «не получилось» без причины не
                     говорит, что чинить. */}
