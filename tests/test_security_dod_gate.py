@@ -132,3 +132,49 @@ def test_every_declared_surface_is_recognised(path: str, surface: str) -> None:
     from check_security_dod import touched_surfaces  # noqa: PLC0415
 
     assert surface in touched_surfaces([path])
+
+
+class TestЗависимостиОтбираютсяПоИмениФайла:
+    """Срез-195: гейт кричал «изменены зависимости» на файлах раздела НПА.
+
+    Первая версия искала подстроку «requirements», и любой файл контура
+    «требования по НПА» срабатывал как манифест зависимостей. Нашлось
+    применением гейта к собственному PR: он потребовал ответ про зависимости
+    там, где не менялся ни один манифест.
+
+    Это не мелочь: сторож, который кричит не по делу, перестают читать — ровно
+    от этого гейт и защищает.
+    """
+
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "backend/app/api/routes/compliance_requirements.py",
+            "backend/app/domains/npa/requirements.py",
+            "tests/api/test_compliance_requirements_paging.py",
+            "frontend/src/types/dto/complianceRequirements.ts",
+        ],
+    )
+    def test_файлы_раздела_требований_не_считаются_зависимостями(self, path: str) -> None:
+        sys.path.insert(0, str(REPO_ROOT / "scripts" / "ci"))
+        from check_security_dod import touched_surfaces  # noqa: PLC0415
+
+        assert "зависимости" not in touched_surfaces([path])
+
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "requirements.txt",
+            "requirements-dev.txt",
+            "pyproject.toml",
+            "frontend/package.json",
+            "frontend/package-lock.json",
+        ],
+    )
+    def test_настоящие_манифесты_по_прежнему_ловятся(self, path: str) -> None:
+        """Обратная половина: сузив правило, легко потерять то, ради чего оно есть."""
+
+        sys.path.insert(0, str(REPO_ROOT / "scripts" / "ci"))
+        from check_security_dod import touched_surfaces  # noqa: PLC0415
+
+        assert "зависимости" in touched_surfaces([path])
