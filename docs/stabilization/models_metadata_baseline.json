@@ -12054,6 +12054,60 @@
         "INTEGER"
       ]
     ],
+    "reseller_prices": [
+      [
+        "amount_minor",
+        "INTEGER"
+      ],
+      [
+        "client_tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "currency",
+        "VARCHAR(3)"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "note",
+        "VARCHAR(255)"
+      ],
+      [
+        "period",
+        "VARCHAR(16)"
+      ],
+      [
+        "reseller_tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "valid_from",
+        "DATE"
+      ],
+      [
+        "valid_to",
+        "DATE"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
     "risk_assessment_items": [
       [
         "assessment_id",
@@ -14442,6 +14496,52 @@
       [
         "yyyymm",
         "VARCHAR(6)"
+      ]
+    ],
+    "tenant_domains": [
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "domain",
+        "VARCHAR(253)"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "last_checked_at",
+        "DATETIME"
+      ],
+      [
+        "last_error",
+        "VARCHAR(255)"
+      ],
+      [
+        "status",
+        "VARCHAR(16)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "verification_token",
+        "VARCHAR(64)"
+      ],
+      [
+        "verified_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
       ]
     ],
     "tenant_integrations_keys": [

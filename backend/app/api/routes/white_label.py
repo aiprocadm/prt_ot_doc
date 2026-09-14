@@ -22,6 +22,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from hashlib import sha256
 from typing import Annotated
 
@@ -37,12 +38,14 @@ from fastapi import (
     status,
 )
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.errors import api_problem_detail
+from app.domains.reseller import domains as reseller_domains
 from app.domains.reseller.brand_images import (
     FAVICON_MAX_BYTES,
     FAVICON_MEDIA_TYPES,
@@ -53,7 +56,7 @@ from app.domains.reseller.brand_images import (
 from app.domains.reseller.pwa_manifest import build_manifest
 from app.domains.reseller.white_label import PLATFORM_BRAND, AppBrand
 from app.models.models import Tenant
-from app.models.white_label import TenantBranding
+from app.models.white_label import TenantBranding, TenantDomain
 from app.schemas.white_label import AppBrandRead, TenantBrandingPatch, TenantBrandingRead
 from app.services.app_branding import (
     brand_session,
@@ -473,3 +476,165 @@ async def delete_favicon(
     _require_brand_editor(credentials, tenant)
     await _drop_image(session, tenant, kind="favicon")
     return await read_own_branding(session, tenant, credentials)
+
+
+# ---------------------------------------------------------------------------
+# BIZ-52 разд. 52.2 (срез-189): собственный домен партнёра.
+# ---------------------------------------------------------------------------
+#
+# DNS и сертификаты — снаружи. Но ВЛАДЕНИЕ доменом обязано подтверждаться кодом:
+# без подтверждения партнёр заявляет чужой домен, и платформа начинает отдавать
+# под ним его бренд и его страницу входа. Это подмена сайта чужими руками.
+
+
+class TenantDomainClaim(BaseModel):
+    domain: str = Field(min_length=3, max_length=253)
+
+
+class TenantDomainRead(BaseModel):
+    domain: str
+    status: str
+    expected_record: str
+    expected_value: str
+    verified_at: datetime | None = None
+    last_checked_at: datetime | None = None
+    last_error: str | None = None
+
+
+def _domain_read(row: TenantDomain) -> TenantDomainRead:
+    return TenantDomainRead(
+        domain=row.domain,
+        status=row.status,
+        expected_record=reseller_domains.expected_record(row.domain),
+        expected_value=reseller_domains.expected_value(row.verification_token),
+        verified_at=row.verified_at,
+        last_checked_at=row.last_checked_at,
+        last_error=row.last_error,
+    )
+
+
+@router.get("/domains", response_model=list[TenantDomainRead])
+async def list_own_domains(
+    session: SessionDep,
+    tenant: Tenant = Depends(get_tenant_record),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+) -> list[TenantDomainRead]:
+    _require_brand_editor(credentials, tenant)
+    rows = (
+        (
+            await session.execute(
+                select(TenantDomain).where(TenantDomain.tenant_id == str(tenant.id))
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [_domain_read(row) for row in rows]
+
+
+@router.post("/domains", response_model=TenantDomainRead, status_code=status.HTTP_201_CREATED)
+@audit_operation("claim", "tenant_domain")
+async def claim_domain(
+    payload: TenantDomainClaim,
+    session: SessionDep,
+    tenant: Tenant = Depends(get_tenant_record),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+) -> TenantDomainRead:
+    """Заявить домен и получить слово для TXT-записи.
+
+    Заявка сама по себе НИЧЕГО не даёт: домен начинает работать только после
+    подтверждения. Уникальность домена глобальная — два арендатора с одним
+    доменом это спор о владении, а не две настройки.
+    """
+
+    _require_brand_editor(credentials, tenant)
+    try:
+        domain = reseller_domains.normalize_domain(payload.domain)
+    except reseller_domains.DomainError as exc:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=api_problem_detail(
+                code="DOMAIN_INVALID", message=str(exc), error_type="white-label"
+            ),
+        ) from exc
+
+    existing = (
+        await session.execute(select(TenantDomain).where(TenantDomain.domain == domain))
+    ).scalar_one_or_none()
+    if existing is not None:
+        if str(existing.tenant_id) != str(tenant.id):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail=api_problem_detail(
+                    code="DOMAIN_TAKEN",
+                    message="Домен уже заявлен другим арендатором",
+                    error_type="white-label",
+                ),
+            )
+        # Повторная заявка своего домена выдаёт НОВОЕ слово: старое могло
+        # утечь в переписке, а запись ещё не заведена.
+        existing.verification_token = reseller_domains.new_token()
+        existing.status = reseller_domains.STATUS_PENDING
+        existing.last_error = None
+        await session.flush()
+        return _domain_read(existing)
+
+    row = TenantDomain(
+        tenant_id=str(tenant.id),
+        domain=domain,
+        verification_token=reseller_domains.new_token(),
+        status=reseller_domains.STATUS_PENDING,
+    )
+    session.add(row)
+    await session.flush()
+    return _domain_read(row)
+
+
+@router.post("/domains/{domain}/verify", response_model=TenantDomainRead)
+@audit_operation("verify", "tenant_domain")
+async def verify_domain(
+    domain: str,
+    session: SessionDep,
+    tenant: Tenant = Depends(get_tenant_record),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+) -> TenantDomainRead:
+    """Проверить TXT-запись у регистратора.
+
+    Результат честный: «записи нет» и «DNS не ответил» — разные сообщения.
+    Первое человек чинит сам, второе означает повторить позже.
+    """
+
+    _require_brand_editor(credentials, tenant)
+    normalized = reseller_domains.normalize_domain(domain)
+    row = (
+        await session.execute(
+            select(TenantDomain).where(
+                TenantDomain.tenant_id == str(tenant.id), TenantDomain.domain == normalized
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail=api_problem_detail(
+                code="DOMAIN_NOT_CLAIMED",
+                message="Домен не заявлен",
+                error_type="white-label",
+            ),
+        )
+
+    result = reseller_domains.check(
+        row.domain, row.verification_token, resolve_txt=reseller_domains.dns_txt_resolver()
+    )
+    row.last_checked_at = datetime.now(tz=timezone.utc)
+    if result.verified:
+        row.status = reseller_domains.STATUS_VERIFIED
+        row.verified_at = row.last_checked_at
+        row.last_error = None
+    else:
+        # Статус НЕ становится failed навсегда: неудачная проверка — обычное
+        # дело, пока запись не распространилась по DNS.
+        row.status = reseller_domains.STATUS_PENDING
+        row.last_error = result.detail[:255]
+    await session.flush()
+    return _domain_read(row)
