@@ -427,6 +427,18 @@ class Settings(BaseSettings):
     # Старый одиночный APP_SECRET_ENCRYPTION_KEY продолжает работать под kid "v1".
     secret_encryption_keys: str = Field("", alias="APP_SECRET_ENCRYPTION_KEYS")
     secret_encryption_active_kid: str = Field("", alias="APP_SECRET_ENCRYPTION_ACTIVE_KID")
+    # SEC-67 (2026-09-14): откуда берётся связка ключей — ``env`` (переменные выше,
+    # умолчание) или ``command`` (внешнее хранилище: агент Vault, CLI облачного KMS,
+    # sops). Подключение хранилища — настройка, а не разработка; подробности и формат
+    # ответа команды — в core/key_provider.py.
+    secret_key_provider: str = Field("env", alias="APP_SECRET_KEY_PROVIDER")
+    secret_key_command: str = Field("", alias="APP_SECRET_KEY_COMMAND")
+    secret_key_command_timeout_seconds: float = Field(
+        10.0, alias="APP_SECRET_KEY_COMMAND_TIMEOUT_SECONDS"
+    )
+    secret_key_provider_ttl_seconds: float = Field(
+        300.0, alias="APP_SECRET_KEY_PROVIDER_TTL_SECONDS"
+    )
     # SEC-64 §64.3: guard outbound webhooks against SSRF (internal/private targets).
     # Default on; operator kill-switch. Enforcement is environment-aware (strict in
     # production/staging, permissive in development/test) — see core/ssrf_guard.py.
@@ -953,6 +965,8 @@ class Settings(BaseSettings):
             "migration_database_url_env",
             "secret_encryption_key",
             "secret_encryption_keys",
+            # Команда получения ключей может нести токен доступа к хранилищу.
+            "secret_key_command",
         ):
             if key in payload and payload[key]:
                 payload[key] = "***"
