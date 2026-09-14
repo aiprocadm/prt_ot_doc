@@ -36,6 +36,7 @@ from app.modules.offboarding.export import DEFAULT_ROWS_PER_TABLE, TenantExportS
 from app.modules.offboarding.files_archive import TenantFilesArchiveService
 from app.modules.offboarding.lifecycle import (
     DEFAULT_GRACE_DAYS,
+    DependentTenantsError,
     OffboardingStateError,
     TenantOffboardingService,
 )
@@ -237,12 +238,25 @@ async def request_offboarding(
     TenantContextValidator.ensure_tenant_context(tenant)
 
     service = TenantOffboardingService(session, tenant_id=str(tenant.id), tenant_slug=tenant.slug)
-    record = await service.request(
-        reason=payload.reason,
-        grace_days=payload.grace_days,
-        actor_user_id=str(access.user.id) if access.user else None,
-        actor_email=getattr(access.user, "email", None),
-    )
+    try:
+        record = await service.request(
+            reason=payload.reason,
+            grace_days=payload.grace_days,
+            actor_user_id=str(access.user.id) if access.user else None,
+            actor_email=getattr(access.user, "email", None),
+        )
+    except DependentTenantsError as error:
+        # Срез-190: у партнёра есть живые клиенты. Отказ называет их поимённо —
+        # «нельзя» без списка означало бы искать виновных вручную по всей базе.
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=api_problem_detail(
+                code="OFFBOARDING_HAS_DEPENDENTS",
+                message=str(error),
+                details={"dependents": error.slugs},
+                error_type="offboarding",
+            ),
+        ) from error
     return _serialize_offboarding(record)
 
 

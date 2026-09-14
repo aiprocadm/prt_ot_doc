@@ -170,6 +170,12 @@ class TenantOffboardingService:
         if existing is not None and existing.status == "grace":
             return existing
 
+        # Срез-190: партнёр с живыми клиентами не уходит молча. Подробности
+        # решения — в блоке «каскад по иерархии» в конце модуля.
+        dependents = await active_dependents(self.session, tenant_id=self.tenant_id)
+        if dependents:
+            raise DependentTenantsError(dependents)
+
         now = _utcnow()
         record = TenantOffboarding(
             tenant_id=self.tenant_id,
@@ -293,3 +299,76 @@ class TenantOffboardingService:
             grace_expired=_as_utc(grace_until) <= _utcnow(),
             tables=plans,
         )
+
+
+# ---------------------------------------------------------------------------
+# OPS-72 разд. 72.3 (срез-190): каскад по иерархии.
+# ---------------------------------------------------------------------------
+#
+# Строка держала остаток «каскад по иерархии (BIZ-52)»: он ждал самой иерархии.
+# Иерархия есть (партнёр -> его клиенты), и вопрос стал конкретным: что
+# происходит с клиентами, когда уходит ПАРТНЁР.
+#
+# РЕШЕНИЕ (2026-09-14, делегировано владельцем): НЕ каскадное удаление, а
+# ОТКАЗ со списком.
+#
+# Почему не каскад. Клиенты партнёра — самостоятельные организации со своими
+# договорами и своими 152-ФЗ обязательствами. Удалить их данные потому, что их
+# продавец расторг договор с платформой, значит принять решение за них. Ошибка
+# здесь необратима: восстановить удалённое нечем.
+#
+# Почему не «молча разрешить». Удалённый партнёр оставляет клиентов сиротами:
+# у них остаётся родитель, которого нет, наследование бренда ведёт в никуда, а
+# отвечать на их обращения некому.
+#
+# Поэтому: заявка партнёра с живыми клиентами ОТКЛОНЯЕТСЯ и называет их
+# поимённо. Владелец платформы решает, что с ними — перевести другому партнёру
+# или офбордить каждого отдельно, его собственным решением.
+
+
+class DependentTenantsError(OffboardingStateError):
+    """У арендатора есть живые клиенты: удалять его рано."""
+
+    def __init__(self, slugs: list[str]) -> None:
+        self.slugs = slugs
+        listed = ", ".join(slugs[:10]) + (" и др." if len(slugs) > 10 else "")
+        super().__init__(
+            "Нельзя расторгнуть договор с партнёром, пока у него есть действующие "
+            f"клиенты ({len(slugs)}): {listed}. Переведите их другому партнёру или "
+            "офбордите каждого отдельным решением — удалять их данные вместе с "
+            "партнёром платформа не вправе."
+        )
+
+
+async def active_dependents(session: AsyncSession, *, tenant_id: str) -> list[str]:
+    """Слаги живых клиентов арендатора.
+
+    Живой — это не находящийся в офбординге: арендатор, который сам уже уходит,
+    не должен удерживать партнёра.
+    """
+
+    from app.models.models import Tenant  # noqa: PLC0415 - цикл импорта
+
+    children = (
+        (await session.execute(select(Tenant).where(Tenant.parent_id == str(tenant_id))))
+        .scalars()
+        .all()
+    )
+    if not children:
+        return []
+
+    child_ids = [str(child.id) for child in children]
+    rows = (
+        (
+            await session.execute(
+                select(TenantOffboarding).where(
+                    TenantOffboarding.tenant_id.in_(child_ids),
+                    TenantOffboarding.status.in_(("grace", "purged")),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    gone = {str(row.tenant_id) for row in rows}
+    return sorted(str(child.slug or child.id) for child in children if str(child.id) not in gone)
