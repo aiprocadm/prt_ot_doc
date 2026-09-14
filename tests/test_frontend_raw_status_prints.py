@@ -56,14 +56,16 @@ _ATTRIBUTE_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=\s*$")
 #: Долг: экран -> сколько мест ещё печатают код. Число обязано УБЫВАТЬ.
 #: Убрать строку, когда экран починен целиком.
 RAW_PRINT_DEBT: dict[str, int] = {
+    "frontend/src/components/JobTimeline.tsx": 1,
     "frontend/src/components/common/LegalAcceptanceBanner.tsx": 1,
     "frontend/src/components/common/LegalLinks.tsx": 1,
-    "frontend/src/components/JobTimeline.tsx": 1,
     "frontend/src/components/wizard/WizardJobTimeline.tsx": 1,
     "frontend/src/features/branches/BranchTable.tsx": 1,
     "frontend/src/features/companies/CompanyTable.tsx": 1,
     "frontend/src/features/documents/DocumentPreview.tsx": 2,
     "frontend/src/features/files/FileList.tsx": 1,
+    "frontend/src/pages/PipelineBuilderPage.tsx": 1,
+    "frontend/src/pages/PipelineRunDetails.tsx": 1,
     "frontend/src/pages/admin/AdminPage.tsx": 1,
     "frontend/src/pages/admin/BillingPage.tsx": 1,
     "frontend/src/pages/approvals/ApprovalRoutesPage.tsx": 1,
@@ -79,21 +81,16 @@ RAW_PRINT_DEBT: dict[str, int] = {
     "frontend/src/pages/fire-training/FireTrainingPage.tsx": 3,
     "frontend/src/pages/managed-clients/ClientCockpitPage.tsx": 1,
     "frontend/src/pages/notifications/NotificationsPage.tsx": 2,
+    "frontend/src/pages/packs/PackRunDetailsPage.tsx": 1,
     "frontend/src/pages/packs/PackagePresetsPage.tsx": 1,
     "frontend/src/pages/packs/PackageProfilesPage.tsx": 1,
-    "frontend/src/pages/packs/PackRunDetailsPage.tsx": 2,
-    "frontend/src/pages/PipelineBuilderPage.tsx": 1,
-    "frontend/src/pages/PipelineRunDetails.tsx": 1,
-    "frontend/src/pages/PipelineRuns.tsx": 1,
     "frontend/src/pages/search/components/SearchResultsList.tsx": 1,
-    "frontend/src/pages/signatures/SignaturesPage.tsx": 1,
     "frontend/src/pages/sout/SoutPage.tsx": 1,
     "frontend/src/pages/warehouse/WarehousePage.tsx": 3,
     "frontend/src/widgets/dashboard/DashboardTabsSection.tsx": 1,
     "frontend/src/widgets/dashboard/RecentObjectsSection.tsx": 1,
     "frontend/src/widgets/tasks/TaskFocusCard.tsx": 2,
     "frontend/src/widgets/workflow/WorkflowDefinitionsCard.tsx": 2,
-    "frontend/src/widgets/workflow/WorkflowRuntimePanel.tsx": 3,
 }
 
 

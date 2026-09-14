@@ -1,3 +1,4 @@
+import { statusLabel } from "@/components/common/StatusBadge";
 import { Can } from "@/components/permissions/Can";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Button } from "@/components/ui/button";
@@ -60,7 +61,7 @@ export const WorkflowRuntimePanel = ({
                 </div>
                 <div className="text-xs text-muted-foreground">
                   узел: {instance.current_node_id ?? "—"} · задач:{" "}
-                  {instance.open_tasks} · статус: {instance.status}
+                  {instance.open_tasks} · статус: {statusLabel(instance.status)}
                 </div>
                 <div className="text-xs text-muted-foreground">
                   корреляция: {instance.correlation_id ?? "—"}
@@ -106,7 +107,7 @@ export const WorkflowRuntimePanel = ({
           <div key={task.id} className="rounded border p-3">
             <div className="font-medium">{task.title}</div>
             <div className="text-sm text-muted-foreground">
-              {task.node_id} · {task.status}
+              {task.node_id} · {statusLabel(task.status)}
             </div>
             <div className="mt-1 text-xs text-muted-foreground">
               Исполнитель:{" "}
@@ -180,7 +181,9 @@ export const WorkflowRuntimePanel = ({
               Сущность: {selectedInstance.entity_type} /{" "}
               {selectedInstance.entity_id}
             </div>
-            <div className="text-sm">Статус: {selectedInstance.status}</div>
+            <div className="text-sm">
+              Статус: {statusLabel(selectedInstance.status)}
+            </div>
             <div className="text-sm">
               Корреляция: {selectedInstance.correlation_id ?? "—"}
             </div>
