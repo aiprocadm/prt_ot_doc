@@ -158,7 +158,7 @@ from app.schemas.managed_clients import (
 )
 from app.services.client_change_signals import enqueue_change_recorded
 from app.services.client_dq_signals import DqSignalsOutcome, collect_dq_signals
-from app.services.client_report_mail import send_report_to_client
+from app.services.client_report_mail import ReportSendStatus, send_report_to_client
 from app.services.discipline_applicability import collect_applicability, only_applicable
 from app.services.tenants.bootstrap.service import BootstrapTenantService
 
@@ -1991,6 +1991,11 @@ async def send_client_audit_report(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Report not found")
 
     outcome = await send_report_to_client(client, report)
+    if outcome.status is ReportSendStatus.SENT:
+        # Отметка ставится на УСПЕШНУЮ доставку: это и есть подтверждение
+        # адреса, после которого автоматическая рассылка становится безопасной.
+        client.report_verified_at = datetime.now(tz=timezone.utc)
+        await session.flush()
     return ReportSendRead(
         status=outcome.status.value, reason=outcome.reason, recipient=outcome.recipient
     )
@@ -2142,6 +2147,15 @@ async def update_managed_client(
 
     if target_status is not None:
         row.contract_status = target_status
+
+    # BIZ-51 срез-193: смена адреса ОБНУЛЯЕТ подтверждение доставки. Новый
+    # адрес — снова непроверенный, и автоматика на него не пишет, пока отчёт не
+    # уйдёт туда вручную. Иначе опечатка в правке адреса сразу уехала бы в
+    # автоматическую рассылку — ровно то, ради чего автоматику и сдерживали.
+    new_email = fields.get("report_email", None)
+    if "report_email" in fields and (new_email or "") != (row.report_email or ""):
+        row.report_verified_at = None
+
     for field, value in fields.items():
         setattr(row, field, value)
 

@@ -73,6 +73,25 @@ def _ping_libreoffice(settings: Settings) -> bool:
     return bool(settings.libreoffice_bin)
 
 
+async def _check_schema(app: FastAPI, settings: Settings):
+    """OPS-74 разд. 74.1: готов ли экземпляр по СОСТОЯНИЮ СХЕМЫ.
+
+    База отвечает на ping задолго до того, как на неё накатили миграции этого
+    экземпляра. Без этой проверки новый экземпляр рапортует «готов» и получает
+    трафик, которого не может обслужить. Правило несимметрично (код впереди базы —
+    не готов; база впереди кода — готов) — подробности в core/schema_readiness.py.
+    """
+
+    from app.core import schema_readiness  # noqa: PLC0415 - alembic тяжёлый
+
+    # Тот же приём, что у _ping_postgres: в тестах подсовывают свою фабрику,
+    # в бою берём соединение движка — alembic_version живёт в общей схеме.
+    open_connection = getattr(app.state, "test_sessionmaker", None) or engine.connect
+    return await schema_readiness.check(
+        open_connection, app_env=getattr(settings, "app_env", "development")
+    )
+
+
 def _resolve_settings(request: Request) -> Settings:
     return getattr(request.app.state, "settings", None) or get_settings()
 
@@ -123,9 +142,18 @@ async def ready(request: Request) -> JSONResponse:
     except Exception:
         logger.exception("health.ready.libreoffice_failed")
 
-    required_ok = statuses["postgres"] and statuses["redis"] and statuses["minio"]
+    # OPS-74 разд. 74.1 (срез-184): схема — такое же условие готовности, как
+    # живая база. Экземпляр, чьи миграции ещё не накатаны, обязан НЕ получать
+    # трафик, иначе раскат без простоя раздаёт пользователям ошибки.
+    schema_state = await _check_schema(request.app, settings)
+    statuses["schema"] = schema_state.ready
+
+    required_ok = (
+        statuses["postgres"] and statuses["redis"] and statuses["minio"] and schema_state.ready
+    )
     content = {
         "status": "ok" if required_ok else "degraded",
+        "schema": schema_state.as_dict(),
         "postgres": statuses["postgres"],
         "redis": statuses["redis"],
         "minio": statuses["minio"],

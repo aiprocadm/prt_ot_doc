@@ -427,6 +427,46 @@ class Settings(BaseSettings):
     # Старый одиночный APP_SECRET_ENCRYPTION_KEY продолжает работать под kid "v1".
     secret_encryption_keys: str = Field("", alias="APP_SECRET_ENCRYPTION_KEYS")
     secret_encryption_active_kid: str = Field("", alias="APP_SECRET_ENCRYPTION_ACTIVE_KID")
+    # SEC-67 (2026-09-14): откуда берётся связка ключей — ``env`` (переменные выше,
+    # умолчание) или ``command`` (внешнее хранилище: агент Vault, CLI облачного KMS,
+    # sops). Подключение хранилища — настройка, а не разработка; подробности и формат
+    # ответа команды — в core/key_provider.py.
+    # OPS-72 разд. 72.3 (2026-09-14): сколько дней живут резервные копии. Из кода
+    # это не видно — объявляет тот, кто настраивал копирование. По этому сроку
+    # считается дата, к которой данные удалённого арендатора вытеснятся из копий:
+    # выборочно удалить строку из копии невозможно, не сделав копию непригодной.
+    backup_retention_days: int = Field(35, alias="BACKUP_RETENTION_DAYS")
+    # BIZ-50 разд. 50.2 (2026-09-14): отправка комплекта в ЭДО.
+    #   disabled — умолчание, прежний честный отказ 409 (ничего не меняется);
+    #   file     — рабочая выгрузка НАСТОЯЩИМ архивом без всякого оператора;
+    #   command  — пакет отдаётся внешней команде оператора (архив в stdin,
+    #              идентификатор отправления — в stdout).
+    # Выгрузка файлом означает «пакет собран», а НЕ «получатель принял».
+    edo_provider: str = Field("disabled", alias="EDO_PROVIDER")
+    edo_command: str = Field("", alias="EDO_COMMAND")
+    edo_command_timeout_seconds: float = Field(60.0, alias="EDO_COMMAND_TIMEOUT_SECONDS")
+    # SEC-68 разд. 68.1 (2026-09-14): второй канал доставки одноразового кода.
+    #   disabled — умолчание, честный отказ «канал не настроен»;
+    #   command  — сообщение отдаётся внешней команде (CLI оператора связи,
+    #              http-обёртка). Номер — первым аргументом, текст — в stdin.
+    # SDK конкретного оператора намеренно не берётся: его пришлось бы
+    # выкорчёвывать при смене поставщика, а команда есть у всех.
+    sms_provider: str = Field("disabled", alias="SMS_PROVIDER")
+    sms_command: str = Field("", alias="SMS_COMMAND")
+    sms_command_timeout_seconds: float = Field(15.0, alias="SMS_COMMAND_TIMEOUT_SECONDS")
+    # SEC-66 разд. 66.1 (2026-09-14): в каком регионе РАЗВЁРНУТА система. Объявляет
+    # тот, кто разворачивал: по адресу хранилища регион не определяется, а угаданное
+    # значение, поданное как измеренное, — худший из возможных ответов. С этим
+    # значением сверяется поле storage_location каждой строки реестра обработки ПДн.
+    data_residency_region: str = Field("RU", alias="DATA_RESIDENCY_REGION")
+    secret_key_provider: str = Field("env", alias="APP_SECRET_KEY_PROVIDER")
+    secret_key_command: str = Field("", alias="APP_SECRET_KEY_COMMAND")
+    secret_key_command_timeout_seconds: float = Field(
+        10.0, alias="APP_SECRET_KEY_COMMAND_TIMEOUT_SECONDS"
+    )
+    secret_key_provider_ttl_seconds: float = Field(
+        300.0, alias="APP_SECRET_KEY_PROVIDER_TTL_SECONDS"
+    )
     # SEC-64 §64.3: guard outbound webhooks against SSRF (internal/private targets).
     # Default on; operator kill-switch. Enforcement is environment-aware (strict in
     # production/staging, permissive in development/test) — see core/ssrf_guard.py.
@@ -953,6 +993,10 @@ class Settings(BaseSettings):
             "migration_database_url_env",
             "secret_encryption_key",
             "secret_encryption_keys",
+            # Команда получения ключей может нести токен доступа к хранилищу.
+            "secret_key_command",
+            # То же у команды отправки SMS: в ней бывает ключ оператора связи.
+            "sms_command",
         ):
             if key in payload and payload[key]:
                 payload[key] = "***"

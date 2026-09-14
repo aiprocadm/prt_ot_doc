@@ -14,9 +14,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session, get_tenant_record
 from app.api.deps.tracing import get_trace_id
 from app.core.audit_decorator import audit_operation
+from app.core.config import get_settings
 from app.core.errors import api_problem_detail
 from app.core.inbound_webhook_auth import enforce_webhook_hmac
 from app.core.security import AccessContext, abac
+from app.models.approval_workflow import EdoDirection, EdoMessageStatus
 from app.models.document import DocumentVersion
 from app.models.job_engine import InboundWebhookDedup
 from app.models.models import IdempotencyStatus, RoleEnum, SignatureRequest, Tenant
@@ -30,7 +32,9 @@ from app.models.workflow import (
     EdoStatus,
     SignatureType,
 )
+from app.services import edo_providers
 from app.services.billing import BillingService
+from app.services.file_storage import FileStorageService
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
 from app.services.outbox import OutboxService
 from app.services.pep_signing import (
@@ -727,7 +731,135 @@ async def send_to_edo(
     )
     if replay is not None:
         return replay
-    raise _provider_not_configured("edo")
+
+    # СРЕЗ-187 (BIZ-50): ручка перестала быть заведомым тупиком. Поставщик
+    # выбирается настройкой; умолчание `disabled` сохраняет прежний 409, поэтому
+    # у тех, кто ЭДО не подключал, ничего не меняется.
+    settings = get_settings()
+    provider = edo_providers.provider_name(settings)
+    if provider == edo_providers.DISABLED_PROVIDER:
+        raise _provider_not_configured("edo")
+
+    version = await session.get(DocumentVersion, payload.document_version_id)
+    if version is None or str(version.tenant_id) != str(tenant.id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=api_problem_detail(
+                code="EDO_DOCUMENT_NOT_FOUND",
+                message="Document version not found",
+                error_type="edo",
+            ),
+        )
+
+    signatures = (
+        (
+            await session.execute(
+                # Подписи адресуются парой (тип объекта, идентификатор), а не
+                # отдельной колонкой на версию документа: подписывают не только
+                # документы. Перепутать это значило бы класть в пакет пустой
+                # список подписей у подписанного документа.
+                select(SignatureRequest).where(
+                    SignatureRequest.tenant_id == str(tenant.id),
+                    SignatureRequest.object_type == "document_version",
+                    SignatureRequest.object_id == str(version.id),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    package = edo_providers.EdoPackage(
+        document_version_id=str(version.id),
+        file_key=version.file_key,
+        file_name=(version.file_key or "document").rsplit("/", 1)[-1] or "document",
+        recipient=payload.recipient,
+        operator_code=payload.operator_code,
+        signatures=[
+            {
+                "id": str(row.id),
+                "kind": str(getattr(row.signature_type, "value", row.signature_type)),
+                "status": str(getattr(row.status, "value", row.status)),
+                "signed_at": row.signed_at.isoformat() if getattr(row, "signed_at", None) else None,
+            }
+            for row in signatures
+        ],
+    )
+
+    storage = FileStorageService.default()
+    try:
+        document_bytes = storage.get(version.file_key)
+    except Exception as exc:  # файл пропал из хранилища — это отказ, а не пустой пакет
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=api_problem_detail(
+                code="EDO_DOCUMENT_FILE_MISSING",
+                message=f"Document file is not readable: {type(exc).__name__}",
+                error_type="edo",
+            ),
+        ) from exc
+
+    try:
+        archive = edo_providers.build_archive(
+            package, tenant_id=str(tenant.id), document_bytes=document_bytes
+        )
+        if provider == edo_providers.FILE_PROVIDER:
+            artifact_key = f"edo/{tenant.id}/{version.id}/{uuid4().hex}.zip"
+            storage.put(artifact_key, archive, content_type="application/zip")
+            result = edo_providers.EdoDispatchResult(
+                provider_code=edo_providers.FILE_PROVIDER_CODE,
+                external_id=artifact_key,
+                status=EdoMessageStatus.SENT.value,
+                detail=(
+                    "Пакет выгружен файлом. Получение адресатом НЕ подтверждается: "
+                    "передайте пакет выбранным способом."
+                ),
+                artifact_key=artifact_key,
+            )
+        else:
+            external_id = edo_providers.dispatch_via_command(
+                archive, package=package, settings=settings
+            )
+            result = edo_providers.EdoDispatchResult(
+                provider_code=(payload.resolved_provider() or "edo-operator"),
+                external_id=external_id,
+                status=EdoMessageStatus.SENT.value,
+                detail="Пакет принят оператором ЭДО",
+            )
+    except edo_providers.EdoDispatchError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=api_problem_detail(
+                code="EDO_DISPATCH_FAILED", message=str(exc), error_type="edo"
+            ),
+        ) from exc
+
+    message = EdoMessage(
+        tenant_id=str(tenant.id),
+        direction=EdoDirection.OUTGOING,
+        document_version_id=str(version.id),
+        provider_code=result.provider_code,
+        operator_code=payload.operator_code,
+        external_id=result.external_id,
+        status=result.status,
+        created_by=str(access.user.id),
+        payload_json={"recipient": payload.recipient, "artifact_key": result.artifact_key},
+    )
+    session.add(message)
+    await session.commit()
+
+    body = {
+        "id": message.id,
+        "external_id": result.external_id,
+        "status": result.status,
+        "detail": result.detail,
+        "artifact_key": result.artifact_key,
+        **provider_response_meta(result.provider_code),
+    }
+    if idem_service is not None:
+        record = getattr(request.state, "idempotency_record", None)
+        if record is not None:
+            await idem_service.store_success(record, status_code=200, body=body)
+    return body
 
 
 @router.get("/edo-workflow/messages")

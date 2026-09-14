@@ -392,5 +392,11 @@ class WebhookEndpoint(TenantBaseModel):
     headers: Mapped[dict[str, Any] | None] = mapped_column(
         MutableDict.as_mutable(JSON), nullable=True
     )
+    # OPS-73 разд. 73.1 (срез-191): по какой схеме слать ЭТОМУ подписчику.
+    # NULL = умолчание развёртывания (сейчас «1»). Версия живёт у ПОДПИСЧИКА, а
+    # не одна на всю платформу: переключение схемы — ломающее изменение, и
+    # подписчики готовы к нему в разное время. Ровно это и есть deprecation по
+    # разд. 73.2: старая схема продолжает работать, пока её кто-то использует.
+    schema_version: Mapped[str | None] = mapped_column(String(8), nullable=True)
 
     __table_args__ = (Index("ix_webhook_endpoint_tenant_enabled", "tenant_id", "is_enabled"),)

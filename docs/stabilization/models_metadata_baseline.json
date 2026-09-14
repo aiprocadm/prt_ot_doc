@@ -2502,6 +2502,10 @@
         "DATETIME"
       ],
       [
+        "otp_phone",
+        "VARCHAR(32)"
+      ],
+      [
         "package_run_id",
         "VARCHAR"
       ],
@@ -6592,6 +6596,60 @@
         "INTEGER"
       ]
     ],
+    "import_profiles": [
+      [
+        "code",
+        "VARCHAR(64)"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "description",
+        "TEXT"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "mapping",
+        "JSON"
+      ],
+      [
+        "signature",
+        "JSON"
+      ],
+      [
+        "splits",
+        "JSON"
+      ],
+      [
+        "target",
+        "VARCHAR(64)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "title",
+        "VARCHAR(255)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
     "import_row": [
       [
         "action",
@@ -7582,8 +7640,16 @@
         "VARCHAR(320)"
       ],
       [
+        "report_last_auto_sent_at",
+        "DATETIME"
+      ],
+      [
         "report_opt_in",
         "BOOLEAN"
+      ],
+      [
+        "report_verified_at",
+        "DATETIME"
       ],
       [
         "responsible_person_id",
@@ -12050,6 +12116,60 @@
         "INTEGER"
       ]
     ],
+    "reseller_prices": [
+      [
+        "amount_minor",
+        "INTEGER"
+      ],
+      [
+        "client_tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "currency",
+        "VARCHAR(3)"
+      ],
+      [
+        "deleted_at",
+        "DATETIME"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "note",
+        "VARCHAR(255)"
+      ],
+      [
+        "period",
+        "VARCHAR(16)"
+      ],
+      [
+        "reseller_tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "valid_from",
+        "DATE"
+      ],
+      [
+        "valid_to",
+        "DATE"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
     "risk_assessment_items": [
       [
         "assessment_id",
@@ -14440,6 +14560,52 @@
         "VARCHAR(6)"
       ]
     ],
+    "tenant_domains": [
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "domain",
+        "VARCHAR(253)"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "last_checked_at",
+        "DATETIME"
+      ],
+      [
+        "last_error",
+        "VARCHAR(255)"
+      ],
+      [
+        "status",
+        "VARCHAR(16)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "verification_token",
+        "VARCHAR(64)"
+      ],
+      [
+        "verified_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
     "tenant_integrations_keys": [
       [
         "created_at",
@@ -16160,6 +16326,10 @@
       [
         "name",
         "VARCHAR(255)"
+      ],
+      [
+        "schema_version",
+        "VARCHAR(8)"
       ],
       [
         "secret",

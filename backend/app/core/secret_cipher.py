@@ -188,10 +188,16 @@ def load_keyring(settings=None) -> tuple[dict[str, bytes], str]:
     variable encrypts under a guessable key.
     """
 
-    settings = settings or _settings()
-    keyring = _parse_keyring(getattr(settings, "secret_encryption_keys", "") or "")
+    from app.core.key_provider import get_key_material  # noqa: PLC0415 - цикл импорта
 
-    legacy = _decode_key(getattr(settings, "secret_encryption_key", "") or "")
+    settings = settings or _settings()
+    # SEC-67 (2026-09-14): связку отдаёт провайдер — окружение или внешнее
+    # хранилище ключей. Ошибка провайдера намеренно НЕ гасится: молчаливый откат
+    # на окружение означал бы шифрование другим ключом при недоступном KMS.
+    material = get_key_material(settings)
+    keyring = _parse_keyring(material.keys)
+
+    legacy = _decode_key(material.legacy_key)
     if legacy is not None:
         # Явная запись v1 в keyring приоритетнее устаревшей одиночной переменной.
         keyring.setdefault(_LEGACY_KID, legacy)
@@ -204,12 +210,13 @@ def load_keyring(settings=None) -> tuple[dict[str, bytes], str]:
             )
         keyring = {_LEGACY_KID: _dev_key(settings)}
 
-    active = (getattr(settings, "secret_encryption_active_kid", "") or "").strip()
+    active = material.active_kid.strip()
     if active:
         if active not in keyring:
             raise SecretKeyringError(
-                f"APP_SECRET_ENCRYPTION_ACTIVE_KID={active!r} is not in the keyring "
-                f"(known: {sorted(keyring)})"
+                f"active key id {active!r} is not in the keyring "
+                f"(known: {sorted(keyring)}); source: APP_SECRET_ENCRYPTION_ACTIVE_KID "
+                "or the 'active_kid' field returned by APP_SECRET_KEY_COMMAND"
             )
     else:
         # Без явного выбора активен единственный/первый ключ: требовать ACTIVE_KID

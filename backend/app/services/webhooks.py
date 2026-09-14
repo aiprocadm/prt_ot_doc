@@ -20,7 +20,13 @@ from app.core.metrics import Metrics, get_metrics
 from app.core.secret_cipher import decrypt_secret
 from app.core.ssrf_guard import UnsafeWebhookURLError, assert_safe_webhook_url
 from app.core.tracing import get_trace_id
-from app.core.webhook_contract import WEBHOOK_SCHEMA_VERSION, WEBHOOK_SCHEMA_VERSION_HEADER
+from app.core.webhook_contract import (
+    WEBHOOK_SCHEMA_VERSION,
+    WEBHOOK_SCHEMA_VERSION_HEADER,
+    WEBHOOK_SCHEMA_VERSION_V2,
+    build_envelope_v2,
+    resolve_schema_version,
+)
 from app.models.models import WebhookEndpoint, WebhookSubscription
 
 logger = logging.getLogger(__name__)
@@ -289,6 +295,7 @@ class WebhookDispatcher:
                     endpoint_id=row.id,
                     secret=decrypt_secret(row.secret, tenant_id=str(row.tenant_id or "") or None),
                     timeout_ms=row.timeout_ms,
+                    schema_version=getattr(row, "schema_version", None),
                 )
             )
         return destinations
@@ -505,14 +512,45 @@ class WebhookDispatcher:
         async with _client_ctx as _acm_client:
             client = cast(httpx.AsyncClient, _acm_client)
             for dest in destinations:
-                merged_headers = {**request_headers, **dest.headers}
-                body = json.dumps(envelope, separators=(",", ":")).encode("utf-8")
+                # OPS-73 срез-191: схема выбирается ПОШТУЧНО. Версия 1 остаётся
+                # ровно такой, какой была, — иначе переключение сломало бы всех
+                # живых подписчиков разом.
+                version = resolve_schema_version(
+                    dest.schema_version,
+                    default=getattr(self.settings, "webhook_schema_version", None),
+                )
+                if version == WEBHOOK_SCHEMA_VERSION_V2:
+                    dest_envelope = build_envelope_v2(
+                        event_id=event_id,
+                        event_type=event_type,
+                        tenant_id=tenant_id,
+                        occurred_at=envelope["occurred_at"],
+                        correlation_id=trace_id,
+                        payload=payload,
+                    )
+                    # ЕДИНИЦА ВРЕМЕНИ — СЕКУНДЫ. В версии 1 этот конвейер ставил
+                    # МИЛЛИСЕКУНДЫ, а конвейер очереди — секунды, и подписчик,
+                    # проверявший подпись по описанию, получал несходящуюся
+                    # подпись на половине доставок.
+                    sign_ts = str(int(time()))
+                else:
+                    dest_envelope = envelope
+                    sign_ts = timestamp_ms
+
+                merged_headers = {
+                    **request_headers,
+                    WEBHOOK_SCHEMA_VERSION_HEADER: version,
+                    "X-Timestamp": sign_ts,
+                    **dest.headers,
+                }
+                body = json.dumps(dest_envelope, separators=(",", ":")).encode("utf-8")
                 if dest.secret:
-                    sign_payload = f"{timestamp_ms}.".encode("utf-8") + body
+                    sign_payload = f"{sign_ts}.".encode("utf-8") + body
                     signature = hmac.new(
                         dest.secret.encode("utf-8"), sign_payload, sha256
                     ).hexdigest()
                     merged_headers["X-Signature"] = f"v1={signature}"
+                    merged_headers["X-Signature-Ts"] = sign_ts
                 if self.settings.webhook_ssrf_guard_enabled:
                     try:
                         await assert_safe_webhook_url(dest.url, app_env=self.settings.app_env)
@@ -564,6 +602,10 @@ class WebhookDestination:
     endpoint_id: str | None = None
     secret: str | None = None
     timeout_ms: int = 5000
+    # OPS-73 срез-191: по какой схеме слать ЭТОМУ подписчику. None = умолчание
+    # развёртывания. Версия у подписчика, а не одна на платформу: переключение —
+    # ломающее изменение, и подписчики готовы к нему в разное время.
+    schema_version: str | None = None
 
 
 class _null_async_context:

@@ -72,6 +72,20 @@ class ManagedClient(TenantBaseModel, SoftDeleteMixin):
     report_opt_in: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="0"
     )
+    # BIZ-51 срез-193 (разд. 51.3): когда на ЭТОТ адрес отчёт дошёл в последний
+    # раз. Не «когда отправили», а «когда дошло»: автоматическая рассылка идёт
+    # ТОЛЬКО на подтверждённые адреса. Срез-11 сознательно не включил
+    # автоматику с доводом «первая же ошибка адреса уедет всем разом» — довод
+    # верный, и снят он не отменой, а условием: адрес, на который уже приходило
+    # письмо, ошибочным быть не может.
+    # Смена адреса обнуляет подтверждение: новый адрес — снова непроверенный.
+    report_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Когда отчёт уходил автоматически. Нужен, чтобы не слать дважды за период.
+    report_last_auto_sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "name", name="uq_managed_client_name"),

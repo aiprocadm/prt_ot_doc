@@ -13,7 +13,9 @@
 
 from __future__ import annotations
 
-from sqlalchemy import LargeBinary, String, UniqueConstraint
+from datetime import datetime
+
+from sqlalchemy import DateTime, LargeBinary, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import TenantBaseModel
@@ -56,3 +58,35 @@ class TenantBranding(TenantBaseModel):
     logo_media_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
     favicon_image: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     favicon_media_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
+class TenantDomain(TenantBaseModel):
+    """Собственный домен партнёра (BIZ-52 разд. 52.2, срез-189).
+
+    ЧТО БЫЛО. Остаток строки звучал так: «домен и поддомен партнёра
+    (инфраструктурный пункт: DNS и сертификаты вне кода)». DNS и сертификаты
+    действительно снаружи. Но ВЛАДЕНИЕ доменом обязано подтверждаться кодом:
+    иначе партнёр заявляет чужой домен, и платформа начинает отдавать под ним
+    его бренд и его страницу входа.
+
+    Подтверждение — TXT-запись с одноразовым словом: способ, который понимают
+    все регистраторы и который не требует, чтобы домен уже куда-то указывал.
+
+    Домен хранится в нижнем регистре и уникален ГЛОБАЛЬНО, а не в пределах
+    арендатора: два арендатора с одним доменом — это спор о владении, а не
+    две настройки.
+    """
+
+    __tablename__ = "tenant_domains"
+    __table_args__ = (UniqueConstraint("domain", name="uq_tenant_domains_domain"),)
+
+    domain: Mapped[str] = mapped_column(String(253), nullable=False, index=True)
+    #: Одноразовое слово для TXT-записи `_ptd-verify.<домен>`.
+    verification_token: Mapped[str] = mapped_column(String(64), nullable=False)
+    #: pending | verified | failed. Строка, а не перечисление: набор состояний
+    #: подтверждения меняется чаще, чем это стоит миграции типа.
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: Почему последняя проверка не удалась — человеку, а не в журнал.
+    last_error: Mapped[str | None] = mapped_column(String(255), nullable=True)

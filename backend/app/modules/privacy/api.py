@@ -23,11 +23,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
+from app.core.config import get_settings
 from app.core.errors import api_problem_detail
 from app.core.feature_flags import is_feature_enabled
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.models.models import Tenant
+from app.modules.privacy import residency
 from app.modules.privacy.consents import (
     PdnConsentService,
     PdnErasureService,
@@ -60,6 +62,7 @@ from app.schemas.privacy import (
     PdnProcessingActivityEntry,
     PdnProcessingActivityPage,
     PdnProcessingActivityUpsert,
+    PdnResidencyReport,
     PdnSubjectExport,
 )
 from app.services.audit import AuditService
@@ -583,6 +586,37 @@ async def deactivate_processing_activity(
             ),
         )
     return _to_activity_entry(activity)
+
+
+@router.get(
+    "/residency",
+    response_model=PdnResidencyReport,
+    dependencies=[FeatureGate],
+    summary="Сверка локализации ПДн с регионом развёртывания (152-ФЗ разд. 66.1)",
+)
+async def check_pdn_residency(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: PdnAccess,
+) -> PdnResidencyReport:
+    """Строка реестра «данные хранятся в РФ» — это УТВЕРЖДЕНИЕ о системе.
+
+    До среза-185 его не сверял никто: арендатор писал в реестре одно, система
+    могла быть развёрнута в другом регионе, и узнать об этом можно было только
+    на проверке. Здесь объявленное сверяется с `DATA_RESIDENCY_REGION` — тем,
+    что объявил разворачивавший систему.
+
+    Регион НЕ угадывается по адресу хранилища: по адресу он не определяется, а
+    угаданное значение, поданное как измеренное, — худший из возможных ответов.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _ = access
+
+    service = PdnProcessingRegistryService(session, tenant_id=str(tenant.id))
+    activities = await service.list_activities(active_only=True)
+    findings = residency.evaluate(activities, settings=get_settings())
+    return PdnResidencyReport(**residency.summarize(findings))
 
 
 @router.get(

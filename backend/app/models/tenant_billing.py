@@ -8,12 +8,13 @@ preserved by re-exports in models.py / __init__.py.
 from __future__ import annotations
 
 import enum
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
     JSON,
     Boolean,
+    Date,
     DateTime,
     Enum,
     ForeignKey,
@@ -382,3 +383,102 @@ class WebhookSubscription(SharedModel):
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     __table_args__ = (Index("ix_webhook_subscription_tenant_event", "tenant_id", "event_type"),)
+
+
+class ResellerPrice(SharedModel, SoftDeleteMixin):
+    """Цена, которую ПАРТНЁР назначил своему клиенту (BIZ-52 разд. 52.4, срез-189).
+
+    ЧТО БЫЛО. Остаток строки звучал так: «выручка партнёра по клиентам упирается
+    в отсутствие модели цен — партнёр назначает цену сам (решение среза-8), но
+    храним её негде». То есть отчёт о выручке было НЕ ИЗ ЧЕГО считать.
+
+    ПОЧЕМУ ОТДЕЛЬНАЯ ТАБЛИЦА, А НЕ ПОЛЕ В ПОДПИСКЕ. Цена платформы для партнёра
+    и цена партнёра для клиента — разные числа, и вторая платформе не
+    принадлежит: партнёр назначает её сам, может менять и может держать
+    несколько периодов истории. Положить её в подписку значило бы смешать два
+    разных договора в одной строке.
+
+    ИСТОРИЯ ХРАНИТСЯ, А НЕ ПЕРЕЗАПИСЫВАЕТСЯ. У строки есть срок действия:
+    отчёт за прошлый квартал обязан считаться по цене ТОГО квартала, иначе
+    любое повышение задним числом переписывало бы прошлое.
+    """
+
+    __tablename__ = "reseller_prices"
+
+    #: Партнёр, назначивший цену.
+    reseller_tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenant.id"), nullable=False, index=True
+    )
+    #: Клиент партнёра.
+    client_tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenant.id"), nullable=False, index=True
+    )
+    #: Копейки, а не дробное число: деньги в плавающей точке рано или поздно
+    #: дают расхождение на копейку в итогах, и объяснить его невозможно.
+    amount_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="RUB")
+    #: month | quarter | year — за какой период назначена сумма.
+    period: Mapped[str] = mapped_column(String(16), nullable=False, default="month")
+    valid_from: Mapped[date] = mapped_column(Date, nullable=False)
+    #: NULL = «действует до сих пор».
+    valid_to: Mapped[date | None] = mapped_column(Date, nullable=True)
+    note: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    __table_args__ = (
+        Index(
+            "ix_reseller_prices_pair_from",
+            "reseller_tenant_id",
+            "client_tenant_id",
+            "valid_from",
+        ),
+    )
+
+
+class SavedImportProfile(SharedModel, SoftDeleteMixin):
+    """Профиль сопоставления колонок, заведённый САМИМ арендатором (OPS-71, срез-192).
+
+    ЧТО БЫЛО. Профили источников лежали константами в коде, и остаток строки
+    звучал так: «профили конкурентов (нужны образцы их выгрузок — вопрос
+    владельцу)». То есть поддержка каждого нового формата упиралась в две вещи
+    сразу: достать чужой файл и написать под него код.
+
+    РЕШЕНИЕ. Образцы конкурентов НЕ НУЖНЫ. У клиента, который переезжает, уже
+    есть его собственная выгрузка. Он один раз сопоставляет колонки руками — и
+    сохраняет это сопоставление профилем. В следующий раз файл той же формы
+    опознаётся сам.
+
+    Так система учится у того, у кого файл действительно есть, а не ждёт, пока
+    кто-то раздобудет образец.
+
+    ТАБЛИЦА ОБЩАЯ, СТРОКА — АРЕНДАТОРА: формат выгрузки это его знание о своей
+    прошлой системе, и делиться им между арендаторами нельзя (в заголовках
+    встречаются названия подразделений и фамилии).
+    """
+
+    __tablename__ = "import_profiles"
+
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenant.id"), nullable=False, index=True
+    )
+    code: Mapped[str] = mapped_column(String(64), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    #: Код цели импорта (люди, площадки, нормы СИЗ…).
+    target: Mapped[str] = mapped_column(String(64), nullable=False)
+    #: «поле модели -> заголовок в файле источника».
+    mapping: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
+    #: Разбор составных колонок: «ФИО» -> фамилия/имя/отчество.
+    splits: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
+    #: Заголовки-подписи: по ним файл опознаётся. Требуются ВСЕ.
+    signature: Mapped[list[str]] = mapped_column(
+        MutableList.as_mutable(JSON), nullable=False, default=list
+    )
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "code", name="uq_import_profiles_tenant_code"),
+        Index("ix_import_profiles_tenant_target", "tenant_id", "target"),
+    )

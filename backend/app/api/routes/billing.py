@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,7 +12,9 @@ from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
+from app.domains.reseller import revenue
 from app.models.models import BillingSubscription, BillingSubscriptionStatus, Tenant
+from app.models.tenant_billing import ResellerPrice
 from app.modules.subscription.editions import EDITIONS
 from app.schemas.billing import (
     BillingChangePlanRequest,
@@ -362,3 +365,142 @@ async def billing_invoices(
     _ = access
     items = await BillingService(session).list_invoices(tenant.id, period)
     return [BillingInvoiceRead.model_validate(item) for item in items]
+
+
+# ---------------------------------------------------------------------------
+# BIZ-52 разд. 52.4 (срез-189): цены партнёра для своих клиентов и его выручка.
+# ---------------------------------------------------------------------------
+#
+# Цену партнёр назначает САМ (решение среза-8) — платформа её не диктует. Но
+# хранить её было негде, и отчёт о выручке было не из чего считать.
+#
+# У цены есть СРОК ДЕЙСТВИЯ: перезаписываемая цена переписывает прошлое —
+# подняли тариф в сентябре, и отчёт за июль показывает сентябрьскую сумму.
+# Спорить с таким отчётом невозможно, а партнёр по нему выставляет счета.
+
+
+class ResellerPriceUpsert(BaseModel):
+    client_tenant_id: str = Field(min_length=1, max_length=36)
+    #: Копейки. Дробные рубли в плавающей точке дают расхождение в итогах,
+    #: которое невозможно объяснить.
+    amount_minor: int = Field(ge=0)
+    currency: str = Field(default="RUB", min_length=3, max_length=3)
+    period: str = Field(default="month")
+    valid_from: date
+    valid_to: date | None = None
+    note: str | None = Field(default=None, max_length=255)
+
+
+class ResellerPriceRead(BaseModel):
+    id: str
+    client_tenant_id: str
+    amount_minor: int
+    currency: str
+    period: str
+    valid_from: date
+    valid_to: date | None = None
+    note: str | None = None
+
+
+def _price_read(row: ResellerPrice) -> ResellerPriceRead:
+    return ResellerPriceRead(
+        id=str(row.id),
+        client_tenant_id=str(row.client_tenant_id),
+        amount_minor=int(row.amount_minor),
+        currency=row.currency,
+        period=row.period,
+        valid_from=row.valid_from,
+        valid_to=row.valid_to,
+        note=row.note,
+    )
+
+
+@router.get("/reseller/prices", response_model=list[ResellerPriceRead])
+async def list_reseller_prices(
+    session: SessionDep,
+    tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = Depends(
+        abac(_tenant_resource_id, required_roles=["owner", "admin"], action="read")
+    ),
+) -> list[ResellerPriceRead]:
+    rows = (
+        (
+            await session.execute(
+                select(ResellerPrice)
+                .where(ResellerPrice.reseller_tenant_id == str(tenant.id))
+                .order_by(ResellerPrice.valid_from.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [_price_read(row) for row in rows]
+
+
+@router.post("/reseller/prices", response_model=ResellerPriceRead, status_code=201)
+@audit_operation("set_price", "reseller_price")
+async def set_reseller_price(
+    payload: ResellerPriceUpsert,
+    session: SessionDep,
+    tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = Depends(
+        abac(_tenant_resource_id, required_roles=["owner", "admin"], action="manage")
+    ),
+) -> ResellerPriceRead:
+    """Назначить цену клиенту с даты. Прошлые строки НЕ переписываются."""
+
+    if payload.period.lower() not in revenue.PERIOD_MONTHS:
+        raise _billing_bad_request(
+            "RESELLER_PRICE_BAD_PERIOD",
+            f"Период должен быть одним из: {', '.join(sorted(revenue.PERIOD_MONTHS))}",
+        )
+    if payload.valid_to is not None and payload.valid_to < payload.valid_from:
+        raise _billing_bad_request(
+            "RESELLER_PRICE_BAD_RANGE", "Дата окончания раньше даты начала"
+        )
+
+    row = ResellerPrice(
+        reseller_tenant_id=str(tenant.id),
+        client_tenant_id=payload.client_tenant_id,
+        amount_minor=payload.amount_minor,
+        currency=payload.currency.upper(),
+        period=payload.period.lower(),
+        valid_from=payload.valid_from,
+        valid_to=payload.valid_to,
+        note=payload.note,
+    )
+    session.add(row)
+    await session.flush()
+    return _price_read(row)
+
+
+@router.get("/reseller/revenue")
+async def reseller_revenue(
+    session: SessionDep,
+    since: date,
+    until: date,
+    currency: str = "RUB",
+    tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = Depends(
+        abac(_tenant_resource_id, required_roles=["owner", "admin"], action="read")
+    ),
+) -> dict:
+    """Выручка партнёра за окно: складываются цены, действовавшие В НЁМ.
+
+    Строки в другой валюте не складываются с запрошенной — но и не
+    замалчиваются: партнёр решил бы, что клиента забыли завести.
+    """
+
+    if until < since:
+        raise _billing_bad_request("RESELLER_REVENUE_BAD_RANGE", "Конец окна раньше начала")
+
+    rows = (
+        (
+            await session.execute(
+                select(ResellerPrice).where(ResellerPrice.reseller_tenant_id == str(tenant.id))
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return revenue.build_report(rows, since=since, until=until, currency=currency)
