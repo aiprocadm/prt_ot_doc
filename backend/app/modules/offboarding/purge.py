@@ -35,6 +35,8 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
+from app.modules.offboarding import backup_retention
 from app.modules.offboarding.file_keys import collect_file_keys
 from app.modules.offboarding.lifecycle import (
     OffboardingStateError,
@@ -104,6 +106,11 @@ class PurgeAct:
     broken_links: list[str] = field(default_factory=list)
     files_deleted: int = 0
     files_failed: list[str] = field(default_factory=list)
+    # OPS-72 (срез-188): удаление из живой базы не равно удалению из резервных
+    # копий. Выборочно вычистить строку из копии невозможно, не сделав копию
+    # непригодной для восстановления, — поэтому здесь не удаление, а
+    # ОБЯЗАТЕЛЬСТВО с вычислимой датой: день удаления плюс срок хранения копий.
+    backup_purge: dict[str, Any] = field(default_factory=dict)
 
     @property
     def rows_deleted(self) -> int:
@@ -126,6 +133,7 @@ class PurgeAct:
             "broken_links": self.broken_links,
             "files_deleted": self.files_deleted,
             "files_failed": self.files_failed,
+            "backup_purge": self.backup_purge,
         }
 
 
@@ -202,6 +210,11 @@ class TenantPurgeService:
             tenant_slug=self.tenant_slug,
             executed_at=_utcnow(),
             retained_tables=dict(sorted(retained.items())),
+        )
+        # Обязательство считается СРАЗУ и попадает в акт: посчитанное потом
+        # «когда-нибудь» на практике не считается никогда.
+        act.backup_purge = backup_retention.build_obligation(
+            purged_at=act.executed_at, settings=get_settings()
         )
 
         file_keys = await self._collect_file_keys(doomed) if delete_files else []
@@ -306,4 +319,5 @@ def _act_from_dict(payload: dict[str, Any], *, tenant_id: str, tenant_slug: str)
         broken_links=list(payload.get("broken_links") or []),
         files_deleted=int(payload.get("files_deleted") or 0),
         files_failed=list(payload.get("files_failed") or []),
+        backup_purge=dict(payload.get("backup_purge") or {}),
     )

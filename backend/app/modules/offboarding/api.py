@@ -21,6 +21,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
@@ -29,6 +30,8 @@ from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.models.models import Tenant
+from app.models.offboarding import TenantOffboarding
+from app.modules.offboarding import backup_retention
 from app.modules.offboarding.export import DEFAULT_ROWS_PER_TABLE, TenantExportService
 from app.modules.offboarding.files_archive import TenantFilesArchiveService
 from app.modules.offboarding.lifecycle import (
@@ -349,3 +352,38 @@ async def purge_tenant_data(
             ),
         ) from error
     return act.to_dict()
+
+
+@router.get(
+    "/backup-obligations",
+    summary="Обязательства по вытеснению данных из резервных копий (152-ФЗ, разд. 72.3)",
+)
+async def backup_obligations(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ExportAccess,
+) -> dict:
+    """Удаление из живой базы не равно удалению из резервных копий.
+
+    Выборочно вычистить строку из копии невозможно, не сделав копию непригодной
+    для восстановления. Зато копии вытесняются ротацией, и у обязательства есть
+    ВЫЧИСЛИМАЯ дата: день удаления плюс срок хранения копий.
+
+    Здесь видно, какие обязательства наступили и какие просрочены. Ещё не
+    наступившие и уже закрытые в выдачу не попадают: список, в котором шумят
+    все строки подряд, перестают читать.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _ = access
+
+    rows = (
+        (
+            await session.execute(
+                select(TenantOffboarding).where(TenantOffboarding.status == "purged")
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return backup_retention.summarize(backup_retention.collect(rows))
