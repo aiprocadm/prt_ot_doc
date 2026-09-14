@@ -185,3 +185,55 @@ class TestСписокДолгаНеПротух:
         assert _module_constant(MIGRATIONS / name, "EXPAND_CONTRACT_STEP") != "contract", (
             f"{name}: миграция объявила contract — уберите её из ACCEPTED_LEGACY"
         )
+
+
+# ---------------------------------------------------------------------------
+# СРЕЗ-184 (OPS-74 разд. 74.3): откат должен быть возможен, а не обещан.
+# ---------------------------------------------------------------------------
+#
+# Строка матрицы держала в остатке «SLA отката» с пометкой «это процесс, а не
+# код». Половина этого — действительно процесс (за сколько минут дежурный
+# принимает решение). Но вторая половина проверяется кодом и без неё SLA
+# бессмыслен: у разрушительной миграции обязан быть РАБОЧИЙ ``downgrade``.
+#
+# Пустой ``downgrade`` у миграции, удаляющей таблицу, означает, что откат
+# невозможен в принципе: данных уже нет и вернуть их нечем. Обещать при этом
+# «откатимся за N минут» — то же самое, что пустой адаптер, рапортующий об
+# успешной отправке.
+#
+# Проверяются ТОЛЬКО разрушительные миграции. Требовать содержательный
+# ``downgrade`` от каждой — значит получить два десятка ложных срабатываний на
+# слияниях веток и правках данных, а сторож, который кричит всегда, перестают
+# читать.
+
+
+def _downgrade_is_empty(path: pathlib.Path) -> bool:
+    """Пуст ли ``downgrade``: только ``pass`` и/или строка описания."""
+
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef) or node.name != "downgrade":
+            continue
+        meaningful = [
+            child
+            for child in node.body
+            if not (isinstance(child, ast.Expr) and isinstance(child.value, ast.Constant))
+            and not isinstance(child, ast.Pass)
+        ]
+        return not meaningful
+    return True  # downgrade нет вовсе — откатить нечем
+
+
+@pytest.mark.parametrize("path", _destructive_migrations(), ids=lambda p: p.name)
+def test_у_разрушительной_миграции_есть_рабочий_откат(path: pathlib.Path) -> None:
+    """SLA отката без работающего downgrade — обещание, а не свойство системы."""
+
+    if path.name in ACCEPTED_LEGACY:
+        pytest.skip("миграция до правила, записана в ACCEPTED_LEGACY с причиной")
+
+    ops = sorted(_destructive_ops_in_upgrade(path))
+    assert not _downgrade_is_empty(path), (
+        f"{path.name}: в upgrade есть {ops}, а downgrade пуст — откатить выкат "
+        f"нечем. Либо напишите обратную операцию, либо разнесите на expand и "
+        f"contract так, чтобы откатывался каждый шаг по отдельности."
+    )
