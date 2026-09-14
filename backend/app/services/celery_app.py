@@ -144,6 +144,14 @@ celery_app.conf.beat_schedule = {
         "task": "disciplines.deadlines.tick",
         "schedule": crontab(hour=4, minute=45),
     },
+    # BIZ-51 срез-193: автоматический отчёт клиентам аутсорсера. Раз в сутки, а
+    # не чаще: сама задача решает, кому период уже отработан. Утро понедельника —
+    # отчёт приходит к началу рабочей недели, а не в ночь на выходные, когда его
+    # прочтут через три дня и в куче писем.
+    "managed-clients-report-weekly": {
+        "task": "managed_clients.report.sweep",
+        "schedule": crontab(hour=7, minute=20, day_of_week=1),
+    },
 }
 
 if settings.outbox_dispatch_schedule_enabled:

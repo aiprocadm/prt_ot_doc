@@ -841,3 +841,87 @@ def generate_edo_protocol_job(*, message_id: str, tenant_id: str) -> dict[str, s
 def webhook_dispatch_job(limit: int = 50, tenant_slug: str = "test") -> dict[str, int]:
     dispatched = dispatch_outbox_events(tenant_slug=tenant_slug)
     return {"dispatched": int(dispatched), "limit": int(limit)}
+
+
+@celery_app.task(
+    name="managed_clients.report.sweep",
+    autoretry_for=RETRYABLE_EXCEPTIONS,
+    retry_backoff=settings.celery.retry_backoff_seconds,
+    retry_backoff_max=settings.celery.retry_backoff_max_seconds,
+    retry_jitter=True,
+    retry_kwargs={"max_retries": settings.celery.task_max_retries},
+)
+def managed_clients_report_sweep() -> dict[str, int]:
+    """BIZ-51 срез-193: автоматический отчёт клиентам аутсорсера (разд. 51.3).
+
+    ЧТО БЫЛО. Отчёт умели собирать и отправлять, но только по кнопке. Срез-11
+    сознательно не включил автоматику: «первая же ошибка адреса уедет всем
+    разом». Довод верный — опечатка, разосланная по портфелю, это письма
+    посторонним людям с названием организации клиента внутри.
+
+    КАК СНЯТ ДОВОД. Не отменой, а условием: автоматика пишет ТОЛЬКО на адреса,
+    на которые отчёт уже доходил (`report_verified_at`). «Обкатать вручную»
+    перестало быть обещанием и стало правилом, которое нельзя забыть выполнить.
+
+    ЗАДАЧА БЕЗ АРГУМЕНТОВ И ВЕЕРНАЯ — урок среза-170: задача, принимающая
+    арендатора параметром, в расписание не попадает, и механизм не запускается
+    НИКОГДА. Сбой у одного арендатора не лишает обхода остальных.
+    """
+
+    async def _run() -> dict[str, int]:
+        from app.domains.managed_clients import report_schedule
+        from app.models.managed_clients import ClientAuditReport, ManagedClient
+        from app.services.client_report_mail import ReportSendStatus, send_report_to_client
+
+        totals = {"tenants": 0, "candidates": 0, "sent": 0, "skipped": 0, "failed_tenants": 0}
+        for slug in await _active_tenant_slugs():
+            totals["tenants"] += 1
+            try:
+                with tenant_context(slug):
+                    ensure_tenant_schema(slug)
+                    async with session_scope(tenant=slug) as session:
+                        clients = (
+                            (await session.execute(select(ManagedClient)))
+                            .scalars()
+                            .all()
+                        )
+                        ready = report_schedule.select_ready(clients)
+                        totals["candidates"] += len(ready)
+                        for client in ready:
+                            report = (
+                                await session.execute(
+                                    select(ClientAuditReport)
+                                    .where(ClientAuditReport.managed_client_id == client.id)
+                                    .order_by(ClientAuditReport.created_at.desc())
+                                    .limit(1)
+                                )
+                            ).scalar_one_or_none()
+                            if report is None:
+                                # Слать «отчёт», которого нет, нечем: пустое
+                                # письмо хуже отсутствия письма.
+                                totals["skipped"] += 1
+                                continue
+                            outcome = await send_report_to_client(client, report)
+                            if outcome.status is ReportSendStatus.SENT:
+                                client.report_last_auto_sent_at = datetime.now(tz=timezone.utc)
+                                totals["sent"] += 1
+                            else:
+                                # Неудача НЕ отмечается как отправка: иначе
+                                # клиент молча пропустил бы период.
+                                totals["skipped"] += 1
+                                logger.warning(
+                                    "managed_clients.report.skip",
+                                    extra={
+                                        "tenant": slug,
+                                        "client": str(client.id),
+                                        "reason": outcome.reason,
+                                    },
+                                )
+                        await session.commit()
+            except Exception:
+                totals["failed_tenants"] += 1
+                logger.exception("managed_clients.report.tenant_failed", extra={"tenant": slug})
+        logger.info("managed_clients.report.done", extra=totals)
+        return totals
+
+    return _run_coroutine(_run())

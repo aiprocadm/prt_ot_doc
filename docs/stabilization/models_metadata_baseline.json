@@ -7640,8 +7640,16 @@
         "VARCHAR(320)"
       ],
       [
+        "report_last_auto_sent_at",
+        "DATETIME"
+      ],
+      [
         "report_opt_in",
         "BOOLEAN"
+      ],
+      [
+        "report_verified_at",
+        "DATETIME"
       ],
       [
         "responsible_person_id",
