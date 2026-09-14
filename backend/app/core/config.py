@@ -431,6 +431,11 @@ class Settings(BaseSettings):
     # умолчание) или ``command`` (внешнее хранилище: агент Vault, CLI облачного KMS,
     # sops). Подключение хранилища — настройка, а не разработка; подробности и формат
     # ответа команды — в core/key_provider.py.
+    # SEC-66 разд. 66.1 (2026-09-14): в каком регионе РАЗВЁРНУТА система. Объявляет
+    # тот, кто разворачивал: по адресу хранилища регион не определяется, а угаданное
+    # значение, поданное как измеренное, — худший из возможных ответов. С этим
+    # значением сверяется поле storage_location каждой строки реестра обработки ПДн.
+    data_residency_region: str = Field("RU", alias="DATA_RESIDENCY_REGION")
     secret_key_provider: str = Field("env", alias="APP_SECRET_KEY_PROVIDER")
     secret_key_command: str = Field("", alias="APP_SECRET_KEY_COMMAND")
     secret_key_command_timeout_seconds: float = Field(

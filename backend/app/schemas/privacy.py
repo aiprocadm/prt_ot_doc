@@ -179,6 +179,30 @@ class PdnProcessingActivityPage(BaseSchema):
     has_special_categories: bool = False
 
 
+class PdnResidencyFinding(BaseSchema):
+    """Расхождение между объявленной локализацией и регионом развёртывания."""
+
+    code: str
+    name: str
+    declared_location: str
+    deployment_region: str
+    cross_border_transfer: bool
+    #: ``undeclared_transfer`` — нарушение: реестр обещает одно, система делает
+    #: другое. ``declared_transfer`` — осознанная трансграничная передача.
+    verdict: str
+
+
+class PdnResidencyReport(BaseSchema):
+    """Сверка локализации ПДн (SEC-66 разд. 66.1, срез-185)."""
+
+    region: str
+    checked: int
+    violations: int
+    declared_transfers: int
+    compliant: bool
+    findings: list[PdnResidencyFinding] = Field(default_factory=list)
+
+
 class PdnProcessingActivityUpsert(BaseSchema):
     code: str = Field(min_length=1, max_length=64)
     name: str = Field(min_length=1, max_length=255)
