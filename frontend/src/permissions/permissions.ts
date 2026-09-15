@@ -61,6 +61,10 @@ export const PERMISSIONS = {
   ADMIN_MANAGE_ROLES: "admin.manage_roles",
   ADMIN_MANAGE_TENANTS: "admin.manage_tenants",
   NPA_VIEW: "npa.view",
+  /** Срез-208: контур ПДн (152-ФЗ). Роли ровно те же, что у ручек
+   *  `_PDN_ROLES` = admin / owner / hr: «меню шире, чем ручки» — известный
+   *  дефект платформы, и повторять его здесь нельзя. */
+  PRIVACY_VIEW: "privacy.view",
   AUDIT_VIEW: "audit.view",
   SETTINGS_VIEW: "settings.view",
   REPORTS_VIEW: "reports.view",
@@ -169,7 +173,12 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   ],
   student: [PERMISSIONS.DASHBOARD_VIEW, PERMISSIONS.TRAINING_VIEW],
   ot_pb_head: ALL_PERMISSIONS.filter(
-    (permission) => permission !== PERMISSIONS.ADMIN_MANAGE_TENANTS,
+    (permission) =>
+      permission !== PERMISSIONS.ADMIN_MANAGE_TENANTS &&
+      // Срез-208: контур ПДн открыт ручками только admin/owner/hr. Роль
+      // получает права скопом, поэтому исключаем явно — иначе пункт меню
+      // появится у того, кому ручка ответит отказом.
+      permission !== PERMISSIONS.PRIVACY_VIEW,
   ),
   ot_specialist: [
     ...baseOpsPermissions,
@@ -244,6 +253,9 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   ],
   hr: [
     PERMISSIONS.DASHBOARD_VIEW,
+    // Срез-208: права субъекта ПДн и реестр утечек ведёт кадровик — он же
+    // и в круге ручек (`_PDN_ROLES`).
+    PERMISSIONS.PRIVACY_VIEW,
     PERMISSIONS.PERSON_VIEW,
     PERMISSIONS.PERSON_CREATE,
     PERMISSIONS.TRAINING_VIEW,
