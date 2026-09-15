@@ -77,6 +77,19 @@ const npaDetail = {
       effective_from: "2026-03-01",
       effective_to: null,
       change_summary: "Обновлены программы обучения",
+      // Срез-198: состояние редакции приходит с сервера словами.
+      status: "active",
+      status_title: "Действует",
+    },
+    {
+      id: "rev-next",
+      revision_code: "772н-2027-01",
+      title: "Редакция будущего года",
+      effective_from: "2027-01-01",
+      effective_to: null,
+      change_summary: null,
+      status: "upcoming",
+      status_title: "Ещё не вступила в силу",
     },
   ],
   // Срез-142: связи приходят по одной и с именами (`binding_items`), сводка —
@@ -476,6 +489,28 @@ describe("NpaPage", () => {
     expect(block).toHaveTextContent("не записывает");
     expect(block).toHaveTextContent("Риски");
     expect(block).toHaveTextContent("Маршруты");
+  });
+
+
+  it("будущая редакция помечена, а не выглядит действующей (срез-198)", async () => {
+    // Владелец платформы заводит редакцию заранее. Без пометки специалист
+    // видит её в списке и может начать исполнять новые правила раньше срока.
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={["/npa?selected=npa-1"]}>
+          <NpaPage />
+        </MemoryRouter>,
+      );
+    });
+    expect(await screen.findByText("772н-2026-03")).toBeInTheDocument();
+
+    const badges = screen.getAllByTestId("npa-revision-status");
+    const states = badges.map((node) => node.getAttribute("data-status"));
+    expect(states).toContain("active");
+    expect(states).toContain("upcoming");
+    expect(
+      badges.find((node) => node.getAttribute("data-status") === "upcoming"),
+    ).toHaveTextContent("Ещё не вступила в силу");
   });
 
 });
