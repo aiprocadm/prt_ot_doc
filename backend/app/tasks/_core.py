@@ -17,6 +17,7 @@ from sqlalchemy import select
 from app.core.config import get_settings
 from app.core.metrics import get_metrics
 from app.core.secret_cipher import decrypt_secret
+from app.core.ssrf_guard import UnsafeWebhookURLError, assert_safe_webhook_url
 from app.core.tenant import tenant_context
 from app.core.webhook_contract import (
     WEBHOOK_SCHEMA_VERSION,
@@ -611,6 +612,37 @@ async def _dispatch_outbox_events(
                         "X-Signature-Ts": ts,
                         WEBHOOK_SCHEMA_VERSION_HEADER: ep_version,
                     }
+                    # SEC-64 §64.3: ВТОРОЙ путь доставки вебхуков. Сторож SSRF
+                    # стоял только в `services/webhooks.py`, а этот обход
+                    # очереди постил куда сказано — и клал до 1000 знаков ОТВЕТА
+                    # в `last_response_body`, который арендатор читает ручкой
+                    # журнала доставок. То есть это был не слепой SSRF, а SSRF с
+                    # выносом: эндпоинт на внутренний адрес возвращал содержимое
+                    # закрытой сети наружу.
+                    #
+                    # Тот же класс, что срез-191 (две дорожки вебхуков, подпись
+                    # починили на одной): у доставки ДВА пути, и правило надо
+                    # ставить на оба.
+                    if settings.webhook_ssrf_guard_enabled:
+                        try:
+                            await assert_safe_webhook_url(ep.url, app_env=settings.app_env)
+                        except UnsafeWebhookURLError as exc:
+                            delivered.status = "failed"
+                            # 0 — «заблокировано до вызова», как в соседнем пути:
+                            # это не ответ сервера, и путать его с кодом нельзя.
+                            delivered.last_status_code = 0
+                            delivered.last_response_body = f"blocked: {exc}"[:1000]
+                            delivered.ended_at = datetime.now(tz=timezone.utc)
+                            logger.warning(
+                                "webhook.blocked_ssrf",
+                                extra={
+                                    "event_type": event.event_type,
+                                    "tenant_id": event.tenant_id,
+                                    "url": ep.url,
+                                    "reason": str(exc),
+                                },
+                            )
+                            continue
                     try:
                         resp = await client.post(
                             ep.url,

@@ -187,6 +187,115 @@ def test_dispatch_outbox_events_resolves_webhook_endpoints_by_tenant_id(monkeypa
     asyncio.run(engine.dispose())
 
 
+def test_dispatch_outbox_events_blocks_internal_urls(monkeypatch) -> None:
+    """SEC-64 §64.3 (срез-206): ВТОРОЙ путь доставки не ходит в закрытую сеть.
+
+    Сторож SSRF стоял только в ``services/webhooks.py``. Этот обход очереди постил
+    по адресу, который задал арендатор, И КЛАЛ ДО 1000 ЗНАКОВ ОТВЕТА в
+    ``last_response_body`` — поле, которое арендатор читает ручкой журнала
+    доставок. То есть это был не слепой SSRF, а SSRF С ВЫНОСОМ: эндпоинт на
+    ``169.254.169.254`` вернул бы наружу данные службы метаданных облака.
+
+    Тот же класс, что дефект подписи выше: у доставки ДВА пути, и правило надо
+    ставить на оба. Поэтому проверка здесь — ПОВЕДЕНИЕМ, а не наличием вызова в
+    тексте: вызов в мёртвой ветке текстовый сторож считает живым.
+    """
+
+    async def setup():
+        _prepare_sqlite_metadata()
+        engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
+        async with engine.begin() as conn:
+            await conn.run_sync(SharedBase.metadata.create_all)
+            await conn.run_sync(Base.metadata.create_all)
+        session_factory = async_sessionmaker(bind=engine, expire_on_commit=False)
+        async with session_factory() as session:
+            tenant = Tenant(slug="demo-ssrf", name="Demo", contact_email="ssrf@example.com")
+            session.add(tenant)
+            await session.flush()
+            session.add_all(
+                [
+                    WebhookEndpoint(
+                        tenant_id=tenant.id,
+                        name="Internal webhook",
+                        url="http://169.254.169.254/latest/meta-data/",
+                        secret=None,
+                        is_enabled=True,
+                        subscribed_events=[],
+                        timeout_ms=1000,
+                    ),
+                    OutboxEvent(
+                        tenant_id=tenant.id,
+                        event_type="CustomEvent",
+                        aggregate_type="document",
+                        aggregate_id="doc-3",
+                        event_id="evt-ssrf",
+                        payload={"document_id": "doc-3"},
+                        status=OutboxEventStatus.PENDING.value,
+                        attempts=0,
+                    ),
+                ]
+            )
+            await session.commit()
+            await session.refresh(tenant)
+        return engine, session_factory, tenant
+
+    engine, TestSession, tenant = asyncio.run(setup())
+    tenant_obj = tenant
+
+    @asynccontextmanager
+    async def override_scope(*, tenant: str | None = None):
+        async with TestSession() as session:
+            session.info["tenant_id"] = tenant_obj.id
+            session.info["tenant_slug"] = tenant_obj.slug
+            session.info["tenant"] = tenant_obj.slug
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
+
+    monkeypatch.setattr(tasks_core, "session_scope", override_scope)
+
+    calls: list[str] = []
+
+    class _FakeAsyncClient:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def post(self, url, *, content, headers, timeout):
+            calls.append(str(url))
+            return SimpleNamespace(status_code=204, text="секрет закрытой сети")
+
+    monkeypatch.setitem(sys.modules, "httpx", SimpleNamespace(AsyncClient=_FakeAsyncClient))
+
+    asyncio.run(tasks._dispatch_outbox_events(max_attempts=3, tenant_slug=tenant.slug))
+
+    assert calls == [], f"запрос во внутреннюю сеть всё-таки ушёл: {calls}"
+
+    async def read_back():
+        async with TestSession() as session:
+            rows = (await session.execute(select(WebhookDelivery))).scalars().all()
+            return [(r.status, r.last_status_code, r.last_response_body) for r in rows]
+
+    deliveries = asyncio.run(read_back())
+    assert deliveries, "доставка не записана — блокировку не видно в журнале"
+    status, code, body = deliveries[0]
+    assert status == "failed"
+    # 0 — «заблокировано до вызова»: это не ответ сервера, и путать его с кодом
+    # нельзя, иначе в журнале появится несуществующий HTTP-статус.
+    assert code == 0
+    assert "секрет закрытой сети" not in (body or ""), "тело чужого ответа попало в журнал"
+
+    asyncio.run(engine.dispose())
+
+
 def test_dispatch_outbox_events_signs_with_the_decrypted_secret(monkeypatch) -> None:
     """SEC-67: секрет вебхука лежит зашифрованным — подписывать надо плейнтекстом.
 

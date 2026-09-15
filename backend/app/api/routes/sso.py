@@ -47,6 +47,7 @@ from app.core.security import (
     issue_refresh_token,
     rbac,
 )
+from app.core.ssrf_guard import UnsafeWebhookURLError, assert_safe_webhook_url
 from app.core.tenant_validation import TenantContextValidator
 from app.domains.sso.rules import (
     PROVIDER_DISABLED,
@@ -234,6 +235,18 @@ async def sso_callback(
         raise HTTPException(status.HTTP_409_CONFLICT, exc.title) from exc
 
     redirect_uri = (settings.sso_redirect_uri or "").strip()
+    # Проверка ПОВТОРЯЕТСЯ перед самим вызовом: между сохранением настройки и
+    # входом имя могло переехать на внутренний адрес. Одной проверки на записи
+    # мало — это классическая подмена между проверкой и использованием.
+    if settings.webhook_ssrf_guard_enabled:
+        for url in (usable.token_endpoint, usable.jwks_uri):
+            try:
+                await assert_safe_webhook_url(url, app_env=settings.app_env)
+            except UnsafeWebhookURLError as exc:
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    "Адрес провайдера единого входа недопустим — обратитесь к администратору",
+                ) from exc
     client = _http_client()
     try:
         identity = await exchange_code(
@@ -365,6 +378,21 @@ async def write_sso_config(
 
     TenantContextValidator.ensure_tenant_context(tenant)
     _ = access
+    # SEC-64 §64.3: адреса провайдера задаёт АРЕНДАТОР, то есть это такая же
+    # исходящая интеграция, как вебхук. Без проверки администратор заказчика
+    # мог бы направить обмен на внутренний адрес и заставить платформу ходить
+    # в закрытую сеть. Проверяем на записи — чтобы отказ пришёл сразу и с
+    # понятным словом, а не при попытке входа.
+    settings = get_settings()
+    if payload.provider != PROVIDER_DISABLED and settings.webhook_ssrf_guard_enabled:
+        for url in (payload.token_endpoint, payload.jwks_uri, payload.authorization_endpoint):
+            try:
+                await assert_safe_webhook_url(url, app_env=settings.app_env)
+            except UnsafeWebhookURLError as exc:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    f"Адрес провайдера недопустим: {exc}",
+                ) from exc
     row = await _config_for_tenant(session, str(tenant.id))
     if row is None:
         row = TenantSsoConfig(tenant_id=str(tenant.id))
