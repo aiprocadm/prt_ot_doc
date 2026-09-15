@@ -37,6 +37,10 @@ type NpaDetail = {
   stale_bindings?: number;
   active_revision_id?: string | null;
   summary: Record<string, number>;
+  /** Срез-197: категории влияния, которые платформа записывать не умеет, — с
+   * причиной. Раньше они считались вечным нулём и экран их молча скрывал, а
+   * человек читал отсутствие строки как «не задевает». */
+  unrecorded?: Record<string, string>;
   tasks_to_create: Array<{ code: string; title: string; count: number }>;
 };
 
@@ -281,6 +285,19 @@ const NpaPage = () => {
                         </div>
                       ))}
                   </div>
+                  {Object.keys(detail.unrecorded ?? {}).length > 0 ? (
+                    <div
+                      className="mt-2 rounded border border-dashed p-3 text-xs text-muted-foreground"
+                      data-testid="npa-unrecorded"
+                    >
+                      Платформа пока не записывает связи акта с этими
+                      сущностями, поэтому по ним нельзя сказать «не задевает»:{" "}
+                      {Object.keys(detail.unrecorded ?? {})
+                        .map((key) => SUMMARY_LABELS[key] ?? key)
+                        .join(", ")}
+                      .
+                    </div>
+                  ) : null}
                   <div className="mt-2 text-sm">
                     <Link
                       className="underline"
@@ -323,6 +340,12 @@ const NpaPage = () => {
                             {BINDING_KIND_LABELS[binding.entity_type] ??
                               binding.entity_type}
                             {binding.ref ? ` · ${binding.ref}` : ""}
+                            {/* Срез-197: кого и где касается связь. Пустая
+                                область означает «весь акт» — отдельное
+                                состояние, и приписывать ему слова не надо. */}
+                            {Object.values(binding.context ?? {}).length > 0
+                              ? ` · ${Object.values(binding.context ?? {}).join(" · ")}`
+                              : ""}
                           </div>
                           {binding.stale ? (
                             <div

@@ -109,6 +109,13 @@ const npaDetail = {
     templates: 0,
     packages: 0,
   },
+  // Срез-197: категории, которые платформа записывать не умеет, приходят
+  // ПРИЧИНОЙ. Раньше они считались вечным нулём, экран их молча скрывал, и
+  // человек читал отсутствие строки как «этот закон их не задевает».
+  unrecorded: {
+    risks: "Связь акта с карточкой риска не ведётся: риск — самостоятельная сущность",
+    workflows: "Связь акта с маршрутом согласования не ведётся",
+  },
   tasks_to_create: [
     {
       code: "npa-update-documents",
@@ -354,10 +361,14 @@ describe("NpaPage", () => {
       await user.click(screen.getByRole("button", { name: "Привязать" }));
     });
 
+    // Срез-197: у связи появилась ОБЛАСТЬ ДЕЙСТВИЯ («кого и где касается»).
+    // Здесь она не выбрана — и это законное состояние «весь акт», поэтому
+    // контекст уходит пустым, а не отсутствует.
     expect(apiClientMock.post).toHaveBeenCalledWith("/npa/npa-1/bindings", {
       entity_type: "document",
       entity_id: "doc-3",
       ref: "п. 7",
+      context: {},
     });
     // После привязки детализация перечитана с сервера.
     expect(
@@ -448,4 +459,23 @@ describe("NpaPage", () => {
         .length,
     ).toBeGreaterThanOrEqual(2);
   });
+
+  it("неведущиеся связи объяснены словами, а не скрыты (срез-197)", async () => {
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={["/npa?selected=npa-1"]}>
+          <NpaPage />
+        </MemoryRouter>,
+      );
+    });
+    expect(await screen.findByText("772н-2026-03")).toBeInTheDocument();
+
+    const block = await screen.findByTestId("npa-unrecorded");
+    // Человек видит, ПОЧЕМУ этих категорий нет, а не делает вывод из их
+    // отсутствия.
+    expect(block).toHaveTextContent("не записывает");
+    expect(block).toHaveTextContent("Риски");
+    expect(block).toHaveTextContent("Маршруты");
+  });
+
 });

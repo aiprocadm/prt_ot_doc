@@ -36,10 +36,12 @@ from sqlalchemy.orm import selectinload
 from app.api.dependencies import get_session, get_tenant_record
 from app.api.routes.platform_tenants import _require_managing_admin
 from app.core.audit_decorator import audit_operation
+from app.core.role_labels import ROLE_CODES, role_label
 from app.core.security import abac, rbac
 from app.core.tenant_validation import TenantContextValidator
 from app.domains.npa.impact import NpaImpactService
 from app.models.document import Document
+from app.models.master_data import Site
 from app.models.models import NPABinding, Tenant
 from app.models.npa import NpaAct, NpaClause, NpaRevision
 from app.models.packages import DocumentPack
@@ -48,6 +50,7 @@ from app.schemas.npa import (
     NpaActCreate,
     NpaActListResponse,
     NpaActRead,
+    NpaBindingContext,
     NpaBindingCreate,
     NpaBindingRead,
     NpaRevisionCreate,
@@ -262,6 +265,74 @@ async def _binding_target_exists(
     return "" if row else None
 
 
+
+async def _validate_binding_context(
+    session: AsyncSession, tenant_id: str, context: NpaBindingContext
+) -> dict[str, str]:
+    """Проверить область действия связи и вернуть её как хранимый словарь.
+
+    Роль — закрытый словарь (тот же, что у требований реестра), площадка —
+    живая площадка ЭТОГО арендатора. Выдуманное значение отвергается 422:
+    иначе «кого и где касается» снова стало бы свободной строкой, по которой
+    ничего не отобрать, — ровно то, из-за чего сводка влияния и показывала
+    вечный ноль.
+    """
+
+    stored: dict[str, str] = {}
+    role_code = (context.role_code or "").strip()
+    if role_code:
+        if role_code not in ROLE_CODES:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                f"Роли «{role_code}» нет в системе — выберите роль из справочника",
+            )
+        stored["role_code"] = role_code
+
+    site_id = (context.site_id or "").strip()
+    if site_id:
+        site = await session.scalar(
+            select(Site.id).where(
+                Site.id == site_id,
+                Site.tenant_id == tenant_id,
+                Site.deleted_at.is_(None),
+            )
+        )
+        if site is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Площадка не найдена")
+        stored["site_id"] = site_id
+    return stored
+
+
+@router.get("/npa/binding-options")
+async def npa_binding_options(
+    session: SessionDep,
+    tenant: Tenant = Depends(get_tenant_record),
+    access=Depends(
+        abac(
+            _tenant_resource_id,
+            required_roles=_IMPACT_WRITE_ROLES,
+            action="bind npa act",
+        )
+    ),
+) -> dict[str, list[dict[str, str]]]:
+    """Справочники области действия связи (срез-197): роли и площадки.
+
+    Без них «кого и где касается» пришлось бы впечатывать руками — и роль
+    снова стала бы свободной строкой, по которой ничего не отобрать. Ровно та
+    же причина, по которой у требований реестра появился свой справочник формы
+    (срез-147).
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _ = access
+    from app.core.role_labels import role_options
+    from app.domains.npa.requirements import RequirementsService
+
+    return {
+        "roles": role_options(),
+        "sites": await RequirementsService(session, str(tenant.id)).site_options(),
+    }
+
 @router.post(
     "/npa/{act_id}/bindings",
     response_model=NpaBindingRead,
@@ -305,6 +376,10 @@ async def create_npa_binding(
     # текущего текста акта. Без редакций — None, и связь не бывает «не
     # пересмотренной», пока владелец платформы не заведёт первую.
     active = await impact.active_revision_for(act_id)
+    # Срез-197: область действия связи («кого и где касается») наконец
+    # записывается. До него здесь стояло `context={}`, и категории сводки
+    # влияния, читавшие контекст, были вечными нулями.
+    context = await _validate_binding_context(session, str(tenant.id), payload.context)
     binding = NPABinding(
         tenant_id=str(tenant.id),
         npa_id=act_id,
@@ -312,7 +387,7 @@ async def create_npa_binding(
         entity_id=payload.entity_id,
         template_version_id=template_version_id or None,
         ref=payload.ref,
-        context={},
+        context=context,
         reviewed_revision_id=active.id if active else None,
     )
     session.add(binding)
@@ -324,6 +399,27 @@ async def create_npa_binding(
         raise HTTPException(status.HTTP_409_CONFLICT, "Связь с этой сущностью уже есть") from exc
     await session.refresh(binding)
     return await _binding_read(impact, binding, active)
+
+
+async def _binding_context_read(session: AsyncSession, binding: NPABinding) -> dict[str, str]:
+    """Область действия связи словами: роль подписью, площадка именем.
+
+    Пустой словарь означает «связь касается всего акта», и это отдельное
+    состояние — его нельзя путать с «область есть, но мы её не показали».
+    """
+
+    stored = binding.context or {}
+    out: dict[str, str] = {}
+    role_code = str(stored.get("role_code") or "").strip()
+    if role_code:
+        out["role"] = role_label(role_code) or role_code
+    site_id = str(stored.get("site_id") or "").strip()
+    if site_id:
+        name = await session.scalar(select(Site.name).where(Site.id == site_id))
+        # Снесённая площадка: показываем идентификатор, а не пустоту — связь
+        # заводили осознанно, и молча её обнулять нельзя.
+        out["site"] = name or site_id
+    return out
 
 
 async def _binding_read(
@@ -340,6 +436,9 @@ async def _binding_read(
         entity_type=str(getattr(binding.entity_type, "value", binding.entity_type)),
         entity_id=binding.entity_id,
         ref=binding.ref,
+        # Срез-197: область действия — СЛОВАМИ. Код роли на экране человек
+        # читать не должен, а площадка без имени — это просто идентификатор.
+        context=await _binding_context_read(impact.session, binding),
         title=titles.get(binding.id, binding.entity_id),
         reviewed_revision_id=binding.reviewed_revision_id,
         reviewed_revision_code=reviewed_code,

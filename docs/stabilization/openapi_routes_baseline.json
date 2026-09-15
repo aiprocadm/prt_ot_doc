@@ -338,6 +338,7 @@
     "GET /api/v1/notifications/settings/me",
     "GET /api/v1/notifications/templates",
     "GET /api/v1/npa",
+    "GET /api/v1/npa/binding-options",
     "GET /api/v1/npa/{act_id}",
     "GET /api/v1/obligations",
     "GET /api/v1/obligations/summary",
@@ -1924,6 +1925,7 @@
     "me_api_v1_auth_me_get",
     "me_permissions_api_v1_auth_me_permissions_get",
     "my_managed_clients_api_v1_managed_clients_my_get",
+    "npa_binding_options_api_v1_npa_binding_options_get",
     "obligations_summary_api_v1_obligations_summary_get",
     "offboarding_status_api_v1_offboarding_status_get",
     "overdue_dashboard_api_v1_analytics_dashboard_overdue_get",
@@ -2822,6 +2824,7 @@
     "NpaActCreate",
     "NpaActListResponse",
     "NpaActRead",
+    "NpaBindingContext",
     "NpaBindingCreate",
     "NpaBindingRead",
     "NpaClauseCreate",
@@ -7569,15 +7572,21 @@
       "valid_to": "null|string",
       "clauses": "array"
     },
+    "NpaBindingContext": {
+      "role_code": "null|string",
+      "site_id": "null|string"
+    },
     "NpaBindingCreate": {
       "entity_type": "string",
       "entity_id": "string",
-      "ref": "null|string"
+      "ref": "null|string",
+      "context": "NpaBindingContext"
     },
     "NpaBindingRead": {
       "id": "string",
       "npa_id": "string",
       "entity_type": "string",
+      "context": "object",
       "entity_id": "string",
       "ref": "null|string",
       "title": "string",
