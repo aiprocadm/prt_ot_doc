@@ -10326,6 +10326,60 @@
         "INTEGER"
       ]
     ],
+    "pdn_breach": [
+      [
+        "affected_people",
+        "INTEGER"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "discovered_at",
+        "DATETIME"
+      ],
+      [
+        "findings_reported_at",
+        "DATETIME"
+      ],
+      [
+        "happened_at",
+        "DATETIME"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "registered_by_user_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "regulator_notified_at",
+        "DATETIME"
+      ],
+      [
+        "subjects_notified_at",
+        "DATETIME"
+      ],
+      [
+        "summary",
+        "VARCHAR(512)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
     "pdn_consent": [
       [
         "consent_version",

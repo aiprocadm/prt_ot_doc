@@ -22,7 +22,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import TenantBaseModel
 
-__all__ = ["PdnAccessLog", "PDN_ACCESS_ACTIONS"]
+__all__ = ["PdnAccessLog", "PdnBreach", "PDN_ACCESS_ACTIONS"]
 
 # Способы обращения к ПДн, которые журналируются. Расширяется по мере того, как
 # новые поверхности начинают отдавать ПДн субъекта наружу.
@@ -69,3 +69,53 @@ class PdnAccessLog(TenantBaseModel):
     request_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class PdnBreach(TenantBaseModel):
+    """Утечка персональных данных: обязательство со сроками (разд. 66.3, срез-207).
+
+    ЧЕГО ЗДЕСЬ НЕТ И НЕ БУДЕТ: отправки уведомления в Роскомнадзор. Канала для
+    неё не существует — уведомление подают через форму регулятора. Кнопка
+    «уведомить», которая на деле только ставит галочку, была бы худшей из
+    возможных: человек решит, что дело сделано. Здесь ведётся обязательство с
+    вычислимым сроком, а факт отправки отмечает человек (тот же приём, что у
+    удаления из резервных копий, срез-188).
+
+    Сроки НЕ хранятся числами: они считаются при чтении из момента обнаружения
+    (``app.modules.privacy.breach``). Записанный срок через сутки после правки
+    даты обнаружения молча разошёлся бы с законом.
+    """
+
+    __tablename__ = "pdn_breach"
+
+    #: Когда утечку ОБНАРУЖИЛИ. Именно от этого момента закон считает 24 и 72
+    #: часа — не от момента самой утечки. Вводит человек: платформа не может
+    #: знать, когда ему написали или позвонили.
+    discovered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    #: Когда утечка произошла, если это удалось установить. Пусто — «не
+    #: установлено»: это законное состояние, а не пробел.
+    happened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    summary: Mapped[str] = mapped_column(String(512), nullable=False)
+    #: Сколько человек затронуто, если установлено. Пусто — «пока не считали».
+    affected_people: Mapped[int | None] = mapped_column(nullable=True)
+
+    #: Три ОТДЕЛЬНЫХ факта. Уведомить регулятора, сообщить результаты
+    #: расследования и уведомить людей — разные обязательства, и одна галочка
+    #: на все три означала бы, что выполнив лёгкое, организация считает
+    #: закрытым и трудное.
+    regulator_notified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    findings_reported_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    subjects_notified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    registered_by_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+
+    __table_args__ = (Index("ix_pdn_breach_tenant_discovered", "tenant_id", "discovered_at"),)

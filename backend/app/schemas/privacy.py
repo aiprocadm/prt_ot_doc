@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from app.schemas.base import BaseSchema
 from app.schemas.employee import EmployeeCard
@@ -261,3 +261,41 @@ class PdnAgreementCreate(BaseSchema):
     breach_notification_hours: int | None = Field(default=None, ge=0)
     covered_activity_codes: list[str] = Field(default_factory=list)
     notes: str | None = None
+
+
+class PdnBreachCreate(BaseSchema):
+    """Заявка на регистрацию утечки ПДн (152-ФЗ разд. 66.3, срез-207).
+
+    ``discovered_at`` ОБЯЗАТЕЛЕН и вводится человеком: от момента обнаружения
+    закон считает 24 и 72 часа, а платформа не может знать, когда организации
+    сообщили об утечке. Подставить «сейчас» значило бы сдвинуть отсчёт на время,
+    прошедшее до записи.
+    """
+
+    summary: str = Field(min_length=1, max_length=512)
+    discovered_at: datetime
+    #: Когда утечка произошла, если установлено. Пусто — «не установлено»:
+    #: законное состояние, а не пробел.
+    happened_at: datetime | None = None
+    affected_people: int | None = Field(default=None, ge=0)
+
+    model_config = {"extra": "forbid"}
+
+    @model_validator(mode="after")
+    def _check(self) -> "PdnBreachCreate":
+        if self.happened_at and self.happened_at > self.discovered_at:
+            raise ValueError("утечка не может произойти позже, чем её обнаружили")
+        return self
+
+
+class PdnBreachStep(BaseSchema):
+    """Отметка о выполненном шаге.
+
+    Момент можно указать задним числом: уведомление часто подают раньше, чем
+    доходят руки до записи в системе, и подстановка «сейчас» превратила бы
+    выполненный в срок шаг в просроченный.
+    """
+
+    done_at: datetime | None = None
+
+    model_config = {"extra": "forbid"}
