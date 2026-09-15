@@ -541,6 +541,12 @@ class Settings(BaseSettings):
     use_frdo_integration: bool = Field(False, alias="USE_FRDO_INTEGRATION")
     use_eisot_integration: bool = Field(False, alias="USE_EISOT_INTEGRATION")
 
+    # BIZ-53 срез-204: адрес, на который провайдер единого входа возвращает
+    # человека. Настройка ЯВНАЯ, а не выведенная из запроса: он обязан посимвольно
+    # совпасть с зарегистрированным у провайдера, и вывод из заголовков за
+    # обратным прокси однажды дал бы правдоподобный, но чужой адрес.
+    sso_redirect_uri: str | None = Field(None, alias="SSO_REDIRECT_URI")
+
     edo_integration_base_url: str | None = Field(None, alias="EDO_INTEGRATION_BASE_URL")
     edo_integration_api_token: str | None = Field(None, alias="EDO_INTEGRATION_API_TOKEN")
     edo_integration_timeout_seconds: float = Field(30.0, alias="EDO_INTEGRATION_TIMEOUT_SECONDS")

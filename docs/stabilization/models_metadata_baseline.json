@@ -15006,6 +15006,68 @@
         "INTEGER"
       ]
     ],
+    "tenant_sso_config": [
+      [
+        "authorization_endpoint",
+        "VARCHAR(512)"
+      ],
+      [
+        "client_id",
+        "VARCHAR(255)"
+      ],
+      [
+        "client_secret_env",
+        "VARCHAR(128)"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "default_role",
+        "VARCHAR(64)"
+      ],
+      [
+        "email_domains",
+        "JSON"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "issuer",
+        "VARCHAR(512)"
+      ],
+      [
+        "jit_enabled",
+        "BOOLEAN"
+      ],
+      [
+        "jwks_uri",
+        "VARCHAR(512)"
+      ],
+      [
+        "provider",
+        "VARCHAR(16)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "token_endpoint",
+        "VARCHAR(512)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
     "training": [
       [
         "completed_at",
@@ -17242,6 +17304,7 @@
     "TenantLegalAcceptance",
     "TenantLegalDocument",
     "TenantSettings",
+    "TenantSsoConfig",
     "Training",
     "TrainingCertificate",
     "TrainingCourse",

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LegalLinks } from "@/components/common/LegalLinks";
+import { SsoButton } from "@/features/auth/SsoButton";
 import { useAuthStore } from "@/stores/auth";
 import { useBrandStore } from "@/stores/brand";
 import { loginSchema, type LoginFormValues } from "@/types/forms/auth";
@@ -118,6 +119,10 @@ const LoginPage = () => {
         <Button type="submit" className="w-full" disabled={loading}>
           {loading ? "Вход..." : "Войти"}
         </Button>
+        {/* Срез-204 (BIZ-53 разд. 53.3): единый вход. Кнопка появляется только
+            там, где он настроен, — кнопка, всегда кончающаяся отказом, хуже
+            отсутствующей. */}
+        <SsoButton tenantSlug={form.watch("tenant") ?? ""} />
       </form>
       {/* Оферта и политика ПДн — до входа, а не после (BIZ-52 разд. 52.2).
           Блок исчезает целиком, если ничего не опубликовано: пустой заголовок
