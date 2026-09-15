@@ -94,6 +94,23 @@ export interface NpaRevisionDiffDto {
   target: { id: string; revision_code: string; title: string };
 }
 
+/**
+ * Срез-203 (B.18 разд. 19.1 «owner»): кто ведёт этот акт в НАШЕЙ организации.
+ *
+ * Ответственный арендаторский: один и тот же приказ Минтруда ведут в разных
+ * организациях разные люди. `responsible: null` — «акт никто не ведёт», и это
+ * честное состояние, а не пропуск данных.
+ */
+export interface NpaResponsibleDto {
+  user_id: string;
+  name: string;
+}
+
+export interface NpaResponsibleResponseDto {
+  responsible: NpaResponsibleDto | null;
+  candidates: Array<{ id: string; name: string; role_label?: string }>;
+}
+
 export interface NpaRevisionCreateDto {
   revision_code: string;
   title: string;

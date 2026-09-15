@@ -8472,6 +8472,36 @@
         "INTEGER"
       ]
     ],
+    "npa_act_responsible": [
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "npa_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "owner_user_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "tenant_id",
+        "VARCHAR(36)"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
     "npa_clause": [
       [
         "act_id",
@@ -17154,8 +17184,10 @@
     "NotificationStatus",
     "NotificationType",
     "NpaAct",
+    "NpaActResponsible",
     "NpaClause",
     "NpaRevision",
+    "NpaRevisionClause",
     "Order",
     "OrderStatus",
     "Outbox",

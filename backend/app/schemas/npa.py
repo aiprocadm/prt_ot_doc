@@ -132,6 +132,19 @@ class NpaRevisionRead(BaseModel):
     }
 
 
+class NpaActResponsibleSet(BaseModel):
+    """Кто ведёт акт в этой организации (срез-203, разд. 19.1 «owner»).
+
+    ``None`` — снять ответственного. Это ОТДЕЛЬНОЕ действие, а не пропуск поля:
+    «акт никто не ведёт» — честное состояние реестра, и оно должно
+    выставляться явно, а не получаться забывчивостью.
+    """
+
+    owner_user_id: str | None = None
+
+    model_config = {"extra": "forbid"}
+
+
 class NpaBindingContext(BaseModel):
     """Область действия связи: кого и где она касается (срез-197).
 

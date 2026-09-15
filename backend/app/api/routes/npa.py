@@ -51,15 +51,18 @@ from app.domains.npa.scope import (
     visible_acts,
 )
 from app.models.document import Document
+from app.models.identity import User
 from app.models.master_data import Site
 from app.models.models import NPABinding, Tenant
 from app.models.npa import NpaAct, NpaClause, NpaRevision, NpaRevisionClause
+from app.models.npa_watch import NpaActResponsible
 from app.models.packages import DocumentPack
 from app.models.templates import TemplateVersion
 from app.schemas.npa import (
     NpaActCreate,
     NpaActListResponse,
     NpaActRead,
+    NpaActResponsibleSet,
     NpaBindingContext,
     NpaBindingCreate,
     NpaBindingRead,
@@ -275,6 +278,27 @@ async def create_npa_revision(
     return _revision_read(revision, await _revision_clauses(session, [revision.id]))
 
 
+async def _responsible_read(
+    session: AsyncSession, tenant_id: str, act_id: str
+) -> dict[str, str] | None:
+    """Ответственный СЛОВАМИ: витрина не должна знать идентификаторы людей."""
+
+    row = await session.scalar(
+        select(NpaActResponsible).where(
+            NpaActResponsible.tenant_id == tenant_id, NpaActResponsible.npa_id == act_id
+        )
+    )
+    if row is None or row.owner_user_id is None:
+        return None
+    user = await session.scalar(select(User).where(User.id == row.owner_user_id))
+    if user is None:
+        return None
+    return {
+        "user_id": user.id,
+        "name": (user.full_name or user.email or "").strip() or user.id,
+    }
+
+
 async def _revision_clauses(
     session: AsyncSession, revision_ids: list[str]
 ) -> dict[str, list[NpaRevisionClause]]:
@@ -316,6 +340,94 @@ def _revision_read(
             ],
         }
     )
+
+
+@router.get("/npa/{act_id}/responsible")
+async def get_npa_responsible(
+    act_id: str,
+    session: SessionDep,
+    tenant: Tenant = Depends(get_tenant_record),
+    access=Depends(rbac()),
+) -> dict:
+    """Кто ведёт этот акт в моей организации и кого можно назначить.
+
+    Кандидаты отдаются той же выборкой, что у требований (срез-147): своя, а не
+    `/admin/users` — та ручка про управление доступом и открыта только
+    admin/owner, а специалисту по охране труда для назначения нужны имя и роль.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _ = access
+    act = await get_visible_act(session, act_id, str(tenant.id))
+    if act is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "NPA act not found")
+    # Локальный импорт — как у соседней ручки справочников связи: держим
+    # правило этого файла, а не заводим второе.
+    from app.domains.npa.requirements import RequirementsService  # noqa: PLC0415
+
+    service = RequirementsService(session, str(tenant.id))
+    return {
+        "responsible": await _responsible_read(session, str(tenant.id), act_id),
+        "candidates": await service.owner_options(),
+    }
+
+
+@router.put("/npa/{act_id}/responsible")
+@audit_operation("set", "npa_act_responsible")
+async def set_npa_responsible(
+    act_id: str,
+    payload: NpaActResponsibleSet,
+    session: SessionDep,
+    tenant: Tenant = Depends(get_tenant_record),
+    access=Depends(
+        abac(
+            _tenant_resource_id,
+            required_roles=_IMPACT_WRITE_ROLES,
+            action="set npa responsible",
+        )
+    ),
+) -> dict:
+    """Назначить или снять ответственного за акт (срез-203, разд. 19.1 «owner»).
+
+    Строка АРЕНДАТОРСКАЯ: один и тот же приказ Минтруда ведут в разных
+    организациях разные люди, и ответственный у общей строки реестра был бы
+    верен максимум для одной из них.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _ = access
+    act = await get_visible_act(session, act_id, str(tenant.id))
+    if act is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "NPA act not found")
+    if payload.owner_user_id:
+        # Чужой пользователь — «нет такого»: иначе по коду ответа можно было бы
+        # перебирать сотрудников соседних арендаторов.
+        known = await session.scalar(
+            select(User.id).where(
+                User.id == payload.owner_user_id,
+                User.tenant_id == str(tenant.id),
+                User.deleted_at.is_(None),
+            )
+        )
+        if known is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Пользователь не найден")
+    row = await session.scalar(
+        select(NpaActResponsible).where(
+            NpaActResponsible.tenant_id == str(tenant.id),
+            NpaActResponsible.npa_id == act_id,
+        )
+    )
+    if row is None:
+        row = NpaActResponsible(
+            tenant_id=str(tenant.id), npa_id=act_id, owner_user_id=payload.owner_user_id
+        )
+        session.add(row)
+    else:
+        # Строка остаётся и при снятии: «акт ведём, ответственного сейчас нет» и
+        # «акт никто не вёл» — разные состояния, и первое не должно исчезать.
+        row.owner_user_id = payload.owner_user_id
+    await session.commit()
+    return {"responsible": await _responsible_read(session, str(tenant.id), act_id)}
 
 
 @router.get("/npa/{act_id}/revisions/diff")

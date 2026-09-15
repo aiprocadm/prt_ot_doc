@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const apiClientMock = vi.hoisted(() => ({
   get: vi.fn(),
   post: vi.fn(),
+  put: vi.fn(),
   delete: vi.fn(),
 }));
 
@@ -13,6 +14,7 @@ vi.mock("@/api/client", () => ({
   apiClient: {
     get: (...args: unknown[]) => apiClientMock.get(...args),
     post: (...args: unknown[]) => apiClientMock.post(...args),
+    put: (...args: unknown[]) => apiClientMock.put(...args),
     delete: (...args: unknown[]) => apiClientMock.delete(...args),
   },
 }));
@@ -151,6 +153,14 @@ const npaDetail = {
   ],
 };
 
+const npaResponsible = {
+  responsible: { user_id: "u-1", name: "Иванов И.И." },
+  candidates: [
+    { id: "u-1", name: "Иванов И.И." },
+    { id: "u-2", name: "Петрова А.С." },
+  ],
+};
+
 const tenantDocuments = [
   {
     id: "doc-3",
@@ -166,6 +176,7 @@ describe("NpaPage", () => {
   beforeEach(() => {
     apiClientMock.get.mockReset();
     apiClientMock.post.mockReset();
+    apiClientMock.put.mockReset();
     apiClientMock.delete.mockReset();
     useNpaStore.getState().reset();
 
@@ -185,6 +196,10 @@ describe("NpaPage", () => {
       }
       if (url === "/npa/npa-1") {
         return Promise.resolve({ data: npaDetail });
+      }
+      // Срез-203: кто ведёт акт в этой организации.
+      if (url === "/npa/npa-1/responsible") {
+        return Promise.resolve({ data: npaResponsible });
       }
       if (url === "/documents") {
         return Promise.resolve({ data: { items: tenantDocuments } });
@@ -629,6 +644,8 @@ describe("NpaPage", () => {
         });
       }
       if (url === "/npa/npa-1") return Promise.resolve({ data: npaDetail });
+      if (url === "/npa/npa-1/responsible")
+        return Promise.resolve({ data: npaResponsible });
       if (url === "/npa/npa-1/revisions/diff") {
         return Promise.resolve({
           data: {
@@ -693,6 +710,8 @@ describe("NpaPage", () => {
         });
       }
       if (url === "/npa/npa-1") return Promise.resolve({ data: npaDetail });
+      if (url === "/npa/npa-1/responsible")
+        return Promise.resolve({ data: npaResponsible });
       if (url === "/npa/npa-1/revisions/diff") {
         return Promise.resolve({
           data: {
@@ -755,5 +774,41 @@ describe("NpaPage", () => {
 
     const select = screen.getByLabelText("От редакции");
     expect(select).toHaveTextContent("772н-2027-01 — текста нет");
+  });
+
+  it("видно, кто ведёт акт, и его можно сменить (срез-203)", async () => {
+    // Разд. 19.1 «owner». До среза задача актуализации доставалась тому, кто
+    // нажал кнопку; теперь у акта есть постоянный ответственный, и он виден.
+    const user = userEvent.setup();
+    mockRegistry(false, npaItems, true);
+    apiClientMock.put.mockResolvedValue({
+      data: { responsible: { user_id: "u-2", name: "Петрова А.С." } },
+    });
+
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <NpaPage />
+        </MemoryRouter>,
+      );
+    });
+    await act(async () => {
+      await user.click(await screen.findByRole("button", { name: "772н" }));
+    });
+
+    const select = await screen.findByLabelText("Ответственный за акт");
+    // Имя приходит с сервера: витрина не собирает его из полей человека.
+    expect(select).toHaveTextContent("Иванов И.И.");
+    // «Никто не ведёт» — отдельный выбор, а не пустота: это состояние надо
+    // заметить и исправить, ему уходят задачи после новой редакции.
+    expect(select).toHaveTextContent("Никто не ведёт");
+
+    await act(async () => {
+      await user.selectOptions(select, "u-2");
+    });
+
+    expect(apiClientMock.put).toHaveBeenCalledWith("/npa/npa-1/responsible", {
+      owner_user_id: "u-2",
+    });
   });
 });
