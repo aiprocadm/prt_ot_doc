@@ -92,6 +92,54 @@ def _active_revision(revisions: list[NpaRevision], today: date) -> NpaRevision |
     )
 
 
+#: Состояние редакции акта для человека (срез-198, разд. 19.4 «явный статус»).
+#:
+#: ЧТО БЫЛО. Список редакций показывал код, название и диапазон дат — и НИЧЕГО
+#: про то, какая из них действует. Будущая редакция выглядела ровно так же, как
+#: действующая.
+#:
+#: Это не косметика. Владелец платформы заводит редакцию ЗАРАНЕЕ — так и
+#: задумано («арендаторы узнают о ней в день вступления в силу»). Пока она не
+#: помечена, специалист по охране труда видит её в списке и может начать
+#: исполнять новые правила РАНЬШЕ СРОКА. В продукте про законы это не мелочь.
+#:
+#: Четыре состояния, и четвёртое — не выдумка, а честное имя для реального
+#: случая: диапазоны редакций могут перекрываться, и тогда «сегодня» покрывает
+#: несколько. Система работает ровно по одной; остальные надо назвать, а не
+#: показать как действующие.
+REVISION_ACTIVE = "active"
+REVISION_UPCOMING = "upcoming"
+REVISION_EXPIRED = "expired"
+REVISION_SUPERSEDED = "superseded"
+
+REVISION_STATUS_TITLES: dict[str, str] = {
+    REVISION_ACTIVE: "Действует",
+    REVISION_UPCOMING: "Ещё не вступила в силу",
+    REVISION_EXPIRED: "Утратила силу",
+    REVISION_SUPERSEDED: "Перекрыта более поздней",
+}
+
+
+def revision_status(
+    revision: NpaRevision, *, active: NpaRevision | None, today: date
+) -> str:
+    """Состояние одной редакции. Порядок проверок — от однозначного к спорному.
+
+    «Действует» — ровно та редакция, по которой система считает несверенные
+    связи. Приписать этот статус второй редакции, покрывающей сегодня, значило
+    бы показать два разных ответа на один вопрос «по чему мы сейчас живём».
+    """
+
+    if active is not None and revision.id == active.id:
+        return REVISION_ACTIVE
+    if revision.effective_from is not None and revision.effective_from > today:
+        return REVISION_UPCOMING
+    if revision.effective_to is not None and revision.effective_to < today:
+        return REVISION_EXPIRED
+    # Покрывает сегодня, но выбрана не она: диапазоны перекрылись.
+    return REVISION_SUPERSEDED
+
+
 def _is_stale(row: NPABinding, reference: NpaRevision | None) -> bool:
     """Связь не пересмотрена: сверяли не по той редакции, что действует.
 
@@ -137,7 +185,15 @@ class NpaImpactService:
         selected_revision = (
             next((r for r in revisions if r.id == revision_id), None) if revision_id else None
         )
-        active_revision = selected_revision or _active_revision(revisions, _today())
+        today = _today()
+        # Срез-198: «действующая» и «выбранная для предпросмотра» — разные вещи.
+        # `active_revision` ниже означает «по чему считаем ЭТОТ ответ» и может
+        # быть выбранной вручную будущей редакцией. Статус же обязан говорить
+        # правду о жизни: иначе выбранная для предпросмотра будущая редакция
+        # пометилась бы как «Действует», и человек начал бы исполнять её раньше
+        # срока — ровно то, от чего статус и защищает.
+        truly_active = _active_revision(revisions, today)
+        active_revision = selected_revision or truly_active
         binding_rows = (
             (
                 await self.session.execute(
@@ -239,6 +295,14 @@ class NpaImpactService:
                     "effective_from": r.effective_from.isoformat() if r.effective_from else None,
                     "effective_to": r.effective_to.isoformat() if r.effective_to else None,
                     "change_summary": r.change_summary,
+                    # Срез-198: состояние решает СЕРВЕР и один раз. Считать его
+                    # на витрине значило бы завести второй ответ на вопрос «по
+                    # чему мы сейчас живём» — и он разошёлся бы с тем, по
+                    # которому система помечает несверенные связи.
+                    "status": revision_status(r, active=truly_active, today=today),
+                    "status_title": REVISION_STATUS_TITLES[
+                        revision_status(r, active=truly_active, today=today)
+                    ],
                 }
                 for r in revisions
             ],

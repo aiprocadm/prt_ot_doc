@@ -29,6 +29,12 @@ type NpaDetail = {
     effective_from?: string | null;
     effective_to?: string | null;
     change_summary?: string | null;
+    /** Срез-198: состояние редакции решает сервер — «Действует», «Ещё не
+     * вступила в силу», «Утратила силу», «Перекрыта более поздней». Считать
+     * его на витрине значило бы завести второй ответ на вопрос «по чему мы
+     * сейчас живём». */
+    status?: string;
+    status_title?: string;
   }>;
   bindings: Record<string, string[]>;
   /** Срез-142: связи по одной, с именами — для списка и кнопки «Отвязать». */
@@ -244,8 +250,25 @@ const NpaPage = () => {
                   <div className="space-y-2 mt-2">
                     {detail.revisions.map((revision) => (
                       <div key={revision.id} className="rounded border p-3">
-                        <div className="font-medium">
-                          {revision.revision_code}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium">
+                            {revision.revision_code}
+                          </span>
+                          {revision.status_title ? (
+                            <span
+                              data-testid="npa-revision-status"
+                              data-status={revision.status}
+                              className={
+                                revision.status === "active"
+                                  ? "rounded bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800"
+                                  : revision.status === "upcoming"
+                                    ? "rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800"
+                                    : "rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+                              }
+                            >
+                              {revision.status_title}
+                            </span>
+                          ) : null}
                         </div>
                         <div className="text-sm text-muted-foreground">
                           {revision.title}
