@@ -16,9 +16,11 @@ RBAC: `admin`/`owner`/`hr` — уже, чем чтение карточки со
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
@@ -29,7 +31,9 @@ from app.core.feature_flags import is_feature_enabled
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.models.models import Tenant
+from app.models.privacy import PdnBreach
 from app.modules.privacy import residency
+from app.modules.privacy.breach import BREACH_STAGES, deadlines_for
 from app.modules.privacy.consents import (
     PdnConsentService,
     PdnErasureService,
@@ -53,6 +57,8 @@ from app.schemas.privacy import (
     PdnAgreementCreate,
     PdnAgreementEntry,
     PdnAgreementPage,
+    PdnBreachCreate,
+    PdnBreachStep,
     PdnConsentEntry,
     PdnConsentGrant,
     PdnConsentPage,
@@ -695,3 +701,141 @@ async def terminate_pdn_agreement(
             ),
         )
     return _to_agreement_entry(agreement)
+
+
+# --------------------------------------------------------------------------
+# Разд. 66.3: порядок при утечке персональных данных (срез-207)
+#
+# Платформа НИЧЕГО НЕ ОТПРАВЛЯЕТ в Роскомнадзор — канала для этого нет,
+# уведомление подают через форму регулятора. Здесь ведётся ОБЯЗАТЕЛЬСТВО С
+# ВЫЧИСЛИМЫМ СРОКОМ, а факт отправки отмечает человек. Кнопка «уведомить»,
+# которая на деле только ставит галочку, была бы худшей из возможных.
+# --------------------------------------------------------------------------
+
+
+def _breach_read(row: PdnBreach, *, now: datetime) -> dict:
+    return {
+        "id": row.id,
+        "summary": row.summary,
+        "discovered_at": row.discovered_at.isoformat() if row.discovered_at else None,
+        "happened_at": row.happened_at.isoformat() if row.happened_at else None,
+        "affected_people": row.affected_people,
+        # Сроки СЧИТАЮТСЯ при чтении, а не хранятся: записанный числом срок
+        # разошёлся бы с законом при первой же правке даты обнаружения.
+        "deadlines": [
+            item.as_dict()
+            for item in deadlines_for(
+                discovered_at=row.discovered_at,
+                regulator_notified_at=row.regulator_notified_at,
+                findings_reported_at=row.findings_reported_at,
+                subjects_notified_at=row.subjects_notified_at,
+                now=now,
+            )
+        ],
+    }
+
+
+@router.get(
+    "/breaches",
+    dependencies=[FeatureGate],
+    summary="Реестр утечек ПДн и сроки уведомления (152-ФЗ разд. 66.3)",
+)
+async def list_pdn_breaches(session: SessionDep, tenant: TenantDep, access: PdnAccess) -> dict:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _ = access
+    rows = (
+        (
+            await session.execute(
+                select(PdnBreach)
+                .where(PdnBreach.tenant_id == str(tenant.id))
+                .order_by(PdnBreach.discovered_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    now = datetime.now(tz=timezone.utc)
+    return {
+        "items": [_breach_read(row, now=now) for row in rows],
+        # Платформа честно говорит, чего она НЕ делает. Без этой строки экран
+        # выглядел бы как «мы уведомим за вас».
+        "notice": (
+            "Платформа не отправляет уведомления в Роскомнадзор: их подают через "
+            "форму регулятора. Здесь ведётся срок и отметка о выполнении."
+        ),
+    }
+
+
+@router.post(
+    "/breaches",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[FeatureGate],
+    summary="Зарегистрировать утечку ПДн (152-ФЗ разд. 66.3)",
+)
+@audit_operation("pdn.breach_register", "tenant")
+async def register_pdn_breach(
+    payload: PdnBreachCreate,
+    request: Request,
+    session: SessionDep,
+    tenant: TenantDep,
+    access: PdnAccess,
+) -> dict:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _ = request
+    row = PdnBreach(
+        tenant_id=str(tenant.id),
+        discovered_at=payload.discovered_at,
+        happened_at=payload.happened_at,
+        summary=payload.summary,
+        affected_people=payload.affected_people,
+        registered_by_user_id=getattr(getattr(access, "user", None), "id", None),
+    )
+    session.add(row)
+    await session.commit()
+    await session.refresh(row)
+    return _breach_read(row, now=datetime.now(tz=timezone.utc))
+
+
+@router.post(
+    "/breaches/{breach_id}/steps/{stage}",
+    dependencies=[FeatureGate],
+    summary="Отметить выполненный шаг: уведомление регулятора, результаты, люди",
+)
+@audit_operation("pdn.breach_step", "tenant")
+async def mark_pdn_breach_step(
+    breach_id: str,
+    stage: str,
+    payload: PdnBreachStep,
+    session: SessionDep,
+    tenant: TenantDep,
+    access: PdnAccess,
+) -> dict:
+    """Три шага отмечаются ПО ОТДЕЛЬНОСТИ.
+
+    Уведомить регулятора, сообщить результаты расследования и уведомить людей —
+    разные обязательства закона. Одна отметка на все три означала бы, что
+    выполнив лёгкое, организация считает закрытым и трудное.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _ = access
+    if stage not in BREACH_STAGES:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            f"Неизвестный шаг {stage!r}: допустимы {', '.join(BREACH_STAGES)}",
+        )
+    row = await session.scalar(
+        select(PdnBreach).where(PdnBreach.id == breach_id, PdnBreach.tenant_id == str(tenant.id))
+    )
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Запись об утечке не найдена")
+    done_at = payload.done_at or datetime.now(tz=timezone.utc)
+    if stage == "notify_regulator":
+        row.regulator_notified_at = done_at
+    elif stage == "report_findings":
+        row.findings_reported_at = done_at
+    else:
+        row.subjects_notified_at = done_at
+    await session.commit()
+    await session.refresh(row)
+    return _breach_read(row, now=datetime.now(tz=timezone.utc))

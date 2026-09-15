@@ -428,6 +428,7 @@
     "GET /api/v1/prescriptions/{prescription_id}",
     "GET /api/v1/presets/packages",
     "GET /api/v1/privacy/agreements",
+    "GET /api/v1/privacy/breaches",
     "GET /api/v1/privacy/processing-activities",
     "GET /api/v1/privacy/residency",
     "GET /api/v1/privacy/subjects/{person_id}/access-log",
@@ -982,6 +983,8 @@
     "POST /api/v1/presets/packages",
     "POST /api/v1/privacy/agreements",
     "POST /api/v1/privacy/agreements/{agreement_id}/terminate",
+    "POST /api/v1/privacy/breaches",
+    "POST /api/v1/privacy/breaches/{breach_id}/steps/{stage}",
     "POST /api/v1/privacy/processing-activities/seed-defaults",
     "POST /api/v1/privacy/subjects/{person_id}/anonymize",
     "POST /api/v1/privacy/subjects/{person_id}/consents",
@@ -1849,6 +1852,7 @@
     "list_pc_measures_api_v1_industrial_safety_pc_measures_get",
     "list_pc_plans_api_v1_industrial_safety_pc_plans_get",
     "list_pdn_agreements_api_v1_privacy_agreements_get",
+    "list_pdn_breaches_api_v1_privacy_breaches_get",
     "list_pep_requests_api_v1_sign_pep_requests_get",
     "list_permits_api_v1_permits_get",
     "list_persons_endpoint_api_v1_persons_get",
@@ -1931,6 +1935,7 @@
     "mark_paid_api_v1_billing_subscription_mark_paid_post",
     "mark_passed_api_v1_training_enrollments__item_id__mark_passed_post",
     "mark_past_due_api_v1_billing_subscription_mark_past_due_post",
+    "mark_pdn_breach_step_api_v1_privacy_breaches__breach_id__steps__stage__post",
     "mark_read_api_v1_notifications_mark_read_post",
     "me_api_v1_auth_me_get",
     "me_permissions_api_v1_auth_me_permissions_get",
@@ -2057,6 +2062,7 @@
     "refresh_edo_status_api_v1_edo_messages__message_id__refresh_status_post",
     "refresh_sign_status_api_v1_sign_requests__request_id__refresh_status_post",
     "refresh_tokens_api_v1_auth_refresh_post",
+    "register_pdn_breach_api_v1_privacy_breaches_post",
     "reindex_all_api_v1_search_reindex_post",
     "reindex_by_entity_api_v1_search_reindex__entity_type__post",
     "remind_overdue_entries_api_v1_briefings_entries_remind_overdue_post",
@@ -2985,6 +2991,8 @@
     "PdnAgreementCreate",
     "PdnAgreementEntry",
     "PdnAgreementPage",
+    "PdnBreachCreate",
+    "PdnBreachStep",
     "PdnConsentEntry",
     "PdnConsentGrant",
     "PdnConsentPage",
@@ -8675,6 +8683,15 @@
       "items": "array",
       "total": "integer",
       "uncovered_activity_codes": "array"
+    },
+    "PdnBreachCreate": {
+      "summary": "string",
+      "discovered_at": "string",
+      "happened_at": "null|string",
+      "affected_people": "integer|null"
+    },
+    "PdnBreachStep": {
+      "done_at": "null|string"
     },
     "PdnConsentEntry": {
       "id": "string",
