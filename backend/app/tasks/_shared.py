@@ -63,6 +63,29 @@ def _run_coroutine(coro: Coroutine[Any, Any, T]) -> T:
     return result_holder["value"]
 
 
+async def task_module_is_on(session: AsyncSession, tenant_id: str, task_name: str) -> bool:
+    """Работает ли обход ``task_name`` у этого арендатора (SEC-63 разд. 63.3).
+
+    Ядровой обход работает всегда. Модульный — только там, где модуль продан:
+    иначе после отключения модуля его ночной обход продолжал бы слать письма
+    про раздел, которого человек не видит, и писать строки в его базу. Разд.
+    63.3 называет это «осиротевшие доступы» и требует, чтобы отключение модуля
+    гасило связанные интеграции — вебхуки гасит `_prune_module_webhooks`,
+    задачи гасит эта проверка.
+
+    Чей обход — решает реестр ``app/tasks/module_scope.py``, а НЕ разбор имени:
+    ``ppe.expiry.tick`` выглядит как модуль «СИЗ», но базовые СИЗ — ядро.
+    """
+
+    from app.core.feature_flags import is_module_enabled  # noqa: PLC0415 - цикл импорта
+    from app.tasks.module_scope import module_for_task  # noqa: PLC0415 - цикл импорта
+
+    code = module_for_task(task_name)
+    if code is None:
+        return True
+    return await is_module_enabled(session, tenant_id, code)
+
+
 async def _resolve_task_tenant_scope(
     session: AsyncSession,
     tenant_slug: str,

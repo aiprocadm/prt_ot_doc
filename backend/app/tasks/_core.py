@@ -56,6 +56,7 @@ from app.tasks._shared import (  # noqa: E402
     RETRYABLE_EXCEPTIONS,
     _resolve_task_tenant_scope,
     _run_coroutine,
+    task_module_is_on,
 )
 
 # Importing document_jobs registers its tasks with Celery and re-exposes them as
@@ -880,11 +881,16 @@ def managed_clients_report_sweep() -> dict[str, int]:
                 with tenant_context(slug):
                     ensure_tenant_schema(slug)
                     async with session_scope(tenant=slug) as session:
-                        clients = (
-                            (await session.execute(select(ManagedClient)))
-                            .scalars()
-                            .all()
-                        )
+                        # SEC-63 (разд. 63.3): кабинет аутсорсера продаётся
+                        # модулем. У арендатора без него авто-отчёт клиентам не
+                        # рассылается — иначе отключение модуля гасило бы экран,
+                        # но не письма, уходящие его клиентам от его имени.
+                        tenant_id, _scope = await _resolve_task_tenant_scope(session, slug)
+                        if not await task_module_is_on(
+                            session, tenant_id, "managed_clients.report.sweep"
+                        ):
+                            continue
+                        clients = (await session.execute(select(ManagedClient))).scalars().all()
                         ready = report_schedule.select_ready(clients)
                         totals["candidates"] += len(ready)
                         for client in ready:

@@ -21,6 +21,7 @@ from app.tasks._shared import (
     RETRYABLE_EXCEPTIONS,
     _resolve_task_tenant_scope,
     _run_coroutine,
+    task_module_is_on,
 )
 
 settings = get_settings()
@@ -94,6 +95,11 @@ async def _medical_contingent_tick() -> int:
             ensure_tenant_schema(tenant.slug)
             async with session_scope(tenant=tenant.slug) as session:
                 tenant_id, _scope = await _resolve_task_tenant_scope(session, tenant.slug)
+                # SEC-63 (разд. 63.3): у арендатора без этого модуля обход
+                # пропускается. Иначе ночная рассылка уходит про раздел,
+                # которого человек не видит и за который не платит.
+                if not await task_module_is_on(session, tenant_id, "medical.contingent.tick"):
+                    continue
                 processed += await notify_overdue(
                     session, tenant_id=tenant_id, actor_id=None, today=today
                 )
@@ -133,6 +139,11 @@ async def _managed_clients_audit_tick() -> int:
             ensure_tenant_schema(tenant.slug)
             async with session_scope(tenant=tenant.slug) as session:
                 tenant_id, _scope = await _resolve_task_tenant_scope(session, tenant.slug)
+                # SEC-63 (разд. 63.3): кабинет аутсорсера продаётся модулем —
+                # у арендатора без него еженедельный авто-аудит клиентов не
+                # должен ни считаться, ни рассылаться.
+                if not await task_module_is_on(session, tenant_id, "managed_clients.audit.tick"):
+                    continue
                 outcome = await run_tenant_audit(session, tenant_id, today=today)
                 await session.commit()
                 created += outcome.created
@@ -207,6 +218,11 @@ async def _contractors_readiness_tick() -> int:
             ensure_tenant_schema(tenant.slug)
             async with session_scope(tenant=tenant.slug) as session:
                 tenant_id, _scope = await _resolve_task_tenant_scope(session, tenant.slug)
+                # SEC-63 (разд. 63.3): у арендатора без этого модуля обход
+                # пропускается. Иначе ночная рассылка уходит про раздел,
+                # которого человек не видит и за который не платит.
+                if not await task_module_is_on(session, tenant_id, "contractors.readiness.tick"):
+                    continue
                 # Enqueue notifications first, THEN rebuild — rebuild() commits, making the
                 # outbox events and the refreshed projection a single atomic unit (avoids a
                 # projection/notification split-brain if either step fails midway).
@@ -242,6 +258,11 @@ async def _contractors_documents_tick() -> int:
             ensure_tenant_schema(tenant.slug)
             async with session_scope(tenant=tenant.slug) as session:
                 tenant_id, _scope = await _resolve_task_tenant_scope(session, tenant.slug)
+                # SEC-63 (разд. 63.3): у арендатора без этого модуля обход
+                # пропускается. Иначе ночная рассылка уходит про раздел,
+                # которого человек не видит и за который не платит.
+                if not await task_module_is_on(session, tenant_id, "contractors.documents.tick"):
+                    continue
                 # Enqueue then commit — outbox events are atomic with the read (notify dedups
                 # by (document, status, day), so autoretry is safe).
                 total += await notify_document_expiry(session, tenant_id=tenant_id)
