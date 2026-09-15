@@ -118,14 +118,36 @@ class TestCoverage:
         assert discipline_of_record("briefing_entry", "legacy_free_text") is None
         # источник по таблице — вид не при чём
         assert discipline_of_record("medical_exam", "whatever") is Discipline.MEDICAL
-        # событие календаря: вид берётся из extra по SOURCE_KIND_FIELD
-        assert SOURCE_KIND_FIELD == {"briefing_entry": "briefing_type"}
+        # событие календаря: вид берётся из extra по SOURCE_KIND_FIELD.
+        #
+        # Список заморожен НАМЕРЕННО: разметка «по виду записи» — исключение, и
+        # каждый новый источник в ней должен быть осознанным решением, а не
+        # побочным следствием правки. Срез-196 добавил второй: требование
+        # реестра НПА размечается своим ПРОЦЕССОМ (до него процесс был
+        # свободной строкой, и сроки из закона не попадали ни в одну
+        # дисциплину).
+        assert SOURCE_KIND_FIELD == {
+            "briefing_entry": "briefing_type",
+            "compliance_requirement": "process_code",
+        }
         assert (
             discipline_of_event("briefing_entry", {"briefing_type": "fire_repeat"})
             is Discipline.FIRE_SAFETY
         )
         assert discipline_of_event("briefing_entry", {}) is Discipline.TRAINING
         assert discipline_of_event("ppe_issue", {"briefing_type": "fire_repeat"}) is Discipline.PPE
+
+        # Те же три исхода — у требований реестра НПА (срез-196).
+        assert (
+            discipline_of_record("compliance_requirement", "fire_safety")
+            is Discipline.FIRE_SAFETY
+        )
+        # Процесса нет под рукой → умолчание источника, а у этого источника его
+        # НЕТ (он не в SOURCE_DISCIPLINE): обязанность бывает общей для
+        # арендатора, и приписывать ей дисциплину целиком было бы враньём.
+        assert discipline_of_record("compliance_requirement", None) is None
+        # Процесс есть, но словарю незнаком — свободная строка до среза-196.
+        assert discipline_of_record("compliance_requirement", "обучение по ОТ") is None
 
 
 class TestSingleSource:

@@ -40,6 +40,9 @@ export interface ComplianceRequirementDto {
   /** Имя площадки (срез-147): без него привязка к объекту невидима. */
   site_name?: string | null;
   process_code?: string | null;
+  /** Процесс словами (срез-196). Неизвестный код возвращается как есть: у
+   * требований до среза в поле лежит свободный текст. */
+  process_label?: string | null;
   owner_user_id?: string | null;
   owner_name?: string | null;
   periodicity_days?: number | null;
@@ -139,4 +142,6 @@ export interface ComplianceRequirementOptionsDto {
   owners: RequirementOwnerOptionDto[];
   sites: RequirementSiteOptionDto[];
   roles: RequirementRoleOptionDto[];
+  /** Процессы (срез-196): дисциплины ТЗ + общая охрана труда. */
+  processes: RequirementRoleOptionDto[];
 }

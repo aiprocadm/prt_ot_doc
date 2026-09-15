@@ -44,14 +44,33 @@ TODAY = datetime.now(tz=timezone.utc).date()
 
 def test_источник_объявлен_без_дисциплины_и_не_поимённый() -> None:
     assert SOURCE in ALL_SOURCES
-    # Дисциплины у требования нет — она не хранится в записи; причина названа
-    # словами, иначе сторож полноты разметки не пропустит.
+    # Источник ЦЕЛИКОМ к одной дисциплине не относится: обязанность бывает
+    # общей для арендатора (порядок расследования, режим труда и отдыха).
+    # Причина названа словами, иначе сторож полноты разметки не пропустит.
     assert SOURCE in UNCLASSIFIED_SOURCES
     assert discipline_of(SOURCE) is None
     assert SOURCE not in ATTENTION_SOURCES
     # Ответственный — пользователь системы, а не карточка сотрудника: подменять
     # одно другим значило бы выдать чужое по фильтру «по человеку».
     assert SOURCE not in PERSON_SCOPED_SOURCES
+
+
+def test_у_записи_с_процессом_дисциплина_есть() -> None:
+    """Срез-196: то, ради чего процесс стал закрытым словарём.
+
+    Пока процесс был свободной строкой, сроки, следующие из ЗАКОНА, не попадали
+    ни в один дисциплинарный отчёт: «что у нас по пожарной безопасности»
+    отвечало про тренировки и огнетушители и молчало про обязанность из приказа.
+    """
+
+    from app.core.disciplines import Discipline, discipline_of_event
+
+    assert (
+        discipline_of_event(SOURCE, {"process_code": "fire_safety"})
+        is Discipline.FIRE_SAFETY
+    )
+    # А у записи без процесса — по-прежнему нет, и это правда, а не пробел.
+    assert discipline_of_event(SOURCE, {"process_code": None}) is None
 
 
 def _requirement(tenant_id: str, *, code: str, **extra) -> ComplianceRequirement:
