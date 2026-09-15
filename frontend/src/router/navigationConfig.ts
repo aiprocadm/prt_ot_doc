@@ -392,6 +392,13 @@ export const MAIN_NAV_GROUPS: NavGroup[] = [
         permission: PERMISSIONS.NPA_VIEW,
       },
       {
+        // Срез-208: утечки ПДн и сроки 152-ФЗ. Право то же, что у ручек.
+        label: "Утечки ПДн",
+        to: "/privacy/breaches",
+        icon: ShieldCheck,
+        permission: PERMISSIONS.PRIVACY_VIEW,
+      },
+      {
         label: "Реестр требований",
         to: "/npa/requirements",
         icon: ClipboardCheck,

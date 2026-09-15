@@ -62,6 +62,7 @@ import {
   MobileIssuePage,
   NotificationsPage,
   NpaPage,
+  PrivacyBreachesPage,
   RequirementsPage,
   OutboxPage,
   PacksPage,
@@ -531,6 +532,18 @@ export const buildProtectedRouteGroups = (): ReactElement[] => {
           key="/admin/branding"
           path="/admin/branding"
           element={<BrandSettingsPage />}
+        />,
+      ],
+    },
+    {
+      // Срез-208 (152-ФЗ разд. 66.3): первая витрина контура ПДн. Право
+      // ровно то же, что у ручек (`_PDN_ROLES`): admin / owner / hr.
+      permission: PERMISSIONS.PRIVACY_VIEW,
+      routes: [
+        <Route
+          key="/privacy/breaches"
+          path="/privacy/breaches"
+          element={<PrivacyBreachesPage />}
         />,
       ],
     },
