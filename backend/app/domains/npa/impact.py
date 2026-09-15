@@ -14,6 +14,7 @@ from app.models.document import Document
 from app.models.models import NPABinding
 from app.models.notifications import PlanTask, PlanTaskStatus
 from app.models.npa import NpaAct, NpaRevision, NpaRevisionClause
+from app.models.npa_watch import NpaActResponsible
 from app.models.packages import DocumentPack
 from app.models.templates import TemplateVersion
 
@@ -307,6 +308,9 @@ class NpaImpactService:
                 # второй, и вес у них разный.
                 "scope": scope_of(act),
                 "scope_title": scope_title(act),
+                # Срез-203: кто ведёт акт в этой организации. Пусто — «никто не
+                # ведёт», и это видно на экране, а не угадывается.
+                "responsible_user_id": await self.responsible_user_id(act_id),
             },
             "revisions": [
                 {
@@ -519,12 +523,28 @@ class NpaImpactService:
             row.id: names.get((_binding_kind(row), row.entity_id), row.entity_id) for row in rows
         }
 
+    async def responsible_user_id(self, act_id: str) -> str | None:
+        """Кто у этого арендатора ведёт акт (разд. 19.1 «owner», срез-203)."""
+
+        return await self.session.scalar(
+            select(NpaActResponsible.owner_user_id).where(
+                NpaActResponsible.tenant_id == self.tenant_id,
+                NpaActResponsible.npa_id == act_id,
+            )
+        )
+
     async def create_update_tasks(
         self, act_id: str, created_by: str | None, revision_id: str | None = None
     ) -> list[PlanTask]:
         payload = await self.detail(act_id, revision_id=revision_id)
         if payload is None:
             return []
+        # Срез-203 (разд. 19.1 «owner»): задача идёт ПОСТОЯННОМУ ответственному
+        # за акт, если он назначен. До среза она доставалась тому, кто нажал
+        # кнопку, — то есть первому, кто открыл экран, а не тому, кто за акт
+        # отвечает. Ответственного нет — прежнее поведение, а не пустой
+        # исполнитель: задача без адресата хуже задачи не на того.
+        assignee = payload["act"]["responsible_user_id"] or created_by
         tasks: list[PlanTask] = []
         for item in payload["tasks_to_create"]:
             existing = (
@@ -553,7 +573,7 @@ class NpaImpactService:
                 ),
                 entity_type="npa",
                 entity_id=act_id,
-                assignee_id=created_by,
+                assignee_id=assignee,
                 status=PlanTaskStatus.OPEN,
             )
             self.session.add(task)

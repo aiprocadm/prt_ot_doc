@@ -15,6 +15,7 @@ import {
   NpaActFormDialog,
   NpaRevisionFormDialog,
 } from "@/features/npa/NpaFormDialogs";
+import { NpaResponsible } from "@/features/npa/NpaResponsible";
 import { NpaRevisionCompare } from "@/features/npa/NpaRevisionCompare";
 import { NpaTable } from "@/features/npa/NpaTable";
 import { ROUTES } from "@/router/routes";
@@ -274,6 +275,12 @@ const NpaPage = () => {
                   <div className="text-sm text-muted-foreground">
                     {detail.act.title} · {detail.act.edition}
                   </div>
+                  {/* Срез-203 (разд. 19.1 «owner»): кто ведёт акт у нас. Круг
+                      назначающих тот же, что у записей по НПА, — поэтому флаг
+                      берётся из того же права, что и «Добавить свой акт». */}
+                  {selectedId ? (
+                    <NpaResponsible actId={selectedId} canEdit={canCreateOwn} />
+                  ) : null}
                 </div>
                 <div>
                   <div className="flex items-center justify-between">

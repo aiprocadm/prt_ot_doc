@@ -340,6 +340,7 @@
     "GET /api/v1/npa",
     "GET /api/v1/npa/binding-options",
     "GET /api/v1/npa/{act_id}",
+    "GET /api/v1/npa/{act_id}/responsible",
     "GET /api/v1/npa/{act_id}/revisions/diff",
     "GET /api/v1/obligations",
     "GET /api/v1/obligations/summary",
@@ -1125,6 +1126,7 @@
     "PUT /api/v1/medical/psychiatric/positions/{position_id}/activities",
     "PUT /api/v1/notifications/notification-settings/me",
     "PUT /api/v1/notifications/settings/me",
+    "PUT /api/v1/npa/{act_id}/responsible",
     "PUT /api/v1/pipelines/profiles/{profile_id}",
     "PUT /api/v1/platform/branding",
     "PUT /api/v1/platform/branding/favicon",
@@ -1627,6 +1629,7 @@
     "get_norm_api_v1_ppe_norms__norm_id__get",
     "get_norm_suggestions_api_v1_sout_workplaces__wid__norm_suggestions_get",
     "get_npa_detail_api_v1_npa__act_id__get",
+    "get_npa_responsible_api_v1_npa__act_id__responsible_get",
     "get_obligation_task_api_v1_tasks__task_id__get",
     "get_operational_dashboard_api_v1_operational_dashboard_get",
     "get_order_api_v1_orders__order_id__get",
@@ -2123,6 +2126,7 @@
     "set_client_change_status_api_v1_managed_clients__mcid__changes__change_id__patch",
     "set_hazard_factor_api_v1_medical_hazards__hazard_id__factor_put",
     "set_matrix_api_v1_risk_matrix_put",
+    "set_npa_responsible_api_v1_npa__act_id__responsible_put",
     "set_position_activities_api_v1_medical_psychiatric_positions__position_id__activities_put",
     "set_reseller_price_api_v1_billing_reseller_prices_post",
     "sign_employee_api_v1_briefings_entries__item_id__sign_employee_post",
@@ -2826,6 +2830,7 @@
     "NpaActCreate",
     "NpaActListResponse",
     "NpaActRead",
+    "NpaActResponsibleSet",
     "NpaBindingContext",
     "NpaBindingCreate",
     "NpaBindingRead",
@@ -7577,6 +7582,9 @@
       "clauses": "array",
       "scope": "string",
       "scope_title": "string"
+    },
+    "NpaActResponsibleSet": {
+      "owner_user_id": "null|string"
     },
     "NpaBindingContext": {
       "role_code": "null|string",

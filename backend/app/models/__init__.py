@@ -127,7 +127,8 @@ from app.models.notifications import (
 from app.models.notifications import (
     PlanTaskStatus as CalendarPlanTaskStatus,
 )
-from app.models.npa import NpaAct, NpaClause, NpaRevision
+from app.models.npa import NpaAct, NpaClause, NpaRevision, NpaRevisionClause
+from app.models.npa_watch import NpaActResponsible
 from app.models.obligations import Task, TaskPriority, TaskReminderChannel, TaskStatus
 from app.models.risk import (
     RiskActionPlan,
@@ -163,6 +164,8 @@ from app.models.white_label import TenantBranding
 from app.models.work_permit import WorkPermit, WorkPermitEvent, WorkPermitMember
 
 __all__ = [
+    "NpaActResponsible",
+    "NpaRevisionClause",
     "TenantBranding",
     "ClientChange",
     "ComplianceRequirement",

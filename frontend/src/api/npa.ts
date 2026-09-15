@@ -1,6 +1,7 @@
 import { apiClient } from "@/api/client";
 import type {
   NpaActCreateDto,
+  NpaResponsibleResponseDto,
   NpaRevisionDiffDto,
   NpaBindingCreateDto,
   NpaBindingOptionsDto,
@@ -30,6 +31,23 @@ export const npaApi = {
     const { data } = await apiClient.post<NpaRevisionDto>(
       `/npa/${actId}/revisions`,
       payload,
+    );
+    return data;
+  },
+  /** Срез-203: кто ведёт акт в этой организации и кого можно назначить. */
+  responsible: async (actId: string): Promise<NpaResponsibleResponseDto> => {
+    const { data } = await apiClient.get<NpaResponsibleResponseDto>(
+      `/npa/${actId}/responsible`,
+    );
+    return data;
+  },
+  setResponsible: async (
+    actId: string,
+    ownerUserId: string | null,
+  ): Promise<NpaResponsibleResponseDto> => {
+    const { data } = await apiClient.put<NpaResponsibleResponseDto>(
+      `/npa/${actId}/responsible`,
+      { owner_user_id: ownerUserId },
     );
     return data;
   },
