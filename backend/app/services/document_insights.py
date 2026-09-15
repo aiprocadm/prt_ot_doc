@@ -9,9 +9,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.domains.npa.scope import get_visible_act
 from app.models.document import Document, DocumentVersion
 from app.models.models import NPABinding, NpaBindingTarget, Template, TemplateVersion
-from app.models.npa import NpaAct
 
 
 def _canonical_value(value: Any) -> Any:
@@ -108,9 +108,10 @@ async def build_document_dependency_map(
 
     npa_payload: list[dict[str, Any]] = []
     for binding in npa_bindings_raw:
-        # Срез-142: связь ведёт в общий реестр актов (npa_act), у него нет
-        # арендатора — проверять принадлежность нечего и незачем.
-        npa = await session.get(NpaAct, binding.npa_id)
+        # Срез-201: у акта появился владелец — общий реестр (NULL) или сам
+        # арендатор. Комментарий среза-142 «проверять принадлежность нечего»
+        # с этого момента неверен, и проверка идёт через единственное место.
+        npa = await get_visible_act(session, binding.npa_id, str(tenant_id))
         npa_payload.append(
             {
                 "binding_id": binding.id,

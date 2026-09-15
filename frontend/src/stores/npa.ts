@@ -22,6 +22,8 @@ interface NpaState extends PaginatedState<NpaDto, NpaFiltersDto> {
   /** Полный ответ сервера; `items` — отфильтрованная страница из него. */
   all: NpaDto[];
   canManage: boolean;
+  /** Срез-201: может ли пришедший завести СВОЙ акт (см. `can_create_own`). */
+  canCreateOwn: boolean;
   list: (params?: Partial<NpaFiltersDto>) => Promise<void>;
   setFilters: (filters: Partial<NpaFiltersDto>) => void;
   setPage: (page: number) => void;
@@ -41,6 +43,7 @@ const matches = (item: NpaDto, search: string | undefined): boolean => {
 const emptyState = () => ({
   all: [] as NpaDto[],
   canManage: false,
+  canCreateOwn: false,
   items: [] as NpaDto[],
   item: null as NpaDto | null,
   filters: {} as NpaFiltersDto,
@@ -100,6 +103,7 @@ export const useNpaStore = create<NpaState>()(
           set((state) => {
             state.all = data.items;
             state.canManage = data.can_manage ?? false;
+            state.canCreateOwn = data.can_create_own ?? false;
           });
           recompute();
         } catch (error) {

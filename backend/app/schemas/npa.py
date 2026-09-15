@@ -7,6 +7,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.domains.npa.scope import REGISTRY_SCOPE, TENANT_SCOPE
+
 
 class NpaClauseRead(BaseModel):
     id: str
@@ -26,6 +28,11 @@ class NpaActRead(BaseModel):
     valid_from: date | None = None
     valid_to: date | None = None
     clauses: list[NpaClauseRead] = []
+    #: Срез-201: из какого ящика акт — общий реестр платформы или собственный
+    #: акт арендатора. Витрина обязана их различать: «Приказ Минтруда» и «наш
+    #: приказ по организации» лежат в одном списке, а весят разное.
+    scope: str = REGISTRY_SCOPE
+    scope_title: str = ""
 
     model_config = {
         "from_attributes": True,
@@ -38,6 +45,11 @@ class NpaActListResponse(BaseModel):
     #: всех арендаторов, поэтому право есть только у владельца платформы —
     #: витрина по этому флагу показывает или прячет кнопку «Добавить акт».
     can_manage: bool = False
+    #: Срез-201: а свой собственный акт завести может? Это ДРУГОЕ право: общий
+    #: реестр закрыт всем, кроме владельца платформы, а свой приказ ведёт любой
+    #: арендатор. Без отдельного флага витрина прятала бы кнопку «Добавить свой
+    #: акт» ровно у тех, кому она и нужна.
+    can_create_own: bool = False
 
 
 class NpaClauseCreate(BaseModel):
@@ -53,6 +65,10 @@ class NpaActCreate(BaseModel):
     можно не расписывать, пока на них не ссылается оценка влияния).
     """
 
+    #: Срез-201: в какой ящик писать. Значение по умолчанию — общий реестр:
+    #: так ручка ведёт себя ровно как до среза, и старые вызовы не меняют
+    #: смысла молча.
+    scope: Literal[REGISTRY_SCOPE, TENANT_SCOPE] = REGISTRY_SCOPE
     code: str = Field(min_length=1, max_length=128)
     title: str = Field(min_length=1, max_length=512)
     edition: str = Field(min_length=1, max_length=128)

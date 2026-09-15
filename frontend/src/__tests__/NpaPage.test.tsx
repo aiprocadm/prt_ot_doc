@@ -41,6 +41,9 @@ const npaItems: NpaDto[] = [
     valid_from: "2026-03-01",
     valid_to: null,
     clauses: [{ id: "c-1", code: "1", text: "Общие положения" }],
+    // Срез-201: ящик приходит с сервера и кодом, и словами.
+    scope: "registry",
+    scope_title: "Общий реестр",
   },
   {
     id: "npa-2",
@@ -50,6 +53,8 @@ const npaItems: NpaDto[] = [
     valid_from: "2026-01-01",
     valid_to: null,
     clauses: [],
+    scope: "registry",
+    scope_title: "Общий реестр",
   },
   {
     id: "npa-3",
@@ -59,6 +64,8 @@ const npaItems: NpaDto[] = [
     valid_from: "2025-09-01",
     valid_to: "2026-02-28",
     clauses: [],
+    scope: "registry",
+    scope_title: "Общий реестр",
   },
 ];
 
@@ -68,6 +75,8 @@ const npaDetail = {
     code: "772н",
     title: "Приказ Минтруда № 772н об обучении по охране труда",
     edition: "ред. от 01.03.2026",
+    scope: "registry",
+    scope_title: "Общий реестр",
   },
   revisions: [
     {
@@ -126,7 +135,8 @@ const npaDetail = {
   // ПРИЧИНОЙ. Раньше они считались вечным нулём, экран их молча скрывал, и
   // человек читал отсутствие строки как «этот закон их не задевает».
   unrecorded: {
-    risks: "Связь акта с карточкой риска не ведётся: риск — самостоятельная сущность",
+    risks:
+      "Связь акта с карточкой риска не ведётся: риск — самостоятельная сущность",
     workflows: "Связь акта с маршрутом согласования не ведётся",
   },
   tasks_to_create: [
@@ -159,10 +169,16 @@ describe("NpaPage", () => {
     mockRegistry(false);
   });
 
-  const mockRegistry = (canManage: boolean, items: NpaDto[] = npaItems) => {
+  const mockRegistry = (
+    canManage: boolean,
+    items: NpaDto[] = npaItems,
+    canCreateOwn = false,
+  ) => {
     apiClientMock.get.mockImplementation((url: string) => {
       if (url === "/npa") {
-        return Promise.resolve({ data: { items, can_manage: canManage } });
+        return Promise.resolve({
+          data: { items, can_manage: canManage, can_create_own: canCreateOwn },
+        });
       }
       if (url === "/npa/npa-1") {
         return Promise.resolve({ data: npaDetail });
@@ -297,6 +313,10 @@ describe("NpaPage", () => {
     });
 
     expect(apiClientMock.post).toHaveBeenCalledWith("/npa", {
+      // Срез-201: ящик называется ЯВНО. Молчание здесь означало бы «решай
+      // по правам» — и однажды приказ одной организации ушёл бы в общий
+      // реестр для всех.
+      scope: "registry",
       code: "1/29",
       title: "Новый акт",
       edition: "ред. 1",
@@ -491,7 +511,6 @@ describe("NpaPage", () => {
     expect(block).toHaveTextContent("Маршруты");
   });
 
-
   it("будущая редакция помечена, а не выглядит действующей (срез-198)", async () => {
     // Владелец платформы заводит редакцию заранее. Без пометки специалист
     // видит её в списке и может начать исполнять новые правила раньше срока.
@@ -513,4 +532,78 @@ describe("NpaPage", () => {
     ).toHaveTextContent("Ещё не вступила в силу");
   });
 
+  it("арендатор заводит СВОЙ акт, и он уходит в свой ящик (срез-201)", async () => {
+    // Главное на витрине: кнопок две, и они делают разное. «Добавить акт»
+    // пишет в общий реестр для всех арендаторов, «Добавить свой акт» — только
+    // себе. Одна кнопка с угадыванием по правам однажды перепутала бы их.
+    const user = userEvent.setup();
+    mockRegistry(false, npaItems, true);
+    apiClientMock.post.mockResolvedValue({
+      data: {
+        id: "npa-own",
+        code: "ПР-1",
+        title: "Приказ по организации",
+        edition: "ред. 1",
+        clauses: [],
+        scope: "own",
+        scope_title: "Акт организации",
+      },
+    });
+
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <NpaPage />
+        </MemoryRouter>,
+      );
+    });
+
+    // Кнопки общего реестра нет: туда ручка ответила бы отказом.
+    expect(
+      await screen.findByRole("button", { name: "Добавить свой акт" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Добавить акт" }),
+    ).not.toBeInTheDocument();
+
+    await act(async () => {
+      await user.click(
+        screen.getByRole("button", { name: "Добавить свой акт" }),
+      );
+    });
+    // Форма честно говорит, куда попадёт акт.
+    expect(screen.getByText("Новый акт организации")).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Номер"), "ПР-1");
+    await user.type(screen.getByLabelText("Редакция"), "ред. 1");
+    await user.type(screen.getByLabelText("Название"), "Приказ по организации");
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: "Добавить" }));
+    });
+
+    expect(apiClientMock.post).toHaveBeenCalledWith(
+      "/npa",
+      expect.objectContaining({ scope: "own", code: "ПР-1" }),
+    );
+  });
+
+  it("в списке видно, чей акт (срез-201)", async () => {
+    // До среза все акты были федеральными, и колонка была бы шумом. Теперь в
+    // одном списке лежат общие приказы и свои — а править можно только свои.
+    mockRegistry(false, npaItems, true);
+
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <NpaPage />
+        </MemoryRouter>,
+      );
+    });
+
+    const cells = await screen.findAllByTestId("npa-scope");
+    expect(cells.length).toBeGreaterThan(0);
+    // Слово приходит с сервера: витрина не переводит код сама.
+    expect(cells[0]).toHaveTextContent("Общий реестр");
+    expect(cells[0]).toHaveAttribute("data-scope", "registry");
+  });
 });

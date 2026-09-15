@@ -13,6 +13,14 @@ export interface NpaClauseDto {
   text: string;
 }
 
+/**
+ * Срез-201: из какого ящика акт. `registry` — общий реестр платформы
+ * (федеральный приказ), `own` — собственный акт этой организации. Подпись
+ * словами приходит С СЕРВЕРА (`scope_title`): витрина не должна знать, что
+ * "own" значит «Акт организации».
+ */
+export type NpaScope = "registry" | "own";
+
 export interface NpaDto {
   id: string;
   code: string;
@@ -21,12 +29,20 @@ export interface NpaDto {
   valid_from?: string | null;
   valid_to?: string | null;
   clauses: NpaClauseDto[];
+  scope?: NpaScope;
+  scope_title?: string;
 }
 
 export interface NpaListResponseDto {
   items: NpaDto[];
-  /** Право заводить акты и редакции — только у владельца платформы. */
+  /** Право заводить акты и редакции ОБЩЕГО реестра — у владельца платформы. */
   can_manage: boolean;
+  /**
+   * Срез-201: право завести СВОЙ акт. Оно шире предыдущего: свой приказ ведёт
+   * любая организация. Без отдельного флага кнопка «Добавить свой акт»
+   * пряталась бы ровно у тех, кому она и нужна.
+   */
+  can_create_own?: boolean;
 }
 
 export interface NpaClauseCreateDto {
@@ -35,6 +51,8 @@ export interface NpaClauseCreateDto {
 }
 
 export interface NpaActCreateDto {
+  /** Срез-201: в какой ящик писать. По умолчанию — общий реестр. */
+  scope?: NpaScope;
   code: string;
   title: string;
   edition: string;

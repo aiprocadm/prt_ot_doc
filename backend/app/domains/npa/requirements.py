@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.role_labels import role_label
+from app.domains.npa.scope import visible_acts
 from app.models.compliance_requirements import (
     ComplianceRequirement,
     ComplianceRequirementEvidence,
@@ -328,7 +329,11 @@ class RequirementsService:
                 sites[site.id] = {"name": site.name}
         if act_ids:
             for act in (
-                (await self.session.execute(select(NpaAct).where(NpaAct.id.in_(act_ids))))
+                (
+                    await self.session.execute(
+                        visible_acts(self.tenant_id).where(NpaAct.id.in_(act_ids))
+                    )
+                )
                 .scalars()
                 .all()
             ):

@@ -18,10 +18,22 @@ import {
 import { NpaTable } from "@/features/npa/NpaTable";
 import { ROUTES } from "@/router/routes";
 import { useNpaStore } from "@/stores/npa";
-import type { NpaBindingDto, NpaBindingTarget } from "@/types/dto/npa";
+import type {
+  NpaBindingDto,
+  NpaBindingTarget,
+  NpaScope,
+} from "@/types/dto/npa";
 
 type NpaDetail = {
-  act: { id: string; code: string; title: string; edition: string };
+  act: {
+    id: string;
+    code: string;
+    title: string;
+    edition: string;
+    // Срез-201: чей это акт. По нему решается, можно ли его переиздать.
+    scope?: NpaScope;
+    scope_title?: string;
+  };
   revisions: Array<{
     id: string;
     revision_code: string;
@@ -70,8 +82,17 @@ const SUMMARY_LABELS: Record<string, string> = {
 };
 
 const NpaPage = () => {
-  const { list, setFilters, filters, items, all, loading, error, canManage } =
-    useNpaStore();
+  const {
+    list,
+    setFilters,
+    filters,
+    items,
+    all,
+    loading,
+    error,
+    canManage,
+    canCreateOwn,
+  } = useNpaStore();
   const [search, setSearch] = useState(filters.search ?? "");
   // Срез-142: поиск ведёт сюда ссылкой `/npa?selected=<id>` — выбранный акт
   // берём из адреса, иначе ссылка открывала бы пустую детализацию.
@@ -170,6 +191,23 @@ const NpaPage = () => {
               onCreated={() => void list()}
             />
           ) : null}
+          {/* Срез-201: своя нормативка организации. Кнопка отдельная от
+              «Добавить акт», потому что поступки разные: тот акт увидят все
+              арендаторы, этот — только своя организация. */}
+          {canCreateOwn ? (
+            <NpaActFormDialog
+              scope="own"
+              trigger={
+                <Button
+                  variant="outline"
+                  className={canManage ? "" : "ml-auto"}
+                >
+                  Добавить свой акт
+                </Button>
+              }
+              onCreated={() => void list()}
+            />
+          ) : null}
         </CardContent>
       </Card>
       {loading && items.length === 0 ? (
@@ -183,7 +221,9 @@ const NpaPage = () => {
               ? "По запросу ничего не найдено — измените поиск."
               : canManage
                 ? "Добавьте нормативный акт кнопкой «Добавить акт» — реестр общий для всех арендаторов."
-                : "Реестр НПА ведёт владелец платформы; пока в нём нет ни одного акта."
+                : canCreateOwn
+                  ? "Общий реестр ведёт владелец платформы, а свой приказ по организации вы можете добавить сами — кнопкой «Добавить свой акт»."
+                  : "Реестр НПА ведёт владелец платформы; пока в нём нет ни одного акта."
           }
         />
       ) : null}
@@ -235,7 +275,10 @@ const NpaPage = () => {
                     <div className="text-xs font-medium uppercase text-muted-foreground">
                       Редакции
                     </div>
-                    {canManage && selectedId ? (
+                    {/* Срез-201: редакцию своего акта ведёт сам арендатор —
+                        иначе собственный приказ остался бы мёртвой карточкой,
+                        которую нельзя переиздать. */}
+                    {(canManage || detail.act.scope === "own") && selectedId ? (
                       <NpaRevisionFormDialog
                         actId={selectedId}
                         trigger={
