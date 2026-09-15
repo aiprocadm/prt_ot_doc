@@ -21,6 +21,11 @@ from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.pool import NullPool
 
 from app.core.config import get_settings
+from app.core.sql_text import (
+    quote_identifier,
+    session_label_params,
+    session_label_statement,
+)
 from app.core.tenant import get_current_tenant, tenant_schema
 from app.modules.tenancy.context import get_tenant_context
 
@@ -414,9 +419,11 @@ async def _create_tenant_schema(schema: str) -> None:
 
     if not _SUPPORTS_SCHEMAS:
         return
+    quoted_schema = quote_identifier(schema, source="схема арендатора")
+    quoted_shared = quote_identifier(_SHARED_SCHEMA, source="общая схема из настроек")
     async with engine.begin() as conn:
-        await conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema}"'))
-        search_path_sql = f'SET LOCAL search_path TO "{schema}", "{_SHARED_SCHEMA}"'
+        await conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {quoted_schema}"))
+        search_path_sql = f"SET LOCAL search_path TO {quoted_schema}, {quoted_shared}"
         if _SEARCH_PATH_SUPPORTED:
             # iter-16f part 4 set this on the async conn, but FK to unqualified
             # ``tenant`` still failed in CI — the async→sync greenlet bridge
@@ -597,7 +604,9 @@ def _format_search_path(schemas: Iterable[str]) -> str:
     for schema in schemas:
         if schema not in seen:
             seen.add(schema)
-            normalized.append(f'"{schema}"')
+            # Имя схемы параметром не передать, поэтому — проверка формата
+            # перед склейкой (разд. 64.1, строка «Injection»).
+            normalized.append(quote_identifier(schema, source="search_path сессии"))
     return ", ".join(normalized)
 
 
@@ -615,8 +624,10 @@ async def _apply_search_path(session: AsyncSession) -> None:
     await session.execute(text(f"SET LOCAL search_path TO {formatted}"))
     ctx = get_tenant_context()
     if ctx and ctx.correlation_id:
-        safe = ctx.correlation_id.replace('"', "")
-        await session.execute(text(f"SET LOCAL application_name TO 'api:{safe}'"))
+        # Разд. 64.1, строка «Injection»: метка сессии приходит ИЗ ЗАГОЛОВКА
+        # ЗАПРОСА. Здесь она уходит параметром и текстом SQL не становится —
+        # см. `app/core/sql_text.py`.
+        await session.execute(session_label_statement(), session_label_params(ctx.correlation_id))
 
 
 async def _apply_tenant_rls(session: AsyncSession) -> None:
@@ -782,22 +793,25 @@ async def get_tenant_session(
     ) as session:
         if _SEARCH_PATH_SUPPORTED:
             schema = schema_name or tenant_schema(tenant or tenant_id or _DEFAULT_TENANT_SLUG)
+            path = _format_search_path([schema, _SHARED_SCHEMA])
             try:
-                await session.execute(
-                    text(f'SET LOCAL search_path TO "{schema}", "{_SHARED_SCHEMA}"')
-                )
+                await session.execute(text(f"SET LOCAL search_path TO {path}"))
             except Exception:
-                await session.execute(text(f'SET search_path TO "{schema}", "{_SHARED_SCHEMA}"'))
+                await session.execute(text(f"SET search_path TO {path}"))
             ctx = get_tenant_context()
             if ctx and ctx.correlation_id:
-                safe = ctx.correlation_id.replace('"', "")
-                await session.execute(text(f"SET LOCAL application_name TO 'api:{safe}'"))
+                # Второй путь тех же настроек сессии. Урок среза-206: у доставки
+                # было два пути, правило стояло на одном — правило ставится на ОБА.
+                await session.execute(
+                    session_label_statement(), session_label_params(ctx.correlation_id)
+                )
         try:
             yield session
         finally:
             if _SEARCH_PATH_SUPPORTED:
                 try:
-                    await session.execute(text(f'SET search_path TO "{_SHARED_SCHEMA}"'))
+                    shared = _format_search_path([_SHARED_SCHEMA])
+                    await session.execute(text(f"SET search_path TO {shared}"))
                 except Exception:
                     pass
 
