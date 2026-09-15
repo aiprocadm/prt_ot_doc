@@ -30,6 +30,7 @@ from typing import Any
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.sql_text import quote_identifier
 from app.models.offboarding import TenantOffboarding
 from app.models.privacy_registry import PdnProcessingActivity
 from app.modules.offboarding.schema_graph import SchemaGraph, reflect_schema_graph
@@ -273,9 +274,12 @@ class TenantOffboardingService:
 
         plans: list[TablePlan] = []
         for table in graph.tables:
+            # Имя таблицы снято со схемы базы; параметром его не передать —
+            # проверка формата перед склейкой (разд. 64.1, строка «Injection»).
+            quoted = quote_identifier(table, source="карта таблиц схемы")
             rows = (
                 await self.session.execute(
-                    text(f'SELECT count(*) FROM "{table}" WHERE tenant_id = :tenant'),
+                    text(f"SELECT count(*) FROM {quoted} WHERE tenant_id = :tenant"),
                     {"tenant": self.tenant_id},
                 )
             ).scalar_one()

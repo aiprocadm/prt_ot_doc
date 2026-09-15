@@ -19,6 +19,8 @@ from sqlalchemy import inspect as sa_inspect
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.sql_text import quote_identifier
+
 __all__ = ["FILE_KEY_COLUMN_SUFFIXES", "file_key_columns", "collect_file_keys"]
 
 FILE_KEY_COLUMN_SUFFIXES: tuple[str, ...] = ("storage_key", "file_key")
@@ -58,10 +60,14 @@ async def collect_file_keys(
     keys: list[str] = []
     for table, columns in sorted(columns_by_table.items()):
         for column in columns:
+            # Имена сняты со схемы базы; параметром идентификатор не передать —
+            # проверка формата перед склейкой (разд. 64.1, строка «Injection»).
+            col = quote_identifier(column, source="колонки файлов в схеме")
+            tbl = quote_identifier(table, source="таблицы файлов в схеме")
             rows = await session.execute(
                 text(
-                    f'SELECT DISTINCT "{column}" FROM "{table}" '
-                    f'WHERE tenant_id = :tenant AND "{column}" IS NOT NULL'
+                    f"SELECT DISTINCT {col} FROM {tbl} "
+                    f"WHERE tenant_id = :tenant AND {col} IS NOT NULL"
                 ),
                 {"tenant": str(tenant_id)},
             )

@@ -117,6 +117,7 @@ def test_missing_body_is_rejected_not_skipped(tmp_path) -> None:
         ("backend/app/services/webhooks.py", "вебхуки и интеграции"),
         ("backend/app/modules/rbac_abac/engine.py", "права и доступ"),
         ("backend/app/core/secret_cipher.py", "секреты и ключи"),
+        ("backend/app/db/session.py", "слой доступа к базе"),
         ("frontend/package.json", "зависимости"),
     ],
 )

@@ -21,7 +21,6 @@ vendor lock-in и требование 152-ФЗ». И отдельно: «Отл
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
@@ -29,6 +28,8 @@ from typing import Any
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.sql_text import quote_identifier
 
 __all__ = [
     "TenantExportService",
@@ -159,9 +160,9 @@ class TenantExportService:
             # Имя таблицы — из статического реестра RLS_ENABLED_TABLES (не ввод
             # пользователя); значения идут bind-параметрами. Параметризовать
             # идентификатор нельзя, поэтому — жёсткий гард формата + nosemgrep.
-            if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", table):
-                raise ValueError(f"unexpected table identifier in RLS registry: {table!r}")
-            quoted = f'"{table}"'
+            # Срез-210: сама проверка переехала в единый дом `core/sql_text.py`,
+            # чтобы правило было одно на все места склейки, а не своё в каждом.
+            quoted = quote_identifier(table, source="реестр RLS_ENABLED_TABLES")
             total = (
                 await self.session.execute(
                     # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text

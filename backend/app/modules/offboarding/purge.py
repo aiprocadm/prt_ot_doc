@@ -36,6 +36,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.sql_text import quote_identifier
 from app.modules.offboarding import backup_retention
 from app.modules.offboarding.file_keys import collect_file_keys
 from app.modules.offboarding.lifecycle import (
@@ -251,26 +252,38 @@ class TenantPurgeService:
     async def _break_link(self, link: ForeignLink) -> None:
         """Обнулить необязательную ссылку, чтобы разорвать цикл."""
 
-        assignments = ", ".join(f'"{column}" = NULL' for column in link.columns)
+        # Имена таблиц и колонок сняты с самой базы, а не пришли из запроса.
+        # Идентификатор параметром не передать — значит, проверка формата перед
+        # склейкой (разд. 64.1, строка «Injection»; дом правила — core/sql_text).
+        assignments = ", ".join(
+            f"{quote_identifier(column, source='карта связей схемы')} = NULL"
+            for column in link.columns
+        )
+        child = quote_identifier(link.child, source="карта связей схемы")
         await self.session.execute(
-            text(f'UPDATE "{link.child}" SET {assignments} WHERE tenant_id = :tenant'),
+            text(f"UPDATE {child} SET {assignments} WHERE tenant_id = :tenant"),
             {"tenant": self.tenant_id},
         )
 
     async def _delete_rows(self, table: str) -> int:
+        quoted = quote_identifier(table, source="карта таблиц схемы")
         result = await self.session.execute(
-            text(f'DELETE FROM "{table}" WHERE tenant_id = :tenant'),
+            text(f"DELETE FROM {quoted} WHERE tenant_id = :tenant"),
             {"tenant": self.tenant_id},
         )
         return int(result.rowcount or 0)
 
     async def _anonymize(self, table: str, columns: dict[str, str]) -> int:
-        assignments = ", ".join(f'"{column}" = {value}' for column, value in columns.items())
+        assignments = ", ".join(
+            f"{quote_identifier(column, source='правила обезличивания')} = {value}"
+            for column, value in columns.items()
+        )
+        quoted = quote_identifier(table, source="правила обезличивания")
         params: dict[str, Any] = {"tenant": self.tenant_id}
         if ":now" in assignments:
             params["now"] = _utcnow()
         result = await self.session.execute(
-            text(f'UPDATE "{table}" SET {assignments} WHERE tenant_id = :tenant'),
+            text(f"UPDATE {quoted} SET {assignments} WHERE tenant_id = :tenant"),
             params,
         )
         return int(result.rowcount or 0)
