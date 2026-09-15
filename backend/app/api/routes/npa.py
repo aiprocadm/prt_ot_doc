@@ -40,6 +40,15 @@ from app.core.role_labels import ROLE_CODES, role_label
 from app.core.security import abac, rbac
 from app.core.tenant_validation import TenantContextValidator
 from app.domains.npa.impact import NpaImpactService
+from app.domains.npa.scope import (
+    REGISTRY_SCOPE,
+    find_act_by_code,
+    get_visible_act,
+    registry_first,
+    scope_of,
+    scope_title,
+    visible_acts,
+)
 from app.models.document import Document
 from app.models.master_data import Site
 from app.models.models import NPABinding, Tenant
@@ -88,6 +97,29 @@ def _can_manage(credentials: HTTPAuthorizationCredentials | None, tenant: Tenant
     return True
 
 
+def _require_act_author(
+    credentials: HTTPAuthorizationCredentials | None, tenant: Tenant, act: NpaAct
+) -> None:
+    """Вести акт вправе тот, чей это акт (срез-201).
+
+    У федерального акта хозяин — владелец платформы: редакция общего приказа
+    меняет правила для всех арендаторов сразу. У собственного акта арендатора
+    хозяин — он сам, и сюда доходят только акты, уже прошедшие фильтр
+    видимости: чужой локальный акт до этой строки не доживает — он отвечен
+    как «нет такого». Роль проверена зависимостью ручки.
+    """
+
+    if act.owner_tenant_id is None:
+        _require_managing_admin(credentials, tenant)
+
+
+def _act_read(act: NpaAct) -> NpaActRead:
+    """Ответ про акт всегда несёт свой ящик — и кодом, и словами."""
+
+    read = NpaActRead.model_validate(act, from_attributes=True)
+    return read.model_copy(update={"scope": scope_of(act), "scope_title": scope_title(act)})
+
+
 @router.get("/npa", response_model=NpaActListResponse)
 async def list_npa(
     session: SessionDep,
@@ -96,11 +128,21 @@ async def list_npa(
     access=Depends(rbac()),
 ) -> NpaActListResponse:
     _ = access  # enforce auth
-    stmt = select(NpaAct).options(selectinload(NpaAct.clauses)).order_by(NpaAct.code)
+    # Срез-201: список — общий реестр ПЛЮС собственные акты этого арендатора.
+    # Чужие локальные сюда не попадают ни при каких правах.
+    stmt = (
+        visible_acts(str(tenant.id))
+        .options(selectinload(NpaAct.clauses))
+        .order_by(registry_first(), NpaAct.code)
+    )
     acts = (await session.execute(stmt)).scalars().unique().all()
+    # Право «завести свой акт» шире права «править общий реестр»: его имеет
+    # любой арендатор с ролью, ведущей записи по НПА.
+    my_roles = set(session.info.get("current_user_roles") or [])
     return NpaActListResponse(
-        items=[NpaActRead.model_validate(act, from_attributes=True) for act in acts],
+        items=[_act_read(act) for act in acts],
         can_manage=_can_manage(credentials, tenant),
+        can_create_own=bool(my_roles & set(_IMPACT_WRITE_ROLES)),
     )
 
 
@@ -111,14 +153,40 @@ async def create_npa_act(
     session: SessionDep,
     tenant: Tenant = Depends(get_tenant_record),
     credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+    access=Depends(
+        abac(
+            _tenant_resource_id,
+            required_roles=_IMPACT_WRITE_ROLES,
+            action="create npa act",
+        )
+    ),
 ) -> NpaActRead:
-    """Срез-141: единственная точка входа в общий реестр актов."""
+    """Срез-141: точка входа в реестр. Срез-201: реестров стало два.
 
-    _require_managing_admin(credentials, tenant)
-    duplicate = await session.scalar(select(NpaAct.id).where(NpaAct.code == payload.code))
+    ``scope="registry"`` — общий реестр платформы: федеральный приказ действует
+    на всех, поэтому писать туда вправе только владелец платформы.
+    ``scope="own"`` — собственный акт арендатора (приказ по организации,
+    инструкция): его видит и ведёт только он сам.
+
+    Ящик называет заявитель, а не роль угадывает за него. «Завести федеральный
+    акт» и «завести свой приказ» — разные поступки с разной ценой ошибки, и
+    молчаливый выбор по правам однажды записал бы приказ одной организации в
+    общий реестр для всех.
+    """
+
+    _ = access
+    owner_tenant_id: str | None
+    if payload.scope == REGISTRY_SCOPE:
+        _require_managing_admin(credentials, tenant)
+        owner_tenant_id = None
+    else:
+        TenantContextValidator.ensure_tenant_context(tenant)
+        owner_tenant_id = str(tenant.id)
+    duplicate = await find_act_by_code(session, payload.code, owner_tenant_id)
     if duplicate is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "Акт с таким кодом уже есть в реестре")
     act = NpaAct(
+        owner_tenant_id=owner_tenant_id,
         code=payload.code,
         title=payload.title,
         edition=payload.edition,
@@ -137,7 +205,7 @@ async def create_npa_act(
             status.HTTP_409_CONFLICT, "Акт с таким кодом уже есть в реестре"
         ) from exc
     await session.refresh(act, attribute_names=["clauses"])
-    return NpaActRead.model_validate(act, from_attributes=True)
+    return _act_read(act)
 
 
 @router.post(
@@ -152,13 +220,25 @@ async def create_npa_revision(
     session: SessionDep,
     tenant: Tenant = Depends(get_tenant_record),
     credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+    access=Depends(
+        abac(
+            _tenant_resource_id,
+            required_roles=_IMPACT_WRITE_ROLES,
+            action="create npa revision",
+        )
+    ),
 ) -> NpaRevisionRead:
-    """Срез-141: новая редакция акта — её и читает оценка влияния."""
+    """Срез-141: новая редакция акта — её и читает оценка влияния.
 
-    _require_managing_admin(credentials, tenant)
-    act = await session.get(NpaAct, act_id)
+    Срез-201: редакцию ведёт тот, чей это акт. У федерального — владелец
+    платформы, у собственного приказа арендатора — сам арендатор.
+    """
+
+    _ = access
+    act = await get_visible_act(session, act_id, str(tenant.id))
     if act is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "NPA act not found")
+    _require_act_author(credentials, tenant, act)
     duplicate = await session.scalar(
         select(NpaRevision.id).where(
             NpaRevision.act_id == act_id, NpaRevision.revision_code == payload.revision_code
@@ -265,7 +345,6 @@ async def _binding_target_exists(
     return "" if row else None
 
 
-
 async def _validate_binding_context(
     session: AsyncSession, tenant_id: str, context: NpaBindingContext
 ) -> dict[str, str]:
@@ -333,6 +412,7 @@ async def npa_binding_options(
         "sites": await RequirementsService(session, str(tenant.id)).site_options(),
     }
 
+
 @router.post(
     "/npa/{act_id}/bindings",
     response_model=NpaBindingRead,
@@ -355,7 +435,7 @@ async def create_npa_binding(
     """Привязать документ / версию шаблона / пакет арендатора к акту реестра."""
     TenantContextValidator.ensure_tenant_context(tenant)
     _ = access
-    act = await session.get(NpaAct, act_id)
+    act = await get_visible_act(session, act_id, str(tenant.id))
     if act is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "NPA act not found")
     template_version_id = await _binding_target_exists(session, str(tenant.id), payload)

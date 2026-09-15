@@ -5,6 +5,7 @@ from datetime import date, datetime, timezone
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domains.npa.scope import visible_acts
 from app.models.finance import Contract, Order
 from app.models.models import (
     BriefingEntry,
@@ -558,11 +559,16 @@ class ProjectionOrchestrator:
             .scalars()
             .all()
         )
-        # Срез-142: акты живут в общем реестре (npa_act) и одинаковы для всех
-        # арендаторов; арендаторская таблица npa была пуста всегда (в неё никто
-        # не писал), модель удалена.
+        # Срез-142: акты живут в общем реестре (npa_act); арендаторская таблица
+        # npa была пуста всегда (в неё никто не писал), модель удалена.
+        # Срез-201: «одинаковы для всех арендаторов» больше НЕВЕРНО — рядом с
+        # федеральными в той же таблице лежат собственные приказы организаций.
+        # Поисковый снимок строится для одного арендатора, и без фильтра он
+        # разложил бы чужой приказ в его поиск.
         npa_items = (
-            (await self.session.execute(select(NpaAct).order_by(NpaAct.code))).scalars().all()
+            (await self.session.execute(visible_acts(self.tenant_id).order_by(NpaAct.code)))
+            .scalars()
+            .all()
         )
         contracts = (
             (

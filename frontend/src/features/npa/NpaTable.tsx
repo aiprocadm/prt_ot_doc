@@ -55,6 +55,18 @@ export const NpaTable = () => {
         header: "Актуальность",
         cell: ({ row }) => npaValidity(row.original),
       },
+      {
+        // Срез-201: в одном списке лежат федеральные акты и собственные приказы
+        // организации. Это не украшение: править можно только свои, и без
+        // колонки человек узнавал бы об этом отказом.
+        id: "scope",
+        header: "Чей акт",
+        cell: ({ row }) => (
+          <span data-testid="npa-scope" data-scope={row.original.scope}>
+            {row.original.scope_title ?? "—"}
+          </span>
+        ),
+      },
     ],
     [],
   );

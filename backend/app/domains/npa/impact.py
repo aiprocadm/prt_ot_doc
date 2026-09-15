@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.domains.npa.requirements import RequirementsService
+from app.domains.npa.scope import get_visible_act, scope_of, scope_title, visible_acts
 from app.models.document import Document
 from app.models.models import NPABinding
 from app.models.notifications import PlanTask, PlanTaskStatus
@@ -120,9 +121,7 @@ REVISION_STATUS_TITLES: dict[str, str] = {
 }
 
 
-def revision_status(
-    revision: NpaRevision, *, active: NpaRevision | None, today: date
-) -> str:
+def revision_status(revision: NpaRevision, *, active: NpaRevision | None, today: date) -> str:
     """Состояние одной редакции. Порядок проверок — от однозначного к спорному.
 
     «Действует» — ровно та редакция, по которой система считает несверенные
@@ -166,7 +165,10 @@ class NpaImpactService:
     tenant_id: str
 
     async def detail(self, act_id: str, revision_id: str | None = None) -> dict[str, Any] | None:
-        act = await self.session.get(NpaAct, act_id)
+        # Срез-201: идентификатор акта приходит из адреса запроса. Прямой
+        # `session.get` вернул бы и ЧУЖОЙ локальный акт — вместе со всем его
+        # текстом и редакциями.
+        act = await get_visible_act(self.session, act_id, self.tenant_id)
         if act is None:
             return None
         revisions = (
@@ -286,6 +288,11 @@ class NpaImpactService:
                 "edition": act.edition,
                 "valid_from": act.valid_from.isoformat() if act.valid_from else None,
                 "valid_to": act.valid_to.isoformat() if act.valid_to else None,
+                # Срез-201: чей это акт. Экран обязан различать «Приказ
+                # Минтруда» и «наш приказ по организации»: править можно только
+                # второй, и вес у них разный.
+                "scope": scope_of(act),
+                "scope_title": scope_title(act),
             },
             "revisions": [
                 {
@@ -408,7 +415,7 @@ class NpaImpactService:
         acts = (
             (
                 await self.session.execute(
-                    select(NpaAct)
+                    visible_acts(self.tenant_id)
                     .options(selectinload(NpaAct.revisions))
                     .where(NpaAct.id.in_(by_act))
                     .order_by(NpaAct.code)

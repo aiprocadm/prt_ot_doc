@@ -37,12 +37,13 @@ from app.core.role_labels import ROLE_CODES, role_label, role_options
 from app.core.security import AccessContext, abac, rbac
 from app.core.tenant_validation import TenantContextValidator
 from app.domains.npa.requirements import RequirementsService, days_left, is_overdue, today
+from app.domains.npa.scope import get_visible_act
 from app.models.compliance_requirements import ComplianceRequirement
 from app.models.document import Document
 from app.models.identity import User
 from app.models.master_data import Site
 from app.models.models import Tenant
-from app.models.npa import NpaAct, NpaClause
+from app.models.npa import NpaClause
 from app.schemas.compliance_requirements import (
     ComplianceEvidenceCreate,
     ComplianceEvidenceRead,
@@ -151,7 +152,7 @@ def _read(
 
 
 async def _validate_links(session: AsyncSession, tenant_id: str, payload: dict[str, Any]) -> None:
-    """Ссылки заявки должны существовать: акт и пункт — в общем реестре,
+    """Ссылки заявки должны существовать: акт и пункт — в ВИДИМОЙ части реестра,
     площадка (живая, не снесённая) и ответственный — у этого арендатора. Иначе
     404 с понятным словом, а не 500 от внешнего ключа на PostgreSQL и молчание
     на SQLite. Роль — закрытый словарь ``RoleEnum`` (срез-147): выдуманная
@@ -173,12 +174,20 @@ async def _validate_links(session: AsyncSession, tenant_id: str, payload: dict[s
             f"Процесса «{process_code}» нет в справочнике — выберите из списка",
         )
     npa_id = payload.get("npa_id")
-    if npa_id and await session.get(NpaAct, npa_id) is None:
+    # Срез-201: «акт есть» перестало быть глобальным вопросом. Чужой локальный
+    # приказ для этого арендатора не существует — иначе, заводя требование по
+    # подобранному идентификатору, он вычитал бы код и название чужого акта.
+    if npa_id and await get_visible_act(session, npa_id, tenant_id) is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "NPA act not found")
     clause_id = payload.get("clause_id")
     if clause_id:
         clause = await session.get(NpaClause, clause_id)
         if clause is None or (npa_id and clause.act_id != npa_id):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "NPA clause not found")
+        # Пункт — часть акта, и видимость наследует от него. Без этой проверки
+        # `npa_id` можно было просто не присылать, и пункт чужого приказа
+        # прошёл бы: его текст виден в требовании.
+        if await get_visible_act(session, clause.act_id, tenant_id) is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "NPA clause not found")
     site_id = payload.get("site_id")
     if site_id:

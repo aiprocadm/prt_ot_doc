@@ -15,15 +15,20 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import type { NpaClauseCreateDto } from "@/types/dto/npa";
+import type { NpaClauseCreateDto, NpaScope } from "@/types/dto/npa";
 import { isApiError } from "@/utils/apiFormErrors";
 
 /**
  * Срез-141: точка входа в реестр НПА на витрине.
  *
- * Обе формы показываются только владельцу платформы (`can_manage` из
- * `GET /npa`): реестр общий, и остальным ручка ответит 403 — кнопка, которая
- * всегда кончается отказом, хуже отсутствующей.
+ * Форма общего реестра показывается только владельцу платформы (`can_manage`
+ * из `GET /npa`): реестр общий, и остальным ручка ответит 403 — кнопка,
+ * которая всегда кончается отказом, хуже отсутствующей.
+ *
+ * Срез-201: та же форма заводит и СОБСТВЕННЫЙ акт организации — по `scope`.
+ * Форма одна, потому что поля у акта одни и те же; разное здесь только одно —
+ * куда он попадёт, и это сказано прямым текстом в заголовке и описании. Два
+ * почти одинаковых окна разошлись бы уже на первой правке.
  */
 
 /**
@@ -54,12 +59,16 @@ const failureMessage = (error: unknown, fallback: string): string => {
 interface NpaActFormDialogProps {
   trigger: ReactNode;
   onCreated: () => void;
+  /** Срез-201: куда попадёт акт. По умолчанию — общий реестр, как было. */
+  scope?: NpaScope;
 }
 
 export const NpaActFormDialog = ({
   trigger,
   onCreated,
+  scope = "registry",
 }: NpaActFormDialogProps) => {
+  const own = scope === "own";
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [code, setCode] = useState("");
@@ -74,6 +83,7 @@ export const NpaActFormDialog = ({
     setSaving(true);
     try {
       await npaApi.createAct({
+        scope,
         code: code.trim(),
         title: title.trim(),
         edition: edition.trim(),
@@ -81,7 +91,7 @@ export const NpaActFormDialog = ({
         valid_to: orNull(validTo),
         clauses: parseClauses(clauses),
       });
-      toast.success("Акт добавлен в реестр");
+      toast.success(own ? "Акт организации добавлен" : "Акт добавлен в реестр");
       setOpen(false);
       setCode("");
       setTitle("");
@@ -102,9 +112,13 @@ export const NpaActFormDialog = ({
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Новый нормативный акт</DialogTitle>
+          <DialogTitle>
+            {own ? "Новый акт организации" : "Новый нормативный акт"}
+          </DialogTitle>
           <DialogDescription>
-            Акт попадёт в общий реестр и станет виден всем арендаторам.
+            {own
+              ? "Акт увидит только ваша организация. Это ваш приказ или инструкция, а не общий документ платформы."
+              : "Акт попадёт в общий реестр и станет виден всем арендаторам."}
           </DialogDescription>
         </DialogHeader>
         <form className="space-y-4" onSubmit={(event) => void submit(event)}>
