@@ -87,16 +87,29 @@ class NpaActCreate(BaseModel):
 
 
 class NpaRevisionCreate(BaseModel):
+    """Заявка на редакцию. Срез-202: вместе с ТЕКСТОМ, если он известен.
+
+    ``clauses`` — снимок пунктов на момент редакции. Поле необязательное, и это
+    осознанно: редакцию часто заводят заранее, зная только дату вступления в
+    силу. Отсутствие текста — законное состояние, а не пробел в данных; дифф по
+    такой редакции честно откажется вместо того, чтобы выдать «изменений нет».
+    """
+
     revision_code: str = Field(min_length=1, max_length=128)
     title: str = Field(min_length=1, max_length=512)
     effective_from: date | None = None
     effective_to: date | None = None
     change_summary: str | None = None
+    clauses: list[NpaClauseCreate] | None = None
 
     @model_validator(mode="after")
     def _check(self) -> NpaRevisionCreate:
         if self.effective_from and self.effective_to and self.effective_to < self.effective_from:
             raise ValueError("effective_to не может быть раньше effective_from")
+        if self.clauses is not None:
+            codes = [clause.code for clause in self.clauses]
+            if len(codes) != len(set(codes)):
+                raise ValueError("коды пунктов внутри редакции должны быть уникальны")
         return self
 
 
@@ -108,6 +121,11 @@ class NpaRevisionRead(BaseModel):
     effective_from: date | None = None
     effective_to: date | None = None
     change_summary: str | None = None
+    #: Срез-202: занесён ли текст этой редакции. Витрина по этому признаку
+    #: решает, можно ли предложить сравнение, — вместо того чтобы предлагать
+    #: кнопку, которая всегда кончается отказом.
+    has_text: bool = False
+    clauses: list[NpaClauseRead] = []
 
     model_config = {
         "from_attributes": True,

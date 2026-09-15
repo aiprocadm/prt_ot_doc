@@ -40,6 +40,7 @@ from app.core.role_labels import ROLE_CODES, role_label
 from app.core.security import abac, rbac
 from app.core.tenant_validation import TenantContextValidator
 from app.domains.npa.impact import NpaImpactService
+from app.domains.npa.revision_diff import diff_clauses
 from app.domains.npa.scope import (
     REGISTRY_SCOPE,
     find_act_by_code,
@@ -52,7 +53,7 @@ from app.domains.npa.scope import (
 from app.models.document import Document
 from app.models.master_data import Site
 from app.models.models import NPABinding, Tenant
-from app.models.npa import NpaAct, NpaClause, NpaRevision
+from app.models.npa import NpaAct, NpaClause, NpaRevision, NpaRevisionClause
 from app.models.packages import DocumentPack
 from app.models.templates import TemplateVersion
 from app.schemas.npa import (
@@ -62,6 +63,7 @@ from app.schemas.npa import (
     NpaBindingContext,
     NpaBindingCreate,
     NpaBindingRead,
+    NpaClauseRead,
     NpaRevisionCreate,
     NpaRevisionRead,
 )
@@ -255,6 +257,13 @@ async def create_npa_revision(
         change_summary=payload.change_summary,
     )
     session.add(revision)
+    await session.flush()
+    # Срез-202: текст редакции. Пунктов может не быть вовсе — редакцию часто
+    # заводят заранее, зная только дату. Копировать сюда текущий текст акта
+    # НЕЛЬЗЯ: редакция описывает будущий текст, и копия сегодняшнего дала бы
+    # дифф «изменений нет» — правдоподобное значение вместо пропущенного.
+    for clause in payload.clauses or ():
+        session.add(NpaRevisionClause(revision_id=revision.id, code=clause.code, text=clause.text))
     try:
         await session.commit()
     except IntegrityError as exc:
@@ -263,7 +272,105 @@ async def create_npa_revision(
             status.HTTP_409_CONFLICT, "Редакция с таким кодом у акта уже есть"
         ) from exc
     await session.refresh(revision)
-    return NpaRevisionRead.model_validate(revision, from_attributes=True)
+    return _revision_read(revision, await _revision_clauses(session, [revision.id]))
+
+
+async def _revision_clauses(
+    session: AsyncSession, revision_ids: list[str]
+) -> dict[str, list[NpaRevisionClause]]:
+    """Тексты редакций одним запросом.
+
+    Возвращает ТОЛЬКО те редакции, у которых снимок есть: отсутствие ключа и
+    пустой список — разные ответы, и различать их обязан уже вызывающий.
+    """
+
+    if not revision_ids:
+        return {}
+    rows = (
+        (
+            await session.execute(
+                select(NpaRevisionClause)
+                .where(NpaRevisionClause.revision_id.in_(revision_ids))
+                .order_by(NpaRevisionClause.code)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    grouped: dict[str, list[NpaRevisionClause]] = {}
+    for row in rows:
+        grouped.setdefault(row.revision_id, []).append(row)
+    return grouped
+
+
+def _revision_read(
+    revision: NpaRevision, clauses_by_revision: dict[str, list[NpaRevisionClause]]
+) -> NpaRevisionRead:
+    clauses = clauses_by_revision.get(revision.id)
+    read = NpaRevisionRead.model_validate(revision, from_attributes=True)
+    return read.model_copy(
+        update={
+            "has_text": clauses is not None,
+            "clauses": [
+                NpaClauseRead(id=row.id, code=row.code, text=row.text) for row in clauses or ()
+            ],
+        }
+    )
+
+
+@router.get("/npa/{act_id}/revisions/diff")
+async def compare_npa_revisions(
+    act_id: str,
+    session: SessionDep,
+    base: str = Query(description="От какой редакции считаем изменения"),
+    target: str = Query(description="К какой редакции считаем изменения"),
+    tenant: Tenant = Depends(get_tenant_record),
+    access=Depends(rbac()),
+) -> dict:
+    """Что изменилось между двумя редакциями акта (срез-202, разд. 19.4).
+
+    Читать может любой, кому виден акт: «что изменилось в законе» — это и есть
+    то, ради чего реестр заводили, а не привилегия. Запись редакций осталась за
+    тем, чей это акт.
+
+    Порядок редакций НЕ подставляется за человека: он спрашивает «что стало с
+    текстом, когда перешли от A к B», и поменять A и B местами значило бы
+    ответить на другой вопрос — добавленные пункты стали бы исключёнными.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _ = access
+    act = await get_visible_act(session, act_id, str(tenant.id))
+    if act is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "NPA act not found")
+    revisions = {
+        row.id: row
+        for row in (
+            (
+                await session.execute(
+                    select(NpaRevision).where(
+                        NpaRevision.act_id == act_id, NpaRevision.id.in_([base, target])
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+    }
+    # Чужая редакция (или редакция другого акта) — «нет такой», а не «пустой
+    # дифф»: иначе по ответу можно было бы перебирать идентификаторы.
+    missing = [rid for rid in (base, target) if rid not in revisions]
+    if missing:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "NPA revision not found")
+    texts = await _revision_clauses(session, [base, target])
+    result = diff_clauses(
+        {row.code: row.text for row in texts[base]} if base in texts else None,
+        {row.code: row.text for row in texts[target]} if target in texts else None,
+    )
+    payload = result.as_dict()
+    payload["base"] = _revision_read(revisions[base], texts).model_dump(mode="json")
+    payload["target"] = _revision_read(revisions[target], texts).model_dump(mode="json")
+    return payload
 
 
 @router.get("/npa/{act_id}")

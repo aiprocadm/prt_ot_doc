@@ -9,7 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import SharedModel
 
-__all__ = ["NpaAct", "NpaClause", "NpaRevision"]
+__all__ = ["NpaAct", "NpaClause", "NpaRevision", "NpaRevisionClause"]
 
 
 class NpaAct(SharedModel):
@@ -109,8 +109,54 @@ class NpaRevision(SharedModel):
     __table_args__ = (UniqueConstraint("act_id", "revision_code", name="uq_npa_revision_per_act"),)
 
 
+class NpaRevisionClause(SharedModel):
+    """Текст пункта В ЭТОЙ РЕДАКЦИИ — снимок, а не действующий текст.
+
+    Срез-202 (B.18 разд. 19.4, «дифф»). До него у редакции не было текста
+    ВООБЩЕ: ``NpaRevision`` хранил только ``change_summary`` — одну фразу
+    «Обновлены программы обучения», — а пункты принадлежали акту. Сравнить две
+    редакции было не с чем: система знала, ЧТО редакция существует, но не
+    знала, чем она отличается.
+
+    **Почему отдельная таблица, а не ``revision_id`` у ``npa_clause``.**
+    На ``npa_clause.id`` ссылается ``ComplianceRequirement.clause_id``
+    настоящим внешним ключом (миграция ``20260911_b18_compliance_requirements``).
+    Пункт там — ЛИЧНОСТЬ: требование «проводить обучение по п. 4» обязано
+    указывать на п. 4 независимо от того, сколько редакций акт пережил.
+    Раздав пункты по редакциям, мы бы привязали каждое требование к одной
+    редакции — и при следующей оно стало бы ссылаться в никуда.
+
+    Поэтому вопросы разделены, а не слиты:
+
+    * ``npa_clause`` — ДЕЙСТВУЮЩИЙ текст акта и стабильная личность пункта,
+      на которую ссылаются требования;
+    * ``npa_revision_clause`` — КАК ПУНКТ ЗВУЧАЛ в конкретной редакции.
+
+    **Снимок не берётся автоматически.** Соблазн «при заведении редакции
+    скопировать текущие пункты акта» велик и неверен: редакция описывает
+    БУДУЩИЙ текст, и копия сегодняшнего дала бы дифф «изменений нет» — то есть
+    правдоподобное значение вместо пропущенного измерения. Нет текста — так и
+    говорим словами (``app.domains.npa.revision_diff``).
+    """
+
+    __tablename__ = "npa_revision_clause"
+
+    revision_id: Mapped[str] = mapped_column(
+        ForeignKey("npa_revision.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    code: Mapped[str] = mapped_column(String(128), nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+
+    __table_args__ = (UniqueConstraint("revision_id", "code", name="uq_npa_revision_clause_code"),)
+
+
 class NpaClause(SharedModel):
-    """Article or clause belonging to a normative legal act."""
+    """Article or clause belonging to a normative legal act.
+
+    Срез-202: это ДЕЙСТВУЮЩИЙ текст акта и стабильная личность пункта для
+    требований. Текст пункта «как он звучал в редакции N» живёт отдельно —
+    ``NpaRevisionClause``; почему именно так, написано там.
+    """
 
     __tablename__ = "npa_clause"
 
