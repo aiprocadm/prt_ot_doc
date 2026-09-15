@@ -392,6 +392,13 @@ export const MAIN_NAV_GROUPS: NavGroup[] = [
         permission: PERMISSIONS.NPA_VIEW,
       },
       {
+        // Срез-209: права человека на его персональные данные (152-ФЗ 66.2).
+        label: "Персональные данные",
+        to: "/privacy/subjects",
+        icon: ShieldCheck,
+        permission: PERMISSIONS.PRIVACY_VIEW,
+      },
+      {
         // Срез-208: утечки ПДн и сроки 152-ФЗ. Право то же, что у ручек.
         label: "Утечки ПДн",
         to: "/privacy/breaches",
