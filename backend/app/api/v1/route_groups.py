@@ -67,6 +67,7 @@ from app.api.routes import (
     safety_ops,
     sites,
     sout,
+    sso,
     tasks,
     tenancy,
     tenants,
@@ -129,6 +130,11 @@ PUBLIC_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
     #
     # Публичными эти ручки были и раньше «без токена» — но заголовок всё равно
     # требовался, и потому манифест под брендом партнёра был невозможен.
+    # BIZ-53 срез-204 (разд. 53.3): единый вход. Публичный по той же причине,
+    # что регистрация: у входящего ещё нет токена, а из возврата от провайдера
+    # браузер не пришлёт заголовок арендатора. Арендатор приезжает слагом в
+    # адресе и подписанным состоянием.
+    (sso.public_router, {}),
     (white_label.manifest_router, {}),
     (white_label.public_router, {}),
 )
@@ -137,6 +143,7 @@ COMPLIANCE_AND_ADMIN_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
     (audit.router, {"prefix": "/audit", "tags": ["audit"]}),
     (admin_users.router, {"tags": ["admin-users"]}),
     (admin_authz.router, {}),
+    (sso.router, {}),
     (attestations.router, {"tags": ["attestations"]}),
     (internships.router, {"tags": ["internships"]}),
     (notifications.router, {}),

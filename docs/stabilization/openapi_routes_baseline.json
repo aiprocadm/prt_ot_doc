@@ -116,6 +116,9 @@
     "GET /api/v1/auth/admin/ping",
     "GET /api/v1/auth/me",
     "GET /api/v1/auth/me/permissions",
+    "GET /api/v1/auth/sso/callback",
+    "GET /api/v1/auth/sso/{tenant_slug}/start",
+    "GET /api/v1/auth/sso/{tenant_slug}/status",
     "GET /api/v1/billing/editions",
     "GET /api/v1/billing/events",
     "GET /api/v1/billing/invoices",
@@ -486,6 +489,7 @@
     "GET /api/v1/search/recent",
     "GET /api/v1/search/saved",
     "GET /api/v1/search/suggest",
+    "GET /api/v1/settings/sso",
     "GET /api/v1/sign/acknowledgements",
     "GET /api/v1/sign/pep/requests",
     "GET /api/v1/sign/pep/requests/{request_id}/verify",
@@ -1135,7 +1139,8 @@
     "PUT /api/v1/ppe/employees/{person_id}/sizes",
     "PUT /api/v1/privacy/processing-activities",
     "PUT /api/v1/risk/matrix",
-    "PUT /api/v1/risk/methodologies/{methodology_id}"
+    "PUT /api/v1/risk/methodologies/{methodology_id}",
+    "PUT /api/v1/settings/sso"
   ],
   "operation_ids": [
     "accept_legal_api_v1_legal_acceptance__kind__post",
@@ -2036,6 +2041,7 @@
     "read_public_legal_api_v1_public_legal__kind__get",
     "read_public_logo_api_v1_public_branding_logo_get",
     "read_pwa_manifest_api_v1_public_manifest_webmanifest_get",
+    "read_sso_config_api_v1_settings_sso_get",
     "read_subject_access_log_api_v1_privacy_subjects__person_id__access_log_get",
     "readiness_api_v1_work_permits__wp_id__readiness_get",
     "reassign_task_api_v1_workflow_tasks__task_id__reassign_post",
@@ -2143,6 +2149,9 @@
     "sign_webhook_api_v1_webhooks_sign__provider_code__post",
     "sla_load_dashboard_api_v1_analytics_dashboard_sla_load_get",
     "specialist_workload_api_v1_managed_clients_workload_get",
+    "sso_callback_api_v1_auth_sso_callback_get",
+    "sso_start_api_v1_auth_sso__tenant_slug__start_get",
+    "sso_status_api_v1_auth_sso__tenant_slug__status_get",
     "start_approval_api_v1_approvals_start_post",
     "start_approval_request_api_v1_approvals_requests_post",
     "start_approval_request_v1_api_v1_edo_workflow_approvals_start_post",
@@ -2272,6 +2281,7 @@
     "withdraw_subject_consent_api_v1_privacy_subjects__person_id__consents_withdraw_post",
     "workspace_attention_api_v1_workspace_attention_get",
     "workspace_task_inbox_api_v1_workspace_task_inbox_get",
+    "write_sso_config_api_v1_settings_sso_put",
     "writeoff_issue_endpoint_api_v1_ppe_issues__issue_id__writeoff_post",
     "ws_events_stub_ws_v1_events_get"
   ],
@@ -3178,6 +3188,10 @@
     "SoutGuaranteeKind",
     "SpecialistWorkloadRead",
     "SpecialistWorkloadResponse",
+    "SsoConfigRead",
+    "SsoConfigWrite",
+    "SsoStartResponse",
+    "SsoStatusResponse",
     "SubscriptionPlanRead",
     "TaskAcceptedResponse",
     "TaskCreate",
@@ -10150,6 +10164,37 @@
       "thresholds": "WorkloadThresholdsRead",
       "summary": "WorkloadSummary",
       "items": "array"
+    },
+    "SsoConfigRead": {
+      "provider": "string",
+      "issuer": "string",
+      "client_id": "string",
+      "client_secret_env": "string",
+      "authorization_endpoint": "string",
+      "token_endpoint": "string",
+      "jwks_uri": "string",
+      "email_domains": "array",
+      "jit_enabled": "boolean",
+      "default_role": "string",
+      "secret_present": "boolean"
+    },
+    "SsoConfigWrite": {
+      "provider": "string",
+      "issuer": "string",
+      "client_id": "string",
+      "client_secret_env": "string",
+      "authorization_endpoint": "string",
+      "token_endpoint": "string",
+      "jwks_uri": "string",
+      "email_domains": "array",
+      "jit_enabled": "boolean",
+      "default_role": "string"
+    },
+    "SsoStartResponse": {
+      "authorization_url": "string"
+    },
+    "SsoStatusResponse": {
+      "enabled": "boolean"
     },
     "SubscriptionPlanRead": {
       "code": "string",
