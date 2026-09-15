@@ -98,18 +98,37 @@ class NpaRevisionRead(BaseModel):
     }
 
 
+class NpaBindingContext(BaseModel):
+    """Область действия связи: кого и где она касается (срез-197).
+
+    Не свободный словарь: лишние ключи отвергаются. Свободное поле здесь уже
+    было — именно из-за него сводка влияния читала то, что никто не мог
+    записать, и всегда показывала ноль.
+    """
+
+    role_code: str | None = Field(default=None, max_length=64)
+    site_id: str | None = Field(default=None, max_length=36)
+
+    model_config = {"extra": "forbid"}
+
+
 class NpaBindingCreate(BaseModel):
     """Срез-142: связь акта с сущностью арендатора — то, что читает оценка влияния."""
 
     entity_type: Literal["document", "template_version", "pack"]
     entity_id: str = Field(min_length=1, max_length=36)
     ref: str | None = Field(default=None, max_length=255)
+    #: Срез-197: «кого и где касается». До него ручка ставила контекст пустым, и
+    #: категории сводки, читавшие его, были вечными нулями.
+    context: NpaBindingContext = Field(default_factory=NpaBindingContext)
 
 
 class NpaBindingRead(BaseModel):
     id: str
     npa_id: str
     entity_type: str
+    #: Область действия связи словами (срез-197): роль и площадка, если заданы.
+    context: dict[str, str] = Field(default_factory=dict)
     entity_id: str
     ref: str | None = None
     #: Имя сущности для витрины — документ, шаблон или пакет по-человечески,

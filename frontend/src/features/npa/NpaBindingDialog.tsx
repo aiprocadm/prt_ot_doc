@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { listDocumentsForPicker } from "@/api/documents";
+import type { NpaBindingOptionsDto } from "@/types/dto/npa";
 import { npaApi } from "@/api/npa";
 import { Button } from "@/components/ui/button";
 import {
@@ -40,6 +41,9 @@ const failureMessage = (error: unknown): string => {
   return "Не удалось привязать документ";
 };
 
+const selectClassName =
+  "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm";
+
 export const NpaBindingDialog = ({
   actId,
   trigger,
@@ -50,12 +54,24 @@ export const NpaBindingDialog = ({
   const [documents, setDocuments] = useState<DocumentDto[]>([]);
   const [documentId, setDocumentId] = useState("");
   const [ref, setRef] = useState("");
+  // Срез-197: область действия связи — кого и где касается. Оба необязательны:
+  // пустая область означает «весь акт», и это законное состояние.
+  const [roleCode, setRoleCode] = useState("");
+  const [siteId, setSiteId] = useState("");
+  const [options, setOptions] = useState<NpaBindingOptionsDto>({
+    roles: [],
+    sites: [],
+  });
 
   useEffect(() => {
     if (!open) return;
     void listDocumentsForPicker()
       .then((items) => setDocuments(items))
       .catch(() => setDocuments([]));
+    void npaApi
+      .bindingOptions()
+      .then(setOptions)
+      .catch(() => setOptions({ roles: [], sites: [] }));
   }, [open]);
 
   const submit = async (event: FormEvent) => {
@@ -67,11 +83,17 @@ export const NpaBindingDialog = ({
         entity_type: "document",
         entity_id: documentId,
         ref: ref.trim() ? ref.trim() : null,
+        context: {
+          ...(roleCode ? { role_code: roleCode } : {}),
+          ...(siteId ? { site_id: siteId } : {}),
+        },
       });
       toast.success("Документ привязан к акту");
       setOpen(false);
       setDocumentId("");
       setRef("");
+      setRoleCode("");
+      setSiteId("");
       onCreated();
     } catch (error) {
       toast.error(failureMessage(error));
@@ -118,6 +140,40 @@ export const NpaBindingDialog = ({
               onChange={(event) => setRef(event.target.value)}
               placeholder="п. 4 (необязательно)"
             />
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="npa-binding-role">Кого касается</Label>
+              <select
+                id="npa-binding-role"
+                className={selectClassName}
+                value={roleCode}
+                onChange={(event) => setRoleCode(event.target.value)}
+              >
+                <option value="">— весь акт —</option>
+                {options.roles.map((role) => (
+                  <option key={role.code} value={role.code}>
+                    {role.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="npa-binding-site">Где касается</Label>
+              <select
+                id="npa-binding-site"
+                className={selectClassName}
+                value={siteId}
+                onChange={(event) => setSiteId(event.target.value)}
+              >
+                <option value="">— весь акт —</option>
+                {options.sites.map((site) => (
+                  <option key={site.id} value={site.id}>
+                    {site.name} · {site.company_name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
           <DialogFooter>
             <Button type="submit" disabled={saving || !documentId}>

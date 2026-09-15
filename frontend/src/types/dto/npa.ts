@@ -74,6 +74,12 @@ export interface NpaBindingDto {
   entity_type: NpaBindingTarget;
   entity_id: string;
   ref?: string | null;
+  /**
+   * Срез-197: область действия связи — кого и где касается, СЛОВАМИ
+   * (`{role, site}`). Пустой объект означает «весь акт»: это отдельное
+   * состояние, а не пробел.
+   */
+  context?: Record<string, string>;
   /** Имя сущности по-человечески: «Инструкция · ООО Ромашка», «Шаблон v3», имя пакета. */
   title: string;
   /**
@@ -89,4 +95,12 @@ export interface NpaBindingCreateDto {
   entity_type: NpaBindingTarget;
   entity_id: string;
   ref?: string | null;
+  /** Срез-197: кого и где касается связь. Пустой объект — «весь акт». */
+  context?: { role_code?: string; site_id?: string };
+}
+
+/** Справочники области действия связи (срез-197). */
+export interface NpaBindingOptionsDto {
+  roles: Array<{ code: string; label: string }>;
+  sites: Array<{ id: string; name: string; company_name: string }>;
 }

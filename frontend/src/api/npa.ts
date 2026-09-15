@@ -2,6 +2,7 @@ import { apiClient } from "@/api/client";
 import type {
   NpaActCreateDto,
   NpaBindingCreateDto,
+  NpaBindingOptionsDto,
   NpaBindingDto,
   NpaDto,
   NpaRevisionCreateDto,
@@ -32,6 +33,13 @@ export const npaApi = {
     return data;
   },
   /** Срез-142: связи акта с документами арендатора — их читает оценка влияния. */
+  /** Срез-197: справочники области действия связи — роли и площадки. */
+  bindingOptions: async (): Promise<NpaBindingOptionsDto> => {
+    const { data } = await apiClient.get<NpaBindingOptionsDto>(
+      "/npa/binding-options",
+    );
+    return data;
+  },
   createBinding: async (
     actId: string,
     payload: NpaBindingCreateDto,
