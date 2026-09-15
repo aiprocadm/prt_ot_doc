@@ -63,6 +63,7 @@ import {
   NotificationsPage,
   NpaPage,
   PrivacyBreachesPage,
+  PrivacySubjectPage,
   RequirementsPage,
   OutboxPage,
   PacksPage,
@@ -544,6 +545,13 @@ export const buildProtectedRouteGroups = (): ReactElement[] => {
           key="/privacy/breaches"
           path="/privacy/breaches"
           element={<PrivacyBreachesPage />}
+        />,
+        // Срез-209 (152-ФЗ разд. 66.2): четыре права субъекта. Право то же:
+        // круг ролей витрины обязан совпадать с кругом ролей ручек.
+        <Route
+          key="/privacy/subjects"
+          path="/privacy/subjects"
+          element={<PrivacySubjectPage />}
         />,
       ],
     },
