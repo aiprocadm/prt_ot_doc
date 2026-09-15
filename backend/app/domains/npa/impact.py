@@ -13,7 +13,7 @@ from app.domains.npa.scope import get_visible_act, scope_of, scope_title, visibl
 from app.models.document import Document
 from app.models.models import NPABinding
 from app.models.notifications import PlanTask, PlanTaskStatus
-from app.models.npa import NpaAct, NpaRevision
+from app.models.npa import NpaAct, NpaRevision, NpaRevisionClause
 from app.models.packages import DocumentPack
 from app.models.templates import TemplateVersion
 
@@ -188,6 +188,20 @@ class NpaImpactService:
             next((r for r in revisions if r.id == revision_id), None) if revision_id else None
         )
         today = _today()
+        # Срез-202: у каких редакций занесён текст. Без этого витрина
+        # предлагала бы сравнение там, где сравнивать нечего, — кнопка,
+        # всегда кончающаяся отказом, хуже отсутствующей.
+        with_text = set(
+            (
+                await self.session.execute(
+                    select(NpaRevisionClause.revision_id)
+                    .where(NpaRevisionClause.revision_id.in_([r.id for r in revisions]))
+                    .distinct()
+                )
+            )
+            .scalars()
+            .all()
+        )
         # Срез-198: «действующая» и «выбранная для предпросмотра» — разные вещи.
         # `active_revision` ниже означает «по чему считаем ЭТОТ ответ» и может
         # быть выбранной вручную будущей редакцией. Статус же обязан говорить
@@ -310,6 +324,7 @@ class NpaImpactService:
                     "status_title": REVISION_STATUS_TITLES[
                         revision_status(r, active=truly_active, today=today)
                     ],
+                    "has_text": r.id in with_text,
                 }
                 for r in revisions
             ],

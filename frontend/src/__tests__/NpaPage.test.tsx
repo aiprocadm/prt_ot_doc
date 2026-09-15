@@ -89,6 +89,8 @@ const npaDetail = {
       // Срез-198: состояние редакции приходит с сервера словами.
       status: "active",
       status_title: "Действует",
+      // Срез-202: текст редакции занесён — её можно сравнивать.
+      has_text: true,
     },
     {
       id: "rev-next",
@@ -99,6 +101,7 @@ const npaDetail = {
       change_summary: null,
       status: "upcoming",
       status_title: "Ещё не вступила в силу",
+      has_text: false,
     },
   ],
   // Срез-142: связи приходят по одной и с именами (`binding_items`), сводка —
@@ -224,7 +227,9 @@ describe("NpaPage", () => {
       await user.click(screen.getByRole("button", { name: "772н" }));
     });
 
-    expect(await screen.findByText("772н-2026-03")).toBeInTheDocument();
+    expect(
+      (await screen.findAllByTestId("npa-revision-code"))[0],
+    ).toHaveTextContent("772н-2026-03");
     expect(
       screen.getByText("Инструкция по ОТ · ООО Ромашка"),
     ).toBeInTheDocument();
@@ -342,7 +347,9 @@ describe("NpaPage", () => {
       );
     });
 
-    expect(await screen.findByText("772н-2026-03")).toBeInTheDocument();
+    expect(
+      (await screen.findAllByTestId("npa-revision-code"))[0],
+    ).toHaveTextContent("772н-2026-03");
     expect(
       screen.getByText("Программа обучения · ООО Ромашка"),
     ).toBeInTheDocument();
@@ -372,7 +379,9 @@ describe("NpaPage", () => {
         </MemoryRouter>,
       );
     });
-    expect(await screen.findByText("772н-2026-03")).toBeInTheDocument();
+    expect(
+      (await screen.findAllByTestId("npa-revision-code"))[0],
+    ).toHaveTextContent("772н-2026-03");
 
     await act(async () => {
       await user.click(
@@ -501,7 +510,9 @@ describe("NpaPage", () => {
         </MemoryRouter>,
       );
     });
-    expect(await screen.findByText("772н-2026-03")).toBeInTheDocument();
+    expect(
+      (await screen.findAllByTestId("npa-revision-code"))[0],
+    ).toHaveTextContent("772н-2026-03");
 
     const block = await screen.findByTestId("npa-unrecorded");
     // Человек видит, ПОЧЕМУ этих категорий нет, а не делает вывод из их
@@ -521,7 +532,9 @@ describe("NpaPage", () => {
         </MemoryRouter>,
       );
     });
-    expect(await screen.findByText("772н-2026-03")).toBeInTheDocument();
+    expect(
+      (await screen.findAllByTestId("npa-revision-code"))[0],
+    ).toHaveTextContent("772н-2026-03");
 
     const badges = screen.getAllByTestId("npa-revision-status");
     const states = badges.map((node) => node.getAttribute("data-status"));
@@ -605,5 +618,142 @@ describe("NpaPage", () => {
     // Слово приходит с сервера: витрина не переводит код сама.
     expect(cells[0]).toHaveTextContent("Общий реестр");
     expect(cells[0]).toHaveAttribute("data-scope", "registry");
+  });
+
+  it("сравнение редакций показывает, что изменилось (срез-202)", async () => {
+    const user = userEvent.setup();
+    apiClientMock.get.mockImplementation((url: string) => {
+      if (url === "/npa") {
+        return Promise.resolve({
+          data: { items: npaItems, can_manage: false, can_create_own: false },
+        });
+      }
+      if (url === "/npa/npa-1") return Promise.resolve({ data: npaDetail });
+      if (url === "/npa/npa-1/revisions/diff") {
+        return Promise.resolve({
+          data: {
+            comparable: true,
+            reason: "",
+            changes: [
+              {
+                code: "п. 4",
+                change: "modified",
+                change_title: "Текст изменён",
+                before: "Обучение раз в год",
+                after: "Обучение раз в полгода",
+              },
+            ],
+            summary: { added: 0, removed: 0, modified: 1, unchanged: 2 },
+            base: { id: "rev-1", revision_code: "772н-2026-03", title: "A" },
+            target: {
+              id: "rev-next",
+              revision_code: "772н-2027-01",
+              title: "B",
+            },
+          },
+        });
+      }
+      if (url === "/documents")
+        return Promise.resolve({ data: { items: tenantDocuments } });
+      throw new Error(`Unexpected GET ${url}`);
+    });
+
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <NpaPage />
+        </MemoryRouter>,
+      );
+    });
+    await act(async () => {
+      await user.click(await screen.findByRole("button", { name: "772н" }));
+    });
+
+    await user.selectOptions(screen.getByLabelText("От редакции"), "rev-1");
+    await user.selectOptions(screen.getByLabelText("К редакции"), "rev-next");
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: "Сравнить" }));
+    });
+
+    const change = await screen.findByTestId("npa-diff-change");
+    expect(change).toHaveAttribute("data-change", "modified");
+    // Подпись словами приходит с сервера, витрина код не переводит.
+    expect(change).toHaveTextContent("Текст изменён");
+    expect(change).toHaveTextContent("Обучение раз в полгода");
+  });
+
+  it("редакция без текста даёт ПРИЧИНУ, а не пустой список (срез-202)", async () => {
+    // ГЛАВНОЕ НА ВИТРИНЕ. Пустой список человек прочитал бы как «закон не
+    // менялся» — и не стал бы пересматривать документы.
+    const user = userEvent.setup();
+    apiClientMock.get.mockImplementation((url: string) => {
+      if (url === "/npa") {
+        return Promise.resolve({
+          data: { items: npaItems, can_manage: false, can_create_own: false },
+        });
+      }
+      if (url === "/npa/npa-1") return Promise.resolve({ data: npaDetail });
+      if (url === "/npa/npa-1/revisions/diff") {
+        return Promise.resolve({
+          data: {
+            comparable: false,
+            reason:
+              "Текст этой редакции в систему не заносили — сравнивать не с чем",
+            changes: [],
+            summary: { added: 0, removed: 0, modified: 0, unchanged: 0 },
+            base: { id: "rev-1", revision_code: "772н-2026-03", title: "A" },
+            target: {
+              id: "rev-next",
+              revision_code: "772н-2027-01",
+              title: "B",
+            },
+          },
+        });
+      }
+      if (url === "/documents")
+        return Promise.resolve({ data: { items: tenantDocuments } });
+      throw new Error(`Unexpected GET ${url}`);
+    });
+
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <NpaPage />
+        </MemoryRouter>,
+      );
+    });
+    await act(async () => {
+      await user.click(await screen.findByRole("button", { name: "772н" }));
+    });
+    await user.selectOptions(screen.getByLabelText("От редакции"), "rev-1");
+    await user.selectOptions(screen.getByLabelText("К редакции"), "rev-next");
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: "Сравнить" }));
+    });
+
+    expect(await screen.findByTestId("npa-diff-unavailable")).toHaveTextContent(
+      "не заносили",
+    );
+    expect(screen.queryByTestId("npa-diff-result")).not.toBeInTheDocument();
+  });
+
+  it("редакция без текста помечена прямо в выборе (срез-202)", async () => {
+    // Иначе человек выбрал бы её и получил отказ — про это лучше знать заранее.
+    const user = userEvent.setup();
+    mockRegistry(false);
+
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <NpaPage />
+        </MemoryRouter>,
+      );
+    });
+    await act(async () => {
+      await user.click(await screen.findByRole("button", { name: "772н" }));
+    });
+
+    const select = screen.getByLabelText("От редакции");
+    expect(select).toHaveTextContent("772н-2027-01 — текста нет");
   });
 });

@@ -15,6 +15,7 @@ import {
   NpaActFormDialog,
   NpaRevisionFormDialog,
 } from "@/features/npa/NpaFormDialogs";
+import { NpaRevisionCompare } from "@/features/npa/NpaRevisionCompare";
 import { NpaTable } from "@/features/npa/NpaTable";
 import { ROUTES } from "@/router/routes";
 import { useNpaStore } from "@/stores/npa";
@@ -47,6 +48,10 @@ type NpaDetail = {
      * сейчас живём». */
     status?: string;
     status_title?: string;
+    /** Срез-202: занесён ли текст этой редакции. Сравнение предлагается только
+     * там, где сравнивать есть что, — кнопка, всегда кончающаяся отказом,
+     * хуже отсутствующей. */
+    has_text?: boolean;
   }>;
   bindings: Record<string, string[]>;
   /** Срез-142: связи по одной, с именами — для списка и кнопки «Отвязать». */
@@ -294,7 +299,14 @@ const NpaPage = () => {
                     {detail.revisions.map((revision) => (
                       <div key={revision.id} className="rounded border p-3">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-medium">
+                          {/* Срез-202: у кода редакции появился второй дом —
+                              выбор в блоке сравнения. Проверять карточку по
+                              простому совпадению текста стало неоднозначно,
+                              поэтому у неё есть собственная отметка. */}
+                          <span
+                            className="font-medium"
+                            data-testid="npa-revision-code"
+                          >
                             {revision.revision_code}
                           </span>
                           {revision.status_title ? (
@@ -323,6 +335,15 @@ const NpaPage = () => {
                       </div>
                     ))}
                   </div>
+                  {/* Срез-202 (разд. 19.4): «дифф» — предпоследний шаг процесса
+                      обновления нормативного контента. Остальные пять шагов
+                      были на месте с срезов 141/144/198. */}
+                  {selectedId ? (
+                    <NpaRevisionCompare
+                      actId={selectedId}
+                      revisions={detail.revisions}
+                    />
+                  ) : null}
                 </div>
                 <div>
                   <div className="flex items-center justify-between">

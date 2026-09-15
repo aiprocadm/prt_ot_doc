@@ -8544,6 +8544,36 @@
         "INTEGER"
       ]
     ],
+    "npa_revision_clause": [
+      [
+        "code",
+        "VARCHAR(128)"
+      ],
+      [
+        "created_at",
+        "DATETIME"
+      ],
+      [
+        "id",
+        "VARCHAR"
+      ],
+      [
+        "revision_id",
+        "VARCHAR"
+      ],
+      [
+        "text",
+        "TEXT"
+      ],
+      [
+        "updated_at",
+        "DATETIME"
+      ],
+      [
+        "version",
+        "INTEGER"
+      ]
+    ],
     "npabinding": [
       [
         "context",

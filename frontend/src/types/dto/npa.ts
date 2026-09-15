@@ -61,6 +61,39 @@ export interface NpaActCreateDto {
   clauses?: NpaClauseCreateDto[];
 }
 
+/**
+ * Срез-202: что изменилось между двумя редакциями акта (B.18 разд. 19.4).
+ *
+ * `comparable: false` — это ОТКАЗ, а не «изменений нет». У редакций, заведённых
+ * до среза-202, текста нет вовсе, и показать по ним пустой список значило бы
+ * сказать «закон не менялся» — после чего документы никто не пересмотрит.
+ */
+export type NpaClauseChangeKind = "added" | "removed" | "modified";
+
+export interface NpaClauseChangeDto {
+  code: string;
+  change: NpaClauseChangeKind;
+  /** Подпись словами приходит с сервера: витрина код не переводит. */
+  change_title: string;
+  before?: string | null;
+  after?: string | null;
+}
+
+export interface NpaRevisionDiffDto {
+  comparable: boolean;
+  /** Причина отказа словами. Пусто, когда сравнение состоялось. */
+  reason: string;
+  changes: NpaClauseChangeDto[];
+  summary: {
+    added: number;
+    removed: number;
+    modified: number;
+    unchanged: number;
+  };
+  base: { id: string; revision_code: string; title: string };
+  target: { id: string; revision_code: string; title: string };
+}
+
 export interface NpaRevisionCreateDto {
   revision_code: string;
   title: string;

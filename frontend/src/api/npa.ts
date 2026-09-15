@@ -1,6 +1,7 @@
 import { apiClient } from "@/api/client";
 import type {
   NpaActCreateDto,
+  NpaRevisionDiffDto,
   NpaBindingCreateDto,
   NpaBindingOptionsDto,
   NpaBindingDto,
@@ -29,6 +30,18 @@ export const npaApi = {
     const { data } = await apiClient.post<NpaRevisionDto>(
       `/npa/${actId}/revisions`,
       payload,
+    );
+    return data;
+  },
+  /** Срез-202: что изменилось между двумя редакциями (B.18 разд. 19.4). */
+  compareRevisions: async (
+    actId: string,
+    base: string,
+    target: string,
+  ): Promise<NpaRevisionDiffDto> => {
+    const { data } = await apiClient.get<NpaRevisionDiffDto>(
+      `/npa/${actId}/revisions/diff`,
+      { params: { base, target } },
     );
     return data;
   },
