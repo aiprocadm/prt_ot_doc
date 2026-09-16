@@ -32,6 +32,7 @@ from app.middleware.global_error_handler import GlobalErrorHandlerMiddleware
 from app.middleware.impersonation_guard import ImpersonationGuardMiddleware
 from app.middleware.observability import ObservabilityMiddleware
 from app.middleware.offboarding_readonly import OffboardingReadOnlyMiddleware
+from app.middleware.tenant_suspension import TenantSuspensionReadOnlyMiddleware
 from app.middleware.reseller_suspension import ResellerSuspensionReadOnlyMiddleware
 from app.middleware.security_headers import DEFAULT_API_CSP, SecurityHeadersMiddleware
 from app.middleware.tenant import TenantMiddleware
@@ -106,6 +107,9 @@ def _configure_middlewares(app: FastAPI, settings: Settings) -> None:
     # клиенту, чей партнёр приостановлен, ответ «оплатите подписку» вводит в
     # заблуждение — должен не он, и заплатить за партнёра он не может.
     app.add_middleware(ResellerSuspensionReadOnlyMiddleware)
+    # Разд. 72.1: СВОЯ приостановка — тоже «только чтение», а не запертая дверь.
+    # Стоит рядом с каскадом партнёра: правило одно, поводы разные.
+    app.add_middleware(TenantSuspensionReadOnlyMiddleware)
     # OPS-72: grace-период офбординга — данные только на чтение. Starlette
     # выполняет middleware в ОБРАТНОМ порядке добавления, поэтому строка ниже
     # ставит проверку ПЕРЕД биллинг-гейтом сознательно: расторгающемуся

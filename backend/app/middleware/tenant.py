@@ -201,13 +201,12 @@ class TenantMiddleware(BaseHTTPMiddleware):
                 code="TENANT_SCOPE_MISMATCH",
                 message="Tenant header does not match token scope",
             )
-        if not tenant.is_active:
-            raise self._error(
-                status.HTTP_403_FORBIDDEN,
-                correlation_id,
-                code="TENANT_BLOCKED",
-                message="Tenant blocked",
-            )
+        # Приостановленный арендатор НЕ блокируется целиком (разд. 72.1: «safe
+        # read-only, данные сохранены»). Полный отказ запирал клиента вместе с
+        # его данными: он не мог ни посмотреть их, ни выгрузить, ни войти — при
+        # том, что право забрать свои данные не зависит от оплаты следующего
+        # месяца. Запись перекрывает `TenantSuspensionReadOnlyMiddleware`, и
+        # отказ там называет причину словами.
         request.state.tenant_id = str(tenant.id)
         request.state.tenant_slug = tenant.slug
         # tenant_id pins the SEC-65 RLS GUC so the tenant_settings/tenant_quotas
