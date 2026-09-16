@@ -12,6 +12,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.domains.enterprise.decisions import DECLINED, decision_for
 from app.domains.sso.rules import PROVIDER_DISABLED, PROVIDER_OIDC
 
 __all__ = ["SsoConfigRead", "SsoConfigWrite", "SsoStartResponse", "SsoStatusResponse"]
@@ -44,6 +45,30 @@ class SsoConfigWrite(BaseModel):
     default_role: str = Field(default="worker", max_length=64)
 
     model_config = {"extra": "forbid"}
+
+    @model_validator(mode="before")
+    @classmethod
+    def _explain_declined_protocols(cls, data):
+        """Назвать РЕШЕНИЕ, а не отвертеться «недопустимым значением».
+
+        ТЗ разд. 53.3 обещает крупному заказчику «SSO/SAML/LDAP». Его
+        администратор, увидев ответ «должно быть disabled или oidc», решит, что
+        у платформы недоделка или сломался список, — и пойдёт в поддержку. На
+        деле это осознанное решение с обходным путём, и сказать об этом обязана
+        сама платформа: причина и что делать берутся из реестра решений
+        (``domains/enterprise/decisions``), чтобы ответ не разошёлся с ним.
+        """
+
+        if not isinstance(data, dict):
+            return data
+        asked = str(data.get("provider") or "").strip().lower()
+        decision = decision_for(asked)
+        if decision is not None and decision.state == DECLINED:
+            raise ValueError(
+                f"{decision.requirement} — не поддерживается осознанно. "
+                f"Причина: {decision.reason}. Что делать: {decision.workaround}."
+            )
+        return data
 
     @model_validator(mode="after")
     def _check(self) -> SsoConfigWrite:
