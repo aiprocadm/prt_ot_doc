@@ -127,6 +127,7 @@ from app.schemas.managed_clients import (
     ClientChangeRead,
     ClientChangeStatusPatch,
     ClientContextRead,
+    ClientContourSession,
     ClientReadinessRead,
     ConsentCreate,
     ConsentRead,
@@ -160,6 +161,7 @@ from app.services.client_change_signals import enqueue_change_recorded
 from app.services.client_dq_signals import DqSignalsOutcome, collect_dq_signals
 from app.services.client_report_mail import ReportSendStatus, send_report_to_client
 from app.services.discipline_applicability import collect_applicability, only_applicable
+from app.services.managed_client_contour import close_contour_session, open_contour_session
 from app.services.tenants.bootstrap.service import BootstrapTenantService
 
 router = APIRouter(prefix="/managed-clients", tags=["managed-clients"])
@@ -871,6 +873,31 @@ async def enter_client_context(
         # доступа рядом с обращениями к данным и должна читаться так же.
         meta=build_context_audit_meta(context, action="context.enter", method=request.method),
     )
+
+    # У Dedicated-клиента данные лежат в ЕГО контуре: одного контекста мало,
+    # нужен ключ от чужого арендатора. Право на него проверяется здесь и
+    # целиком (иерархия + согласие), а отказ приходит ПРИЧИНОЙ, а не пустотой:
+    # иначе «войти вошёл, а данных нет» читается как поломка.
+    contour: ClientContourSession | None = None
+    contour_reason: str | None = None
+    if client.mode is ManagedClientMode.DEDICATED:
+        entry, reason = await open_contour_session(
+            session,
+            client=client,
+            outsourcer_tenant=tenant,
+            specialist_user_id=auth.sub,
+            now=now,
+        )
+        if entry is None:
+            contour_reason = reason
+        else:
+            contour = ClientContourSession(
+                tenant_slug=entry.tenant_slug,
+                access_token=entry.access_token,
+                role=entry.role,
+                display_name=entry.display_name,
+            )
+
     return ClientContextRead(
         scoped_sections=scoped_section_titles(),
         client_id=context.client_id,
@@ -880,6 +907,8 @@ async def enter_client_context(
         modules=list(context.modules),
         expires_at=session_expires_at(now),
         seconds_left=session_seconds_left(started_at=now, now=now),
+        contour=contour,
+        contour_reason=contour_reason,
     )
 
 
@@ -921,6 +950,23 @@ async def leave_client_context(
             after=None,
             meta={"on_behalf_of_client": False, "managed_client_id": row.managed_client_id},
         )
+        # Выход обязан ГАСИТЬ личность в контуре клиента, иначе ключ от чужого
+        # арендатора продолжал бы работать после того, как специалист вышел.
+        closed_client = (
+            await session.execute(
+                select(ManagedClient).where(
+                    ManagedClient.id == row.managed_client_id,
+                    ManagedClient.tenant_id == tenant.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if closed_client is not None:
+            await close_contour_session(
+                session,
+                client=closed_client,
+                outsourcer_slug=str(tenant.slug),
+                specialist_user_id=auth.sub,
+            )
     await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -1058,6 +1104,16 @@ async def revoke_access(
     now = datetime.now(tz=timezone.utc)
     row.revoked_at = now
     row.revoked_by_user_id = auth.sub
+    # Снятый грант обязан гасить и личность в контуре клиента: иначе у
+    # специалиста, которого только что отключили, остался бы рабочий ключ от
+    # чужого арендатора — и никто бы этого не заметил.
+    revoked_client = await _get(session, tenant, mcid)
+    await close_contour_session(
+        session,
+        client=revoked_client,
+        outsourcer_slug=str(tenant.slug),
+        specialist_user_id=str(row.user_id),
+    )
     await session.flush()
     await write_audit_event(
         session=session,
@@ -1247,7 +1303,7 @@ async def revoke_client_consent(
     """
 
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _get(session, tenant, mcid)
+    client_row = await _get(session, tenant, mcid)
     now = datetime.now(tz=timezone.utc)
     row = (
         await session.execute(
@@ -1275,6 +1331,16 @@ async def revoke_client_consent(
     closed = await close_open_sessions_for_client(
         session, tenant_id=str(tenant.id), client_id=mcid, now=now, reason="consent_revoked"
     )
+    # Закрыть сессию мало: у Dedicated-клиента у специалиста есть ЛИЧНОСТЬ в
+    # его контуре, и она пускала бы туда своим ключом уже без согласия.
+    # Согласие — основание обработки; отозвано основание — гаснет и личность.
+    for closed_row in closed:
+        await close_contour_session(
+            session,
+            client=client_row,
+            outsourcer_slug=str(tenant.slug),
+            specialist_user_id=str(closed_row.user_id),
+        )
     await session.flush()
     await write_audit_event(
         session=session,

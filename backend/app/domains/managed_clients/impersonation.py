@@ -37,6 +37,7 @@ __all__ = [
     "ForbiddenRule",
     "ImpersonationExpired",
     "ensure_action_allowed",
+    "find_forbidden_rule",
     "ensure_session_active",
     "session_expires_at",
     "session_seconds_left",
@@ -157,14 +158,29 @@ def ensure_session_active(
         )
 
 
+def find_forbidden_rule(*, method: str, path: str) -> ForbiddenRule | None:
+    """Какой запрет задевает это действие. ``None`` — никакой.
+
+    Вынесено отдельно от отказа, потому что порядок проверок важен для цены:
+    выяснять «а работает ли этот запрос от имени клиента» имеет смысл ТОЛЬКО
+    для опасного пути. Опасных путей единицы, обычных запросов — все
+    остальные, и они не должны платить за эту проверку ничем.
+    """
+
+    if path.startswith(_ALWAYS_ALLOWED):
+        return None
+    for rule in FORBIDDEN_IN_CONTEXT:
+        if rule.matches(method=method, path=path):
+            return rule
+    return None
+
+
 def ensure_action_allowed(*, method: str, path: str) -> None:
     """Проверить, что действие вообще разрешено имперсонатору."""
 
-    if path.startswith(_ALWAYS_ALLOWED):
-        return
-    for rule in FORBIDDEN_IN_CONTEXT:
-        if rule.matches(method=method, path=path):
-            raise ForbiddenInContext(
-                f"Действие запрещено при работе от имени клиента: {rule.reason}. "
-                "Выйдите из контекста и повторите под своей ролью."
-            )
+    rule = find_forbidden_rule(method=method, path=path)
+    if rule is not None:
+        raise ForbiddenInContext(
+            f"Действие запрещено при работе от имени клиента: {rule.reason}. "
+            "Выйдите из контекста и повторите под своей ролью."
+        )

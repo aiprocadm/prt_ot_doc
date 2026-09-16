@@ -32,10 +32,10 @@ from app.middleware.global_error_handler import GlobalErrorHandlerMiddleware
 from app.middleware.impersonation_guard import ImpersonationGuardMiddleware
 from app.middleware.observability import ObservabilityMiddleware
 from app.middleware.offboarding_readonly import OffboardingReadOnlyMiddleware
-from app.middleware.tenant_suspension import TenantSuspensionReadOnlyMiddleware
 from app.middleware.reseller_suspension import ResellerSuspensionReadOnlyMiddleware
 from app.middleware.security_headers import DEFAULT_API_CSP, SecurityHeadersMiddleware
 from app.middleware.tenant import TenantMiddleware
+from app.middleware.tenant_suspension import TenantSuspensionReadOnlyMiddleware
 from app.modules.files import s3
 from app.services.demo_bootstrap import bootstrap_demo_tenant
 from app.services.dev_bootstrap import bootstrap_admin_user
