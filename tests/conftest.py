@@ -227,16 +227,7 @@ async def app_fixture():
                     )
         await seed_session.commit()
 
-    async def override_session() -> AsyncIterator[AsyncSession]:
-        # Swap only the engine binding; the transaction contract must stay identical
-        # to production (app.api.dependencies.get_session) or the suite silently
-        # stops catching missing-commit bugs.
-        async with TestSession() as session:
-            async with transaction_scope(session):
-                yield session
-
     app = create_app()
-    app.dependency_overrides[get_session] = override_session
     app.state.test_sessionmaker = TestSession
 
     class _StubRedisClient:
@@ -275,6 +266,38 @@ async def app_fixture():
             return tenant
 
     app.dependency_overrides[get_tenant_record] = override_tenant_record
+
+    async def override_session(request: Request) -> AsyncIterator[AsyncSession]:
+        # Swap only the engine binding; the transaction contract must stay identical
+        # to production (app.api.dependencies.get_session) or the suite silently
+        # stops catching missing-commit bugs.
+        #
+        # СРЕЗ-211: сессия теперь НЕСЁТ АРЕНДАТОРА, как в бою. Раньше не несла, и
+        # это было тихое расхождение: боевой `get_session` кладёт `tenant_id` в
+        # `session.info`, а тестовый — нет. Значит, всё, что опирается на
+        # арендатора сессии (рубеж на чтение чужой строки, переменные RLS),
+        # в тестах молчало и проверить его было нечем.
+        # Арендатор берётся ТОЙ ЖЕ подменой, что и у обработчиков
+        # (`override_tenant_record`). Через `Depends(get_tenant_record)` его брать
+        # нельзя: там выполнилась бы НАСТОЯЩАЯ проверка совпадения арендатора с
+        # токеном, которую тесты нарочно обходят, — и часть проверок стала бы
+        # мерить не то, что заявлено (поймано прогоном: чужая задача отвечала
+        # «нет доступа» вместо «не найдено»).
+        try:
+            tenant = await override_tenant_record(request)
+        except Exception:
+            tenant = None
+        async with TestSession() as session:
+            if tenant is not None:
+                session.info["tenant"] = tenant.slug
+                session.info["tenant_slug"] = tenant.slug
+                session.info["tenant_schema"] = tenant.schema_name
+                if getattr(tenant, "id", None) is not None:
+                    session.info["tenant_id"] = str(tenant.id)
+            async with transaction_scope(session):
+                yield session
+
+    app.dependency_overrides[get_session] = override_session
 
     yield app
 

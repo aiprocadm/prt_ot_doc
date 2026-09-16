@@ -5,7 +5,6 @@ from datetime import date, datetime, timezone
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domains.npa.scope import visible_acts
 from app.models.finance import Contract, Order
 from app.models.models import (
     BriefingEntry,
@@ -37,6 +36,7 @@ from app.modules.projections.models import (
 from app.modules.workflow.models import WorkflowTask, WorkflowTaskStatus
 from app.services.contractor_admission import evaluate_with_documents
 from app.services.discipline_incidents import open_incidents_where
+from app.services.npa_visibility import visible_acts
 from app.services.person_scope import employed_person_where, not_employed_record_where
 
 

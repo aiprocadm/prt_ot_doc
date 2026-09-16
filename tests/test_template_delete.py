@@ -19,7 +19,7 @@ async def test_template_version_delete_rejected_when_used(
         tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
 
         template = Template(
-            tenant_id=tenant.slug,
+            tenant_id=tenant.id,
             name="Safety Form",
             description="",
             metadata_json={},
@@ -29,7 +29,7 @@ async def test_template_version_delete_rejected_when_used(
         await session.flush()
 
         version = TemplateVersion(
-            tenant_id=tenant.slug,
+            tenant_id=tenant.id,
             template_id=template.id,
             version=1,
             checksum=b"checksum",
@@ -99,7 +99,7 @@ async def test_template_version_uniqueness_constraint(
 
         # Create a template
         template = Template(
-            tenant_id=tenant.slug,
+            tenant_id=tenant.id,
             code="unique-test-code",
             name="Template with uniqueness check",
             description="",
@@ -111,7 +111,7 @@ async def test_template_version_uniqueness_constraint(
 
         # Create version 1
         version_1 = TemplateVersion(
-            tenant_id=tenant.slug,
+            tenant_id=tenant.id,
             template_id=template.id,
             version=1,
             checksum=b"checksum1",
@@ -124,7 +124,7 @@ async def test_template_version_uniqueness_constraint(
         # Try to create another version 1 for the same template
         # This should fail due to UniqueConstraint(template_id, version)
         version_1_dup = TemplateVersion(
-            tenant_id=tenant.slug,
+            tenant_id=tenant.id,
             template_id=template.id,
             version=1,  # Same version number
             checksum=b"checksum2",
@@ -158,7 +158,7 @@ async def test_template_delete_guard_409_when_in_use_api_contract(
 
         # Create template and version
         template = Template(
-            tenant_id=tenant.slug,
+            tenant_id=tenant.id,
             code="protected-template",
             name="Template in Use",
             description="",
@@ -169,7 +169,7 @@ async def test_template_delete_guard_409_when_in_use_api_contract(
         await session.flush()
 
         version = TemplateVersion(
-            tenant_id=tenant.slug,
+            tenant_id=tenant.id,
             template_id=template.id,
             version=1,
             checksum=b"checksum-protected",

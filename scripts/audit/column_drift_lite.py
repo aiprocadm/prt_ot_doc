@@ -202,9 +202,16 @@ def _enclosing_for_bindings(
     return bindings
 
 
-def _column_name(call: ast.Call) -> str | None:
+def _column_name(call: ast.Call, scalars: dict[str, str] | None = None) -> str | None:
     """If ``call`` is ``sa.Column("name", ...)`` or ``Column("name", ...)``,
-    return ``"name"``; otherwise ``None``."""
+    return ``"name"``; otherwise ``None``.
+
+    Имя колонки может быть задано ПОСТОЯННОЙ модуля — ``sa.Column(COLUMN, ...)``
+    рядом с ``COLUMN = "owner_tenant_id"``. Так написана миграция b18 (срез-201),
+    и разбор её не видел: колонка читалась как никогда не добавленная и всплывала
+    ложным расхождением. Постоянные модуля уже собираются для ИМЁН ТАБЛИЦ —
+    теперь тем же способом разрешаются и имена колонок.
+    """
     func = call.func
     is_col = (isinstance(func, ast.Attribute) and func.attr == "Column") or (
         isinstance(func, ast.Name) and func.id == "Column"
@@ -214,6 +221,8 @@ def _column_name(call: ast.Call) -> str | None:
     first = call.args[0]
     if isinstance(first, ast.Constant) and isinstance(first.value, str):
         return first.value
+    if isinstance(first, ast.Name) and scalars:
+        return scalars.get(first.id)
     return None
 
 
@@ -562,7 +571,7 @@ def collect_migration_columns(verbose: bool = False) -> dict[str, set[str]]:
                 col_arg = node.args[1]
                 if isinstance(col_arg, (ast.Call, ast.Name)):
                     col = (
-                        _column_name(col_arg)
+                        _column_name(col_arg, module_scalars)
                         if isinstance(col_arg, ast.Call)
                         else col_vars.get(col_arg.id)
                     )

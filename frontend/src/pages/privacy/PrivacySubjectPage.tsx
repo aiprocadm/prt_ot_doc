@@ -39,6 +39,28 @@ import { downloadBlob } from "@/utils/download";
  *    неполные данные, считая их полными, — и это хуже отказа.
  */
 
+/**
+ * Основания обработки и состояния согласия — СЛОВАМИ.
+ *
+ * Сторож `tests/test_frontend_raw_status_prints.py` поймал на этом экране
+ * печать служебного кода: человек видел бы «consent» и «active» латиницей.
+ * Состав словарей повторяет серверные `PDN_LEGAL_BASES` и
+ * `PDN_CONSENT_STATUSES` — расходиться им нельзя, иначе экран однажды покажет
+ * код вместо слова снова.
+ */
+const LEGAL_BASIS_TITLES: Record<string, string> = {
+  consent: "согласие человека",
+  contract: "трудовой договор",
+  legal_obligation: "требование закона",
+  vital_interests: "защита жизни и здоровья",
+};
+
+const CONSENT_STATUS_TITLES: Record<string, string> = {
+  active: "действует",
+  withdrawn: "отозвано",
+  superseded: "заменено новой версией",
+};
+
 const ACTION_TITLES: Record<string, string> = {
   view_card: "Просмотр карточки",
   export: "Выгрузка данных",
@@ -284,9 +306,13 @@ const PrivacySubjectPage = () => {
                   >
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-medium">{entry.purpose}</span>
-                      <span className="text-xs uppercase">{entry.status}</span>
+                      <span className="text-xs uppercase">
+                        {CONSENT_STATUS_TITLES[entry.status] ?? entry.status}
+                      </span>
                       <span className="text-xs text-muted-foreground">
-                        основание: {entry.legal_basis} · версия {entry.version}
+                        основание:{" "}
+                        {LEGAL_BASIS_TITLES[entry.legal_basis] ?? entry.legal_basis} ·
+                        версия {entry.version}
                       </span>
                     </div>
                     {entry.withdrawn_at ? (

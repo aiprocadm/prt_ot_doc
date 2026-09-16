@@ -25,6 +25,7 @@ from app.core.external_perimeter import (
 from app.core.security import AccessContext, abac, issue_portal_session_token, verify_token
 from app.core.tenant import tenant_prefix_path
 from app.db.session import rearm_session_tenant_context
+from app.db.tenant_read_guard import allow_cross_tenant_read
 from app.models.models import (
     ClientPackagePreset,
     ClientPackageRun,
@@ -305,6 +306,26 @@ def _ensure_link_alive(record: ClientPortalToken) -> None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Portal token expired or revoked")
 
 
+def _bind_to_link(session: AsyncSession, record: ClientPortalToken) -> None:
+    """Прижать сессию к арендатору, которого назвала ссылка (разд. 64.1).
+
+    ЗАЧЕМ. Внешний контур — самая открытая поверхность продукта, и до этого
+    среза его изоляция держалась ТОЛЬКО на списке разрешённых ссылкой прогонов
+    (`scope_json`). Запрос приходит без имени организации, поэтому сессия была
+    прибита к арендатору по умолчанию — и любой запрос портала шёл «не от того
+    имени».
+
+    После опознания ссылки арендатор ИЗВЕСТЕН. Прижимая к нему сессию, мы
+    получаем у портала второй рубеж: строки других арендаторов для него просто
+    перестают существовать, даже если список прогонов однажды окажется шире,
+    чем следует.
+    """
+
+    info = getattr(session, "info", None)
+    if isinstance(info, dict):
+        info["tenant_id"] = str(record.tenant_id)
+
+
 async def _resolve_link_token(
     request: Request, session: AsyncSession, raw: str, *, burn_use: bool
 ) -> ClientPortalToken:
@@ -312,7 +333,14 @@ async def _resolve_link_token(
 
     token_hash = _hash_token(raw)
     stmt = select(ClientPortalToken).where(ClientPortalToken.token_hash == token_hash)
-    record = (await session.execute(stmt)).scalar_one_or_none()
+    # ЗАКОННОЕ ЧТЕНИЕ МИМО АРЕНДАТОРА, названное вслух (разд. 64.1). Ссылка САМА
+    # называет арендатора: до того, как она найдена по отпечатку, неизвестно,
+    # чья она. Разрешение здесь предельно узкое — один поиск по отпечатку; сразу
+    # после него сессия прикалывается к арендатору из ссылки (`_bind_to_link`).
+    with allow_cross_tenant_read(
+        session, reason="поиск ссылки клиентского портала по отпечатку: арендатор известен из неё"
+    ):
+        record = (await session.execute(stmt)).scalar_one_or_none()
     if record is None:
         record_auth_failure(request)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid portal token")
@@ -352,18 +380,24 @@ async def _portal_auth(
             # Подделка сеансового токена — та же попытка перебора.
             record_auth_failure(request)
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid portal session")
-        record = await session.get(ClientPortalToken, str(claims.get("sub") or ""))
+        with allow_cross_tenant_read(
+            session,
+            reason="сеанс клиентского портала: арендатор известен из самой ссылки",
+        ):
+            record = await session.get(ClientPortalToken, str(claims.get("sub") or ""))
         if record is None:
             record_auth_failure(request)
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid portal session")
         # Отзыв ссылки обязан убивать и сеанс — перепроверяем на каждом запросе.
         _ensure_link_alive(record)
+        _bind_to_link(session, record)
         return _auth_from_record(record)
 
     raw = x_portal_token or token
     if not raw:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Portal token is required")
     record = await _resolve_link_token(request, session, raw, burn_use=True)
+    _bind_to_link(session, record)
     return _auth_from_record(record)
 
 

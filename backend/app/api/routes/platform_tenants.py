@@ -33,6 +33,7 @@ from app.core.config import get_settings
 from app.core.errors import api_problem_detail
 from app.core.security import verify_token
 from app.db.session import AsyncSessionLocal, rearm_session_tenant_context
+from app.db.tenant_read_guard import allow_cross_tenant_read
 from app.domains.reseller import (
     FleetScope,
     HierarchyViolation,
@@ -231,9 +232,7 @@ async def _enforce_plan_ceiling(scope: FleetScope, actor: Tenant, plan: Any) -> 
     if not is_ceiling_applicable(actor_sees_everything=scope.sees_everything):
         return
     own = await read_feature_grants(actor)
-    verdict = check_plan_ceiling(
-        plan_features=set(plan.features), reseller_features=own.effective
-    )
+    verdict = check_plan_ceiling(plan_features=set(plan.features), reseller_features=own.effective)
     if verdict.allowed:
         return
     raise HTTPException(
@@ -430,9 +429,7 @@ async def read_industries(
 
     _require_fleet_actor(credentials, tenant)
     return IndustryList(
-        items=[
-            IndustryRead(code=item.code, title=item.title) for item in INDUSTRIES
-        ]
+        items=[IndustryRead(code=item.code, title=item.title) for item in INDUSTRIES]
     )
 
 
@@ -516,9 +513,7 @@ async def read_fleet_usage(
     ]
     # Клиент, не пользовавшийся ничем, в отчёте о расходе — шум. Но «ничем»
     # теперь означает ноль по ВСЕМ трём метрикам, а не по одной.
-    items = [
-        row for row in rows if row.doc_generations or row.storage_bytes or row.active_workers
-    ]
+    items = [row for row in rows if row.doc_generations or row.storage_bytes or row.active_workers]
     return FleetUsageReport(
         period=yyyymm,
         items=items,
@@ -633,9 +628,7 @@ async def provision_tenant_endpoint(
         # партнёра он не может. Своя проверка здесь однажды разошлась бы с
         # соседней, и «чей это клиент» стало бы зависеть от ручки.
         parent_record = (
-            await provisioning_session.get(Tenant, payload.parent_id)
-            if payload.parent_id
-            else None
+            await provisioning_session.get(Tenant, payload.parent_id) if payload.parent_id else None
         )
         try:
             plan = plan_tenant_creation(
@@ -657,10 +650,7 @@ async def provision_tenant_endpoint(
                 status.HTTP_400_BAD_REQUEST,
                 detail=api_problem_detail(
                     code="UNKNOWN_INDUSTRY",
-                    message=(
-                        f"{exc}. Доступные: "
-                        + ", ".join(item.code for item in INDUSTRIES)
-                    ),
+                    message=(f"{exc}. Доступные: " + ", ".join(item.code for item in INDUSTRIES)),
                     error_type="platform-tenants",
                 ),
             ) from exc
@@ -671,10 +661,7 @@ async def provision_tenant_endpoint(
                 status.HTTP_400_BAD_REQUEST,
                 detail=api_problem_detail(
                     code="UNKNOWN_PLAN",
-                    message=(
-                        f"Неизвестный тариф {payload.plan!r}. Доступные: "
-                        + ", ".join(PLANS)
-                    ),
+                    message=(f"Неизвестный тариф {payload.plan!r}. Доступные: " + ", ".join(PLANS)),
                     error_type="platform-tenants",
                 ),
             )
@@ -909,33 +896,42 @@ async def export_tenant_config(
     _payload, scope = _require_fleet_actor(credentials, tenant)
     target = await _load_in_scope(session, tenant_id, scope)
 
-    positions = list(
-        (
-            await session.execute(
-                select(Position.name)
-                .where(Position.tenant_id == target.id, Position.deleted_at.is_(None))
-                .order_by(Position.created_at.asc())
-            )
-        ).scalars()
-    )
-    hazards = list(
-        (
-            await session.execute(
-                select(Hazard.name)
-                .where(Hazard.tenant_id == target.id, Hazard.deleted_at.is_(None))
-                .order_by(Hazard.created_at.asc())
-            )
-        ).scalars()
-    )
-    controls = list(
-        (
-            await session.execute(
-                select(RiskMeasure.name)
-                .where(RiskMeasure.tenant_id == target.id, RiskMeasure.deleted_at.is_(None))
-                .order_by(RiskMeasure.created_at.asc())
-            )
-        ).scalars()
-    )
+    # ЗАКОННОЕ ЧТЕНИЕ ЧУЖОГО АРЕНДАТОРА — и оно названо вслух (разд. 64.1).
+    # Сессия приколота к арендатору партнёра, а справочники снимаются с ЕГО
+    # КЛИЕНТА. Право на это уже проверено выше: `_require_fleet_actor` (роль
+    # оператора платформы или партнёра) и `_load_in_scope` (чужой клиент — 404).
+    # Без явного разрешения рубеж на чтение молча вернул бы пустые списки, и
+    # выгрузка «сработала» бы, не выгрузив ничего, — худший вид отказа.
+    with allow_cross_tenant_read(
+        session, reason="партнёр снимает слепок справочников своего клиента (разд. 52.3)"
+    ):
+        positions = list(
+            (
+                await session.execute(
+                    select(Position.name)
+                    .where(Position.tenant_id == target.id, Position.deleted_at.is_(None))
+                    .order_by(Position.created_at.asc())
+                )
+            ).scalars()
+        )
+        hazards = list(
+            (
+                await session.execute(
+                    select(Hazard.name)
+                    .where(Hazard.tenant_id == target.id, Hazard.deleted_at.is_(None))
+                    .order_by(Hazard.created_at.asc())
+                )
+            ).scalars()
+        )
+        controls = list(
+            (
+                await session.execute(
+                    select(RiskMeasure.name)
+                    .where(RiskMeasure.tenant_id == target.id, RiskMeasure.deleted_at.is_(None))
+                    .order_by(RiskMeasure.created_at.asc())
+                )
+            ).scalars()
+        )
 
     config = build_config(
         positions=positions, hazards=hazards, controls=controls, source_slug=target.slug
@@ -1019,8 +1015,9 @@ async def _cascade_impact(session: AsyncSession, target: Tenant) -> CascadeImpac
         TenantNode(id=row[0], slug=row[1], kind=row[2], parent_id=row[3], is_active=bool(row[4]))
         for row in (
             await session.execute(
-                select(Tenant.id, Tenant.slug, Tenant.kind, Tenant.parent_id, Tenant.is_active)
-                .where(Tenant.parent_id == target.id)
+                select(
+                    Tenant.id, Tenant.slug, Tenant.kind, Tenant.parent_id, Tenant.is_active
+                ).where(Tenant.parent_id == target.id)
             )
         ).all()
     ]

@@ -28,9 +28,14 @@ class DummySession:
     def __init__(self) -> None:
         self.info = {"search_path": ["tenant_a", "public"]}
         self.calls: list[str] = []
+        self.params: list[dict | None] = []
 
-    async def execute(self, stmt):
+    async def execute(self, stmt, params=None):
+        # Срез-210: метка сессии уходит ПАРАМЕТРОМ (`set_config`), а не склейкой,
+        # поэтому у запроса появился второй довод. Заглушка обязана повторять
+        # боевой вызов, иначе проверка мерит не тот контракт.
         self.calls.append(str(stmt))
+        self.params.append(params)
         return None
 
 
@@ -72,7 +77,10 @@ async def test_search_path_set_local_with_correlation(monkeypatch: pytest.Monkey
         reset_tenant_context(token)
 
     assert any("SET LOCAL search_path" in call for call in dummy.calls)
-    assert any("SET LOCAL application_name" in call for call in dummy.calls)
+    # Метка сессии ставится через `set_config` с ПАРАМЕТРОМ: значение из
+    # заголовка запроса больше не становится текстом SQL (разд. 64.1, срез-210).
+    assert any("set_config('application_name'" in call for call in dummy.calls)
+    assert {"value": "api:cid-1"} in dummy.params
 
 
 def test_policy_engine_matrix_smoke() -> None:

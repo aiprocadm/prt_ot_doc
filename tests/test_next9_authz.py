@@ -140,6 +140,11 @@ async def test_deny_write_produces_authz_audit_event(sessionmaker) -> None:
 
     async with sessionmaker() as session:
         session.info["tenant"] = "test"
+        # Срез-211: сессия и запись аудита должны быть ОДНОГО арендатора. Раньше
+        # запись ложилась под арендатора актёра (случайный номер), а читалась
+        # сессией без арендатора — расхождение было незаметно. Теперь сессия
+        # несёт арендатора, и чужая строка для неё не существует.
+        session.info["tenant_id"] = actor.tenant_id
         request = SimpleNamespace(
             url=SimpleNamespace(path="/api/v1/incidents/1"),
             client=SimpleNamespace(host="127.0.0.1"),
