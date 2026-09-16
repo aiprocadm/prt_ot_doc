@@ -363,8 +363,26 @@ async def _portal_auth(
     session: Annotated[AsyncSession, Depends(get_session)],
     x_portal_session: Annotated[str | None, Header(alias="X-Portal-Session")] = None,
     x_portal_token: Annotated[str | None, Header(alias="X-Portal-Token")] = None,
-    token: Annotated[str | None, Query()] = None,
 ) -> PortalAuth:
+    """Кто пришёл во внешний контур (разд. 68.1).
+
+    ССЫЛОЧНЫЙ ТОКЕН В АДРЕСЕ ЗДЕСЬ НЕ ПРИНИМАЕТСЯ — и это решение, а не
+    недосмотр. ТЗ разд. 68.1 в таблице угроз пишет прямо: «утечка через
+    Referer/логи/историю → токен не в query, а лучше в теле/заголовке». Адрес
+    страницы попадает в журналы сервера, в историю браузера и в заголовок
+    Referer при переходе на любой внешний ресурс; всё это места, куда ключ от
+    чужих документов попадать не должен.
+
+    Ссылка из письма от этого НЕ ломается: она остаётся входным билетом для
+    двух ручек обмена — ``/otp`` (код получателю) и ``/session`` (обмен на
+    короткоживущий сеанс). Дальше портал ходит заголовком
+    ``X-Portal-Session``, и токен в адресе больше не фигурирует.
+
+    Срез-213: до этого адрес принимался на КАЖДОЙ ручке портала, то есть
+    обменять ссылку на сеанс было можно, но не обязательно, — а мера, которую
+    можно обойти, мерой не является.
+    """
+
     # SEC-68 (разд. 68.2): внешний контур ограничивается жёстче внутреннего, и
     # проверка идёт ДО обращения к базе — перебор не должен стоить нам запроса
     # в БД на каждую попытку.
@@ -393,10 +411,13 @@ async def _portal_auth(
         _bind_to_link(session, record)
         return _auth_from_record(record)
 
-    raw = x_portal_token or token
-    if not raw:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Portal token is required")
-    record = await _resolve_link_token(request, session, raw, burn_use=True)
+    if not x_portal_token:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            "Portal token is required in the X-Portal-Token header "
+            "(exchange the emailed link for a session at POST /portal/session)",
+        )
+    record = await _resolve_link_token(request, session, x_portal_token, burn_use=True)
     _bind_to_link(session, record)
     return _auth_from_record(record)
 
