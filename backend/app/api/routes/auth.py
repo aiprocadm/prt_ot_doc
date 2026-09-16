@@ -29,6 +29,10 @@ from app.core.security import (
     verify_token,
 )
 from app.core.tenant_validation import TenantContextValidator
+from app.domains.managed_clients.delegated_identity import (
+    is_delegated_email,
+    is_delegated_password,
+)
 from app.models.models import Tenant, User
 from app.services.auth import verify_password
 from app.services.refresh_sessions import (
@@ -183,6 +187,14 @@ async def login(
     )
     user = result.scalar_one_or_none()
     if user is None or not user.is_active:
+        raise _invalid_credentials()
+
+    # BIZ-49 (разд. 49.3): у личности специалиста аутсорсера, заведённой в
+    # контуре клиента, пароля НЕТ вовсе. Проверка стоит здесь явно, а не
+    # держится на том, что метка не сойдётся с хэшем: случайная защита
+    # исчезает при первой же смене хэшера. Ответ тот же, что и при неверном
+    # пароле, — существование такой личности посторонним знать незачем.
+    if is_delegated_email(user.email) or is_delegated_password(user.hashed_password):
         raise _invalid_credentials()
 
     # Argon2 — умышленно дорогой CPU-bound верифай (~75+ мс): синхронный вызов
