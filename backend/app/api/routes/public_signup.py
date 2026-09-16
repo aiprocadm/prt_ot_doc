@@ -34,11 +34,13 @@
 
 from __future__ import annotations
 
+import logging
 import re
 
 from fastapi import APIRouter, HTTPException, Request, status
 from sqlalchemy import select
 
+from app.core.anti_bot import AntiBotRefusal, resolve_config, verify_human, warn_if_unprotected
 from app.core.config import get_settings
 from app.core.external_perimeter import enforce_signup_attempts
 from app.db.session import AsyncSessionLocal
@@ -46,6 +48,8 @@ from app.models.tenanting import Tenant
 from app.modules.subscription.plans import DEFAULT_PLAN_CODE
 from app.schemas.public_signup import SignupRequest, SignupResult
 from app.services.tenants.bootstrap.service import BootstrapTenantService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["public"])
 
@@ -72,6 +76,43 @@ async def public_signup(payload: SignupRequest, request: Request) -> SignupResul
 
     # Считаем попытку ДО создания: перебор не должен стоить нам арендаторов.
     enforce_signup_attempts(request, settings=settings)
+
+    # SEC-68 (разд. 68.2): «человек ли это». Лимит по адресу не мешает боту с
+    # набором адресов, а каждый успешный запрос создаёт СХЕМУ В БАЗЕ — это самая
+    # дорогая кнопка, выставленная в интернет.
+    #
+    # Служба подключается НАСТРОЙКОЙ (правило продукта: внешняя зависимость —
+    # настройка, а не разработка). Не подключена — регистрация работает на
+    # прежних мерах, но об этом честно пишется предупреждение в журнал: молча
+    # обходиться без проверки значило бы притворяться защищёнными.
+    try:
+        antibot = resolve_config(settings)
+    except AntiBotRefusal as exc:
+        # Настройка неполная: служба названа, секрета нет. Это ХУЖЕ отсутствия
+        # настройки — владелец уверен, что защита включена. Поэтому отказ.
+        logger.error("public_signup.antibot_misconfigured", extra={"reason": str(exc)})
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Registration is temporarily unavailable",
+        ) from exc
+
+    if antibot is None:
+        warn_if_unprotected(settings)
+    else:
+        try:
+            await verify_human(
+                antibot,
+                payload.antibot_token,
+                remote_ip=request.client.host if request.client else None,
+            )
+        except AntiBotRefusal as exc:
+            logger.warning("public_signup.antibot_rejected", extra={"reason": str(exc)})
+            # Ответ ОДИНАКОВ для «нет ответа» и «ответ не принят»: разные
+            # ответы подсказывали бы боту, где именно он ошибся.
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "Anti-bot verification failed",
+            ) from exc
 
     slug = payload.slug.strip().lower()
     if not _SLUG_RE.match(slug):

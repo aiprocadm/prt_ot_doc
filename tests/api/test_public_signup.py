@@ -182,3 +182,63 @@ async def test_перебор_останавливается_лимитом(
     finally:
         get_settings.cache_clear()  # type: ignore[attr-defined]
         external_perimeter.reset_guard()
+
+
+@pytest.mark.anyio
+async def test_бот_без_ответа_службы_не_создаёт_арендатора(
+    async_client: AsyncClient, signup_on, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """SEC-68 (разд. 68.2): когда служба проверки подключена, она обязательна.
+
+    Лимит по адресу не мешает боту с сотней адресов — именно так делают
+    регистрационный спам, а каждый успешный запрос создаёт СХЕМУ В БАЗЕ.
+    """
+
+    monkeypatch.setenv("SIGNUP_ANTIBOT_PROVIDER", "turnstile")
+    monkeypatch.setenv("SIGNUP_ANTIBOT_SECRET", "s3cret")
+    get_settings.cache_clear()  # type: ignore[attr-defined]
+
+    response = await async_client.post(URL, json=_payload("bot-ne-proydyot"))
+
+    assert response.status_code == 400, response.text
+    assert not await _tenant_exists("bot-ne-proydyot")
+
+
+@pytest.mark.anyio
+async def test_неполная_настройка_закрывает_регистрацию(
+    async_client: AsyncClient, signup_on, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Служба названа, секрета нет — это ХУЖЕ, чем отсутствие настройки.
+
+    Владелец в таком случае уверен, что защита включена, а её нет. Поэтому
+    регистрация закрывается, а не работает «как будто всё в порядке».
+    """
+
+    monkeypatch.setenv("SIGNUP_ANTIBOT_PROVIDER", "turnstile")
+    monkeypatch.delenv("SIGNUP_ANTIBOT_SECRET", raising=False)
+    get_settings.cache_clear()  # type: ignore[attr-defined]
+
+    response = await async_client.post(URL, json=_payload("nastroyka-nepolnaya"))
+
+    assert response.status_code == 503, response.text
+    assert not await _tenant_exists("nastroyka-nepolnaya")
+
+
+@pytest.mark.anyio
+async def test_без_подключённой_службы_регистрация_работает(
+    async_client: AsyncClient, signup_on, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Обратная сторона: не подключено — не значит сломано.
+
+    Без этой половины «починкой» можно было бы объявить запрет всем и сломать
+    самостоятельный старт, который ТЗ называет условием аренды.
+    """
+
+    monkeypatch.delenv("SIGNUP_ANTIBOT_PROVIDER", raising=False)
+    get_settings.cache_clear()  # type: ignore[attr-defined]
+
+    response = await async_client.post(URL, json=_payload("bez-sluzhby-rabotaet"))
+
+    assert response.status_code == 201, response.text
+    assert await _tenant_exists("bez-sluzhby-rabotaet")
+

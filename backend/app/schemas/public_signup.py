@@ -27,6 +27,10 @@ class SignupRequest(BaseSchema):
     #: попало бы в журналы прокси и историю браузера.
     owner_password: str = Field(min_length=8, max_length=128)
     industry: str | None = Field(default=None, max_length=64)
+    #: Ответ на проверку «человек ли это» (разд. 68.2). Нужен только когда
+    #: владелец подключил службу проверки; без настройки поле не смотрят, и
+    #: старые формы продолжают работать.
+    antibot_token: str | None = Field(default=None, max_length=4096)
 
 
 class SignupResult(BaseSchema):
