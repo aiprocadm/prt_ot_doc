@@ -35,6 +35,8 @@ vi.mock("@/stores/persons", () => ({
   }),
 }));
 
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
+
 import PrivacySubjectPage from "@/pages/privacy/PrivacySubjectPage";
 
 /**
@@ -217,5 +219,16 @@ describe("PrivacySubjectPage", () => {
     // чистить было нечего, — неправда в доказательстве исполнения.
     expect(result).toHaveTextContent("Вычищено полей: 2");
     confirmSpy.mockRestore();
+  });
+
+  it("экран в UX-бюджете (разд. 59.2)", async () => {
+    // Долг среза-209, поймал сторож полноты приёмки.
+    const user = userEvent.setup();
+    await renderPage();
+    await selectPerson(user);
+
+    const budget = uxBudgetDelta(document.body, "PrivacySubjectPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 });

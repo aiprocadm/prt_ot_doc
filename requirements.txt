@@ -26,6 +26,12 @@ python-docx==1.1.2
 # python-dotenv: PYSEC-2026-2270 fixed at 1.2.2.
 python-dotenv==1.2.2
 python-jose[cryptography]==3.5.0
+# cryptography: прямое закрепление поверх транзитивного (тянется python-jose).
+# PYSEC-2026-3552 закрыт в 50.0.0. Без своей строки версия оставалась 49.0.0 —
+# это БОЕВАЯ библиотека шифрования (подпись токенов входа, шифрование секретов
+# арендаторов), поэтому её нельзя оставлять на «что притянулось».
+# python-jose требует cryptography>=3.4.0, поэтому 50.x с ней совместима.
+cryptography==50.0.1
 python-magic==0.4.27
 # pyasn1: direct pin to override transitive (pulled by python-jose/cryptography).
 # CVE-2026-30922 (HIGH, unbounded recursion DoS) fixed at 0.6.3.

@@ -23,6 +23,8 @@ vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
+
 import PrivacyBreachesPage from "@/pages/privacy/PrivacyBreachesPage";
 
 /**
@@ -167,5 +169,16 @@ describe("PrivacyBreachesPage", () => {
     expect(payload.summary).toBe("Письмо не туда");
     // Момент обнаружения вводит ЧЕЛОВЕК и уходит на сервер.
     expect(payload.discovered_at).toContain("2026-09-15");
+  });
+
+  it("экран в UX-бюджете (разд. 59.2)", async () => {
+    // Долг среза-208: экран завели, а в приёмку бюджета наглядности не внесли —
+    // поймал сторож полноты. Замер обязателен для КАЖДОГО экрана: иначе экран
+    // тихо растёт полями и кнопками, и никто этого не видит.
+    await renderPage();
+
+    const budget = uxBudgetDelta(document.body, "PrivacyBreachesPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 });
