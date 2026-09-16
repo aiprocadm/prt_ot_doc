@@ -27,6 +27,7 @@ from app.core.sql_text import (
     session_label_statement,
 )
 from app.core.tenant import get_current_tenant, tenant_schema
+from app.db.tenant_read_guard import hide_foreign_rows, refuse_foreign_row
 from app.modules.tenancy.context import get_tenant_context
 
 _logger = logging.getLogger(__name__)
@@ -305,6 +306,16 @@ def _apply_default_tenant(session, flush_context, instances) -> None:
 
 
 event.listen(TenantAsyncSession.sync_session_class, "before_flush", _apply_default_tenant)
+
+# Разд. 64.1, строка «Broken Access Control»: рубеж на ЧТЕНИЕ. Рубеж на запись
+# (выше) ставил арендатора новым строкам; этот не даёт выдать чужую строку, если
+# ручка забыла фильтр. Второй рубеж, как RLS, но работает и на SQLite, и в фоне.
+#
+# Основной рубеж — подмешивание условия к запросу: чужой строки для арендатора
+# просто НЕТ, и ручка отвечает своими словами. Проверка загруженной строки —
+# вторая сеть на случай пути, где условие подмешать не удалось.
+event.listen(TenantAsyncSession.sync_session_class, "do_orm_execute", hide_foreign_rows)
+event.listen(TenantAsyncSession.sync_session_class, "loaded_as_persistent", refuse_foreign_row)
 
 
 def _run_in_thread(fn: Callable[[], None]) -> None:

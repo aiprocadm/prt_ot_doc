@@ -536,7 +536,15 @@ async def test_get_job_returns_404_when_job_belongs_to_different_tenant(
     await _ensure_global_tenant(slug=tenant_owner.slug, tenant_id=str(tenant_owner.id))
     await _ensure_global_tenant(slug=tenant_other.slug, tenant_id=str(tenant_other.id))
 
-    headers = await make_auth_headers()
+    # Токен выписан ТОМУ АРЕНДАТОРУ, от имени которого идёт запрос. Иначе
+    # проверка «токен и арендатор запроса совпадают» отвергнет запрос раньше
+    # (403), и тест мерил бы не то, что заявляет.
+    #
+    # Срез-211: раньше эта боевая проверка в тестах МОЛЧАЛА — тестовая сессия не
+    # несла арендатора, а проверка сравнивает именно его. Теперь несёт.
+    headers = await make_auth_headers(
+        tenant=tenant_other.slug, email=f"jobs-cross-{tenant_other.slug}@example.com"
+    )
     headers["x-tenant"] = str(tenant_other.id)
     response = await async_client.get(f"/api/v1/jobs/{job_id}", headers=headers)
     assert response.status_code == 404
