@@ -151,5 +151,7 @@ def test_ссылки_витрины_ведут_на_объявленные_ма
     assert not broken, (
         "ссылки ведут на несуществующие маршруты (человек молча уезжает "
         "на посадочную страницу по catch-all):\n"
-        + "\n".join(f"  {link} — {', '.join(sorted(files))}" for link, files in sorted(broken.items()))
+        + "\n".join(
+            f"  {link} — {', '.join(sorted(files))}" for link, files in sorted(broken.items())
+        )
     )

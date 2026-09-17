@@ -132,9 +132,7 @@ async def test_counts_readonly_when_warehouse_disabled(
     resp = await async_client.get("/api/v1/ppe/stock/inventory/counts", headers=headers)
     assert resp.status_code == status.HTTP_200_OK, resp.text
 
-    write = await async_client.post(
-        "/api/v1/ppe/stock/inventory/counts", json={}, headers=headers
-    )
+    write = await async_client.post("/api/v1/ppe/stock/inventory/counts", json={}, headers=headers)
     assert write.status_code == status.HTTP_403_FORBIDDEN, write.text
     assert "MODULE_READ_ONLY" in write.text
 

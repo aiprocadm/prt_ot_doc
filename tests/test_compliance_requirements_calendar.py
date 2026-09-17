@@ -65,10 +65,7 @@ def test_у_записи_с_процессом_дисциплина_есть() -
 
     from app.core.disciplines import Discipline, discipline_of_event
 
-    assert (
-        discipline_of_event(SOURCE, {"process_code": "fire_safety"})
-        is Discipline.FIRE_SAFETY
-    )
+    assert discipline_of_event(SOURCE, {"process_code": "fire_safety"}) is Discipline.FIRE_SAFETY
     # А у записи без процесса — по-прежнему нет, и это правда, а не пробел.
     assert discipline_of_event(SOURCE, {"process_code": None}) is None
 

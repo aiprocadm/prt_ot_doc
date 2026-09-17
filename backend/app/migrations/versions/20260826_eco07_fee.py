@@ -78,9 +78,7 @@ def upgrade() -> None:
         sa.Column("impact_kind", sa.String(length=16), nullable=False),
         sa.Column("subject", sa.String(length=255), nullable=False),
         sa.Column("mass_tons", sa.Numeric(16, 3), nullable=False),
-        sa.Column(
-            "coefficient", sa.Numeric(6, 2), nullable=False, server_default="1.00"
-        ),
+        sa.Column("coefficient", sa.Numeric(6, 2), nullable=False, server_default="1.00"),
         sa.Column("notes", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),

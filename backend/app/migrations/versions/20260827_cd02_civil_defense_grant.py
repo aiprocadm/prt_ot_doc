@@ -100,9 +100,7 @@ def upgrade() -> None:
     for tenant_id, code in rows:
         enabled.setdefault(str(tenant_id), set()).add(str(code))
 
-    known = bind.execute(
-        sa.text("SELECT DISTINCT tenant_id FROM featureenablement")
-    ).scalars()
+    known = bind.execute(sa.text("SELECT DISTINCT tenant_id FROM featureenablement")).scalars()
 
     previous = set(_PREVIOUS_CATALOG)
     for tenant_id in {str(row) for row in known} - already:

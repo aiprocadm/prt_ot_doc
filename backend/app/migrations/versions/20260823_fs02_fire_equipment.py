@@ -42,19 +42,13 @@ def upgrade() -> None:
         sa.Column("location", sa.String(length=255), nullable=True),
         sa.Column("recharge_due", sa.Date(), nullable=True),
         sa.Column("inspection_due", sa.Date(), nullable=True),
-        sa.Column(
-            "status", sa.String(length=32), nullable=False, server_default="active"
-        ),
+        sa.Column("status", sa.String(length=32), nullable=False, server_default="active"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
     )
-    op.create_index(
-        "ix_fire_safety_equipment_site_id", "fire_safety_equipment", ["site_id"]
-    )
-    op.create_index(
-        "ix_fire_equipment_tenant_kind", "fire_safety_equipment", ["tenant_id", "kind"]
-    )
+    op.create_index("ix_fire_safety_equipment_site_id", "fire_safety_equipment", ["site_id"])
+    op.create_index("ix_fire_equipment_tenant_kind", "fire_safety_equipment", ["tenant_id", "kind"])
 
 
 def downgrade() -> None:

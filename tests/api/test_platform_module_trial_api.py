@@ -146,8 +146,6 @@ async def test_only_the_managing_tenant_may_grant(
     admin_headers = await make_auth_headers(RoleEnum.ADMIN)
     tenant_id = await _provision(async_client, admin_headers, "trialauth")
 
-    anonymous = await async_client.post(
-        f"{BASE}/{tenant_id}/modules/sout/trial", json={"days": 7}
-    )
+    anonymous = await async_client.post(f"{BASE}/{tenant_id}/modules/sout/trial", json={"days": 7})
     assert anonymous.status_code >= 400, "выдать модуль удалось без предъявления прав"
     assert anonymous.status_code < 500, anonymous.text

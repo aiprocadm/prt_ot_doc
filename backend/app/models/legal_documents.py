@@ -28,9 +28,7 @@ class TenantLegalDocument(TenantBaseModel):
         # Действующая редакция — с наибольшим `doc_version`. Уникальность пары
         # не даёт завести две «версии 3» и превратить вопрос «что действует» в
         # выбор из нескольких строк.
-        UniqueConstraint(
-            "tenant_id", "kind", "doc_version", name="uq_tenant_legal_kind_version"
-        ),
+        UniqueConstraint("tenant_id", "kind", "doc_version", name="uq_tenant_legal_kind_version"),
         Index("ix_tenant_legal_kind", "tenant_id", "kind", "doc_version"),
     )
 

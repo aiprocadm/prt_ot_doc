@@ -82,9 +82,7 @@ def build_jinja_env(*, strict: bool) -> Environment:
     # own rendering pass; enabling Jinja autoescape would double-escape entities
     # ('&' -> '&amp;' -> '&amp;amp;') and corrupt the generated documents. There
     # is no HTML/XSS attack surface on this code path.
-    env = Environment(
-        undefined=StrictUndefined if strict else Undefined, autoescape=False
-    )  # nosec B701
+    env = Environment(undefined=StrictUndefined if strict else Undefined, autoescape=False)  # nosec B701
     env.filters.update(_CUSTOM_FILTERS)
     return env
 

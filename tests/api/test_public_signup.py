@@ -108,9 +108,7 @@ async def test_выдаётся_стартовая_редакция_а_не_вс
 
 
 @pytest.mark.anyio
-async def test_пароль_в_ответе_не_повторяется(
-    async_client: AsyncClient, signup_on
-) -> None:
+async def test_пароль_в_ответе_не_повторяется(async_client: AsyncClient, signup_on) -> None:
     """Эхо пароля попало бы в журналы прокси и историю браузера."""
 
     response = await async_client.post(URL, json=_payload("bez-eha"))
@@ -120,9 +118,7 @@ async def test_пароль_в_ответе_не_повторяется(
 
 
 @pytest.mark.anyio
-async def test_занятый_слаг_отклоняется(
-    async_client: AsyncClient, signup_on
-) -> None:
+async def test_занятый_слаг_отклоняется(async_client: AsyncClient, signup_on) -> None:
     first = await async_client.post(URL, json=_payload("zanyaty-slag"))
     assert first.status_code == 201, first.text
 
@@ -148,9 +144,7 @@ async def test_слаг_управляющего_арендатора_откло
 @pytest.mark.parametrize(
     "bad", ["ab", "ЗАГЛАВНЫЕ", "с_подчёркиванием", "-начинается-с-дефиса", "точка.точка"]
 )
-async def test_негодный_слаг_отклоняется(
-    async_client: AsyncClient, signup_on, bad: str
-) -> None:
+async def test_негодный_слаг_отклоняется(async_client: AsyncClient, signup_on, bad: str) -> None:
     """Слаг — часть адреса И имя схемы в базе: набор символов закрытый."""
 
     response = await async_client.post(URL, json=_payload(bad))
@@ -241,4 +235,3 @@ async def test_без_подключённой_службы_регистраци
 
     assert response.status_code == 201, response.text
     assert await _tenant_exists("bez-sluzhby-rabotaet")
-

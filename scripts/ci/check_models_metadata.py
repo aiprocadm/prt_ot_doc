@@ -21,6 +21,7 @@ Modes:
 
 Baseline: docs/stabilization/models_metadata_baseline.json
 """
+
 from __future__ import annotations
 
 import argparse

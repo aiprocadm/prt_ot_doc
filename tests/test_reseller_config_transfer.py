@@ -66,9 +66,7 @@ def test_формат_совпадает_с_эталонным_набором():
     """
 
     payload = _config().as_payload(pack="acme")
-    reference = json.loads(
-        (STARTER_PACK_ROOT / "v1" / "default.json").read_text(encoding="utf-8")
-    )
+    reference = json.loads((STARTER_PACK_ROOT / "v1" / "default.json").read_text(encoding="utf-8"))
 
     assert payload["version"] == reference["version"] == CONFIG_FORMAT_VERSION
     assert set(payload) >= {"version", "pack", "enabled_for", "reference_data"}

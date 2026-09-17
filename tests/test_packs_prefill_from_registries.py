@@ -50,9 +50,7 @@ _FIELDS = "/api/v1/packs/scenarios"
 
 async def _grant(sessionmaker, code: str = "road_safety") -> None:
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         feature = (
             await session.execute(select(Feature).where(Feature.code == code))
         ).scalar_one_or_none()
@@ -69,9 +67,7 @@ async def _grant(sessionmaker, code: str = "road_safety") -> None:
             )
         ).scalar_one_or_none()
         if grant is None:
-            session.add(
-                FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=True)
-            )
+            session.add(FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=True))
         else:
             grant.on = True
         await session.commit()
@@ -79,15 +75,9 @@ async def _grant(sessionmaker, code: str = "road_safety") -> None:
 
 async def _person(sessionmaker, last_name: str = "Шофёров") -> str:
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         company = (
-            (
-                await session.execute(
-                    select(Company).where(Company.tenant_id == tenant.id)
-                )
-            )
+            (await session.execute(select(Company).where(Company.tenant_id == tenant.id)))
             .scalars()
             .first()
         )
@@ -251,9 +241,7 @@ class TestЧтоСчитается:
         headers = await make_auth_headers()
         await _grant(sessionmaker)
         await _vehicle(async_client, headers, plate="А111АА77")
-        await _vehicle(
-            async_client, headers, plate="В222ВВ77", status="decommissioned"
-        )
+        await _vehicle(async_client, headers, plate="В222ВВ77", status="decommissioned")
         person_id = await _person(sessionmaker)
         await async_client.post(
             f"{_ROAD}/drivers",
@@ -281,9 +269,7 @@ class TestЧтоСчитается:
         await async_client.post(
             f"{_ROAD}/accidents",
             json={
-                "occurred_at": (
-                    datetime.now(timezone.utc) - timedelta(days=10)
-                ).isoformat(),
+                "occurred_at": (datetime.now(timezone.utc) - timedelta(days=10)).isoformat(),
                 "place": "трасса",
                 "vehicle_id": vehicle["id"],
                 "kind": "collision",

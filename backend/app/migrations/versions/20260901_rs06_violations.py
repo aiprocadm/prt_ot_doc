@@ -63,9 +63,7 @@ def upgrade() -> None:
             nullable=True,
         ),
         sa.Column("occurred_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column(
-            "source", sa.String(length=16), nullable=False, server_default="camera"
-        ),
+        sa.Column("source", sa.String(length=16), nullable=False, server_default="camera"),
         sa.Column("article", sa.String(length=64), nullable=True),
         sa.Column("resolution_number", sa.String(length=64), nullable=True),
         sa.Column("place", sa.String(length=255), nullable=True),
@@ -78,9 +76,7 @@ def upgrade() -> None:
     )
     op.create_index("ix_road_violation_vehicle_id", "road_violation", ["vehicle_id"])
     op.create_index("ix_road_violation_driver_id", "road_violation", ["driver_id"])
-    op.create_index(
-        "ix_violation_tenant_occurred", "road_violation", ["tenant_id", "occurred_at"]
-    )
+    op.create_index("ix_violation_tenant_occurred", "road_violation", ["tenant_id", "occurred_at"])
 
 
 def downgrade() -> None:

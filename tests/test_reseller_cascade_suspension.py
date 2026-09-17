@@ -56,9 +56,7 @@ async def _shape_tree(sessionmaker) -> dict[str, str]:
 
 async def _set_active(sessionmaker, slug: str, active: bool) -> None:
     async with sessionmaker() as session:
-        record = (
-            await session.execute(select(Tenant).where(Tenant.slug == slug))
-        ).scalar_one()
+        record = (await session.execute(select(Tenant).where(Tenant.slug == slug))).scalar_one()
         record.is_active = active
         await session.commit()
 
@@ -158,11 +156,7 @@ class TestКаскаднаяПриостановка:
 
         async with sessionmaker() as session:
             survived = (
-                (
-                    await session.execute(
-                        select(Company).where(Company.tenant_id == ids["acme"])
-                    )
-                )
+                (await session.execute(select(Company).where(Company.tenant_id == ids["acme"])))
                 .scalars()
                 .all()
             )

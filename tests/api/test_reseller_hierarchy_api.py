@@ -35,9 +35,7 @@ async def _mark_as_reseller(slug: str) -> str:
     async with AsyncSessionLocal(
         tenant="public", include_public=False, create_schema=False, rls_bypass=True
     ) as session:
-        record = (
-            await session.execute(select(Tenant).where(Tenant.slug == slug))
-        ).scalar_one()
+        record = (await session.execute(select(Tenant).where(Tenant.slug == slug))).scalar_one()
         record.kind = RESELLER_KIND
         await session.commit()
         return record.id
@@ -92,9 +90,7 @@ async def test_владелец_платформы_создаёт_реселле
 
 
 @pytest.mark.anyio
-async def test_реселлеру_нельзя_дать_родителя(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_реселлеру_нельзя_дать_родителя(async_client: AsyncClient, make_auth_headers) -> None:
     headers = await make_auth_headers(
         RoleEnum.ADMIN, tenant="test", email="admin-platform-biz52@example.com"
     )
@@ -128,9 +124,7 @@ async def test_владелец_платформы_отдаёт_клиента_�
 
 
 @pytest.mark.anyio
-async def test_клиент_родителем_быть_не_может(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_клиент_родителем_быть_не_может(async_client: AsyncClient, make_auth_headers) -> None:
     headers = await make_auth_headers(
         RoleEnum.ADMIN, tenant="test", email="admin-platform-biz52@example.com"
     )
@@ -181,9 +175,7 @@ async def test_реселлер_заводит_клиента_и_тот_ложи
 
 
 @pytest.mark.anyio
-async def test_реселлер_не_плодит_реселлеров(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_реселлер_не_плодит_реселлеров(async_client: AsyncClient, make_auth_headers) -> None:
     await _mark_as_reseller("beta")
     headers = await make_auth_headers(
         RoleEnum.ADMIN, tenant="beta", email="admin-beta-biz52@example.com"

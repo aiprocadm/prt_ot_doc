@@ -21,9 +21,7 @@ _BAD_REQUEST_CODES = frozenset({"TENANT_PARENT_NOT_FOUND"})
 
 def hierarchy_http_error(exc: HierarchyViolation, *, error_type: str) -> HTTPException:
     status_code = (
-        status.HTTP_400_BAD_REQUEST
-        if exc.code in _BAD_REQUEST_CODES
-        else status.HTTP_403_FORBIDDEN
+        status.HTTP_400_BAD_REQUEST if exc.code in _BAD_REQUEST_CODES else status.HTTP_403_FORBIDDEN
     )
     return HTTPException(
         status_code=status_code,

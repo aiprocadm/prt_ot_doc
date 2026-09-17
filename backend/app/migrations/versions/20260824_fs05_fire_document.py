@@ -51,9 +51,7 @@ def upgrade() -> None:
         sa.Column("approved_on", sa.Date(), nullable=True),
         sa.Column("review_due", sa.Date(), nullable=True),
         sa.Column("responsible", sa.String(length=255), nullable=True),
-        sa.Column(
-            "document_id", sa.String(length=36), sa.ForeignKey("document.id"), nullable=True
-        ),
+        sa.Column("document_id", sa.String(length=36), sa.ForeignKey("document.id"), nullable=True),
         sa.Column("notes", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
@@ -61,9 +59,7 @@ def upgrade() -> None:
     )
     op.create_index("ix_fire_document_site_id", "fire_document", ["site_id"])
     op.create_index("ix_fire_document_tenant_kind", "fire_document", ["tenant_id", "kind"])
-    op.create_index(
-        "ix_fire_document_tenant_review", "fire_document", ["tenant_id", "review_due"]
-    )
+    op.create_index("ix_fire_document_tenant_review", "fire_document", ["tenant_id", "review_due"])
 
 
 def downgrade() -> None:

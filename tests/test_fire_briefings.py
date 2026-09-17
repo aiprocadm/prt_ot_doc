@@ -66,9 +66,7 @@ class TestСловарьВидов:
 
 async def _grant_fire(sessionmaker) -> None:
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         feature = (
             await session.execute(select(Feature).where(Feature.code == "fire_safety"))
         ).scalar_one_or_none()
@@ -85,9 +83,7 @@ async def _grant_fire(sessionmaker) -> None:
             )
         ).scalar_one_or_none()
         if grant is None:
-            session.add(
-                FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=True)
-            )
+            session.add(FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=True))
         else:
             grant.on = True
         await session.commit()
@@ -119,9 +115,7 @@ class TestКонтрольСроков:
         headers = await make_auth_headers()
         await _grant_fire(sessionmaker)
 
-        before = (
-            await async_client.get("/api/v1/fire-safety/readiness", headers=headers)
-        ).json()
+        before = (await async_client.get("/api/v1/fire-safety/readiness", headers=headers)).json()
 
         async with sessionmaker() as session:
             tenant = (
@@ -159,12 +153,8 @@ class TestКонтрольСроков:
             )
             await session.commit()
 
-        after = (
-            await async_client.get("/api/v1/fire-safety/readiness", headers=headers)
-        ).json()
-        assert (
-            after["overdue_fire_briefings"] == before["overdue_fire_briefings"] + 1
-        ), after
+        after = (await async_client.get("/api/v1/fire-safety/readiness", headers=headers)).json()
+        assert after["overdue_fire_briefings"] == before["overdue_fire_briefings"] + 1, after
 
     async def test_истёкший_птм_уволенного_не_просрочка_в_готовности(
         self, async_client, make_auth_headers, sessionmaker, data_factory
@@ -175,9 +165,7 @@ class TestКонтрольСроков:
         headers = await make_auth_headers()
         await _grant_fire(sessionmaker)
 
-        before = (
-            await async_client.get("/api/v1/fire-safety/readiness", headers=headers)
-        ).json()
+        before = (await async_client.get("/api/v1/fire-safety/readiness", headers=headers)).json()
 
         async with sessionmaker() as session:
             tenant = (
@@ -221,12 +209,8 @@ class TestКонтрольСроков:
             )
             await session.commit()
 
-        after = (
-            await async_client.get("/api/v1/fire-safety/readiness", headers=headers)
-        ).json()
-        assert (
-            after["overdue_fire_briefings"] == before["overdue_fire_briefings"] + 1
-        ), after
+        after = (await async_client.get("/api/v1/fire-safety/readiness", headers=headers)).json()
+        assert after["overdue_fire_briefings"] == before["overdue_fire_briefings"] + 1, after
 
     async def test_старая_запись_перекрытая_свежей_не_просрочка(
         self, async_client, make_auth_headers, sessionmaker, data_factory
@@ -244,9 +228,7 @@ class TestКонтрольСроков:
         await _grant_fire(sessionmaker)
         now = datetime.now(timezone.utc)
 
-        before = (
-            await async_client.get("/api/v1/fire-safety/readiness", headers=headers)
-        ).json()
+        before = (await async_client.get("/api/v1/fire-safety/readiness", headers=headers)).json()
 
         async with sessionmaker() as session:
             tenant = (
@@ -286,9 +268,5 @@ class TestКонтрольСроков:
                 )
             await session.commit()
 
-        after = (
-            await async_client.get("/api/v1/fire-safety/readiness", headers=headers)
-        ).json()
-        assert (
-            after["overdue_fire_briefings"] == before["overdue_fire_briefings"] + 1
-        ), after
+        after = (await async_client.get("/api/v1/fire-safety/readiness", headers=headers)).json()
+        assert after["overdue_fire_briefings"] == before["overdue_fire_briefings"] + 1, after

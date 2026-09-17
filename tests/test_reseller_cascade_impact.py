@@ -13,8 +13,9 @@ CLIENT = TenantNode(id="c9", slug="acme", kind="customer", parent_id=None)
 
 
 def _child(slug: str, parent: str = "r1", active: bool = True) -> TenantNode:
-    return TenantNode(id=f"id-{slug}", slug=slug, kind="customer", parent_id=parent,
-                      is_active=active)
+    return TenantNode(
+        id=f"id-{slug}", slug=slug, kind="customer", parent_id=parent, is_active=active
+    )
 
 
 class TestКогоЗатрагивает:

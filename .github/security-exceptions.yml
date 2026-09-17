@@ -67,25 +67,6 @@ exceptions:
     expires_on: 2026-09-30
     created_on: 2026-07-30
 
-  - id: PYSEC-2026-2120
-    tool: pip-audit
-    category: vulnerability
-    owner: reviewers-platform-infra
-    reason: >-
-      black 24.10.0 (dev-only, never shipped): fix is black 26.x whose default
-      style differs — bumping means reformatting the codebase in a dedicated PR
-      (make lint uses black --check).
-    expires_on: 2026-09-30
-    created_on: 2026-07-30
-  - id: PYSEC-2026-2121
-    tool: pip-audit
-    category: vulnerability
-    owner: reviewers-platform-infra
-    reason: >-
-      black 24.10.0 (dev-only, never shipped): same dedicated-reformat-PR
-      blocker as PYSEC-2026-2120.
-    expires_on: 2026-09-30
-    created_on: 2026-07-30
 
   # --- npm-audit (разд. 64.1): остаток после `npm audit fix` 2026-07-31. ---
   # Записи читает scripts/ci/check_npm_audit.py (гейт по КОРНЕВЫМ advisory:

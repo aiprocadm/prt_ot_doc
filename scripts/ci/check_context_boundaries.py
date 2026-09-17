@@ -24,6 +24,7 @@ designates ``services/`` as the sanctioned orchestration layer between contexts.
 
 Run: ``make check-boundaries`` (also runs inside ``make gate`` / local_gate.py).
 """
+
 from __future__ import annotations
 
 import ast

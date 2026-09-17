@@ -63,9 +63,7 @@ def upgrade() -> None:
             "tenant_id", "facility_id", "point_number", name="uq_water_point_number"
         ),
     )
-    op.create_index(
-        "ix_water_usage_point_facility_id", "water_usage_point", ["facility_id"]
-    )
+    op.create_index("ix_water_usage_point_facility_id", "water_usage_point", ["facility_id"])
     op.create_index(
         "ix_water_point_tenant_permit",
         "water_usage_point",
@@ -106,9 +104,7 @@ def upgrade() -> None:
             name="uq_water_record_period",
         ),
     )
-    op.create_index(
-        "ix_water_usage_record_point_id", "water_usage_record", ["point_id"]
-    )
+    op.create_index("ix_water_usage_record_point_id", "water_usage_record", ["point_id"])
     op.create_index(
         "ix_water_record_tenant_year",
         "water_usage_record",

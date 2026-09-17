@@ -76,8 +76,7 @@ class PackUpdate:
             return f"Обновлений нет: применена редакция {self.applied_revision}"
         total = sum(len(values) for values in self.additions.values())
         return (
-            f"Редакция {self.applied_revision} → {self.current_revision}: "
-            f"новых строк {total}"
+            f"Редакция {self.applied_revision} → {self.current_revision}: " f"новых строк {total}"
         )
 
 

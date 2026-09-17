@@ -91,7 +91,9 @@ async def test_хранилище_и_сотрудники_видны_в_каби
     await _seed_billing_usage(ids["acme"], storage=1_500_000, workers=42)
 
     response = await async_client.get(
-        f"{BASE}/usage", params={"period": PERIOD}, headers=await _partner_headers(make_auth_headers)
+        f"{BASE}/usage",
+        params={"period": PERIOD},
+        headers=await _partner_headers(make_auth_headers),
     )
 
     assert response.status_code == 200, response.text
@@ -114,7 +116,9 @@ async def test_клиент_без_генераций_но_с_данными_п�
     await _seed_billing_usage(ids["acme"], storage=1_000_000, workers=50)
 
     response = await async_client.get(
-        f"{BASE}/usage", params={"period": PERIOD}, headers=await _partner_headers(make_auth_headers)
+        f"{BASE}/usage",
+        params={"period": PERIOD},
+        headers=await _partner_headers(make_auth_headers),
     )
 
     slugs = [item["slug"] for item in response.json()["items"]]
@@ -130,23 +134,25 @@ async def test_совсем_пустой_клиент_в_отчёт_не_поп�
     await _shape_tree()
 
     response = await async_client.get(
-        f"{BASE}/usage", params={"period": PERIOD}, headers=await _partner_headers(make_auth_headers)
+        f"{BASE}/usage",
+        params={"period": PERIOD},
+        headers=await _partner_headers(make_auth_headers),
     )
 
     assert response.json()["items"] == []
 
 
 @pytest.mark.anyio
-async def test_генерации_считаются_как_прежде(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_генерации_считаются_как_прежде(async_client: AsyncClient, make_auth_headers) -> None:
     """Источник генераций менять нельзя: числа не должны поменяться у партнёра."""
 
     ids = await _shape_tree()
     await _seed_generations(ids["acme"], 7)
 
     response = await async_client.get(
-        f"{BASE}/usage", params={"period": PERIOD}, headers=await _partner_headers(make_auth_headers)
+        f"{BASE}/usage",
+        params={"period": PERIOD},
+        headers=await _partner_headers(make_auth_headers),
     )
 
     row = next(item for item in response.json()["items"] if item["slug"] == "acme")

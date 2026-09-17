@@ -43,11 +43,10 @@ def _front_map(name: str) -> dict[str, str]:
     """Читает map подписей из ``frontend/src/api/fireSafety.ts``."""
 
     text = _FRONTEND_FIRE_API.read_text(encoding="utf-8")
-    block = re.search(
-        rf"{name}:\s*Record<[^>]+>\s*=\s*\{{(.*?)\n\}}", text, re.S
-    )
+    block = re.search(rf"{name}:\s*Record<[^>]+>\s*=\s*\{{(.*?)\n\}}", text, re.S)
     assert block is not None, f"не нашёлся map {name}"
     return dict(re.findall(r'^\s*([A-Za-z_]+):\s*"([^"]+)"', block.group(1), re.M))
+
 
 pytestmark = pytest.mark.anyio
 
@@ -56,9 +55,7 @@ _API = "/api/v1/fire-safety"
 
 async def _grant(sessionmaker, code: str = "fire_safety", on: bool = True) -> None:
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         feature = (
             await session.execute(select(Feature).where(Feature.code == code))
         ).scalar_one_or_none()
@@ -379,4 +376,3 @@ class TestСловариРаботНаФронте:
         assert front == FIRE_MAINTENANCE_RESULTS, sorted(
             front.items() ^ FIRE_MAINTENANCE_RESULTS.items()
         )
-

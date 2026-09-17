@@ -64,9 +64,7 @@ _ROAD = "/api/v1/road-safety"
 
 async def _grant(sessionmaker, code: str, on: bool = True) -> None:
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         feature = (
             await session.execute(select(Feature).where(Feature.code == code))
         ).scalar_one_or_none()
@@ -83,9 +81,7 @@ async def _grant(sessionmaker, code: str, on: bool = True) -> None:
             )
         ).scalar_one_or_none()
         if grant is None:
-            session.add(
-                FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=on)
-            )
+            session.add(FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=on))
         else:
             grant.on = on
         await session.commit()
@@ -93,13 +89,9 @@ async def _grant(sessionmaker, code: str, on: bool = True) -> None:
 
 async def _person(sessionmaker, last_name: str) -> str:
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         company = (
-            await session.execute(
-                select(Company).where(Company.tenant_id == tenant.id).limit(1)
-            )
+            await session.execute(select(Company).where(Company.tenant_id == tenant.id).limit(1))
         ).scalar_one_or_none()
         if company is None:
             company = Company(tenant_id=str(tenant.id), name="ООО «Тест»")
@@ -199,9 +191,7 @@ class TestСущностьВЯдре:
     ) -> None:
         headers = await make_auth_headers()
         trainee = await _person(sessionmaker, "Ошибкин")
-        await _internship(
-            async_client, headers, trainee, discipline="бдд", expect=422
-        )
+        await _internship(async_client, headers, trainee, discipline="бдд", expect=422)
 
     async def test_неизвестное_состояние_отвергается(
         self, async_client, make_auth_headers, sessionmaker
@@ -223,9 +213,7 @@ class TestЛюдиНеДублируются:
 
         headers = await make_auth_headers()
         trainee = await _person(sessionmaker, "Одиноков")
-        await _internship(
-            async_client, headers, trainee, mentor_id=trainee, expect=422
-        )
+        await _internship(async_client, headers, trainee, mentor_id=trainee, expect=422)
 
     async def test_наставник_необязателен(
         self, async_client, make_auth_headers, sessionmaker
@@ -239,9 +227,7 @@ class TestЛюдиНеДублируются:
         assert body["mentor_person_id"] is None
         assert body["mentor_name"] is None
 
-    async def test_чужого_человека_нет(
-        self, async_client, make_auth_headers, sessionmaker
-    ) -> None:
+    async def test_чужого_человека_нет(self, async_client, make_auth_headers, sessionmaker) -> None:
         headers = await make_auth_headers()
         response = await async_client.post(
             _API,
@@ -337,15 +323,11 @@ class TestНедоборСмен:
 
 
 class TestОтборИСводкаБДД:
-    async def test_отбор_по_дисциплине(
-        self, async_client, make_auth_headers, sessionmaker
-    ) -> None:
+    async def test_отбор_по_дисциплине(self, async_client, make_auth_headers, sessionmaker) -> None:
         headers = await make_auth_headers()
         driver = await _person(sessionmaker, "Водителев")
         welder = await _person(sessionmaker, "Сварщиков")
-        await _internship(
-            async_client, headers, driver, discipline=Discipline.ROAD_SAFETY.value
-        )
+        await _internship(async_client, headers, driver, discipline=Discipline.ROAD_SAFETY.value)
         await _internship(async_client, headers, welder)
         response = await async_client.get(
             _API, params={"discipline": Discipline.ROAD_SAFETY.value}, headers=headers
@@ -391,9 +373,7 @@ class TestОтборИСводкаБДД:
         await _grant(sessionmaker, "road_safety")
         welder = await _person(sessionmaker, "Сварщиков")
         unmarked = await _person(sessionmaker, "Неразмеченов")
-        await _internship(
-            async_client, headers, welder, discipline=Discipline.TRAINING.value
-        )
+        await _internship(async_client, headers, welder, discipline=Discipline.TRAINING.value)
         await _internship(async_client, headers, unmarked)
         body = (await async_client.get(f"{_ROAD}/readiness", headers=headers)).json()
         assert body["internships_total"] == 0
@@ -512,8 +492,7 @@ class TestСводкаЯдра:
         body = (await async_client.get(f"{_API}/summary", headers=headers)).json()
         assert body["total"] == 0
         assert not any(
-            key in body
-            for key in ("required", "missing", "admission_valid", "shifts_enough")
+            key in body for key in ("required", "missing", "admission_valid", "shifts_enough")
         )
 
 
@@ -527,13 +506,7 @@ class TestОбщийЭкран:
         фронт — состояние нельзя будет ни выбрать в форме, ни отфильтровать.
         """
 
-        page = (
-            Path(__file__).resolve().parents[1]
-            / "frontend"
-            / "src"
-            / "api"
-            / "internships.ts"
-        )
+        page = Path(__file__).resolve().parents[1] / "frontend" / "src" / "api" / "internships.ts"
         text = page.read_text(encoding="utf-8")
         block = re.search(
             r"INTERNSHIP_STATUS_TITLES:\s*Record<string,\s*string>\s*=\s*\{(.*?)\}",

@@ -225,9 +225,7 @@ async def _last_maintenance_map(
     return {row.equipment_id: (row.performed_on, row.result) for row in rows}
 
 
-def _equipment_read(
-    unit: FireSafetyEquipment, last: tuple[date, str] | None
-) -> FireEquipmentRead:
+def _equipment_read(unit: FireSafetyEquipment, last: tuple[date, str] | None) -> FireEquipmentRead:
     return FireEquipmentRead(
         id=unit.id,
         kind=unit.kind,
@@ -335,9 +333,7 @@ async def update_equipment(
     TenantContextValidator.ensure_tenant_context(tenant)
     unit = await _get_unit_or_404(session, tenant, unit_id)
     data = payload.model_dump(exclude_unset=True)
-    await _validate_payload(
-        session, tenant, kind=data.get("kind"), site_id=data.get("site_id")
-    )
+    await _validate_payload(session, tenant, kind=data.get("kind"), site_id=data.get("site_id"))
     _validate_equipment_status(data.get("status"))
     before = FireEquipmentRead.model_validate(unit).model_dump()
     for field in ("kind", "label", "site_id", "location", "recharge_due", "inspection_due"):
@@ -466,22 +462,16 @@ async def list_fire_documents(
     rows = (
         (
             await session.execute(
-                stmt.order_by(FireSafetyDocument.created_at.desc())
-                .offset(offset)
-                .limit(limit)
+                stmt.order_by(FireSafetyDocument.created_at.desc()).offset(offset).limit(limit)
             )
         )
         .scalars()
         .all()
     )
-    return FireDocumentPage(
-        items=[_fire_document_read(r, today) for r in rows], total=total
-    )
+    return FireDocumentPage(items=[_fire_document_read(r, today) for r in rows], total=total)
 
 
-@router.post(
-    "/documents", response_model=FireDocumentRead, status_code=status.HTTP_201_CREATED
-)
+@router.post("/documents", response_model=FireDocumentRead, status_code=status.HTTP_201_CREATED)
 async def create_fire_document(
     request: Request,
     payload: FireDocumentCreate,
@@ -637,8 +627,7 @@ async def list_maintenance(
         items=[
             _maintenance_read(
                 r,
-                shifted=r.next_due is not None
-                and r.result in FIRE_MAINTENANCE_PASSING_RESULTS,
+                shifted=r.next_due is not None and r.result in FIRE_MAINTENANCE_PASSING_RESULTS,
             )
             for r in rows
         ],
@@ -677,8 +666,7 @@ async def record_maintenance(
         )
     if payload.performed_on > date.today():
         raise _unprocessable(
-            "Дата работы не может быть в будущем — запись о работе это "
-            "свидетельство, а не план"
+            "Дата работы не может быть в будущем — запись о работе это " "свидетельство, а не план"
         )
 
     record = FireMaintenanceRecord(
@@ -695,10 +683,7 @@ async def record_maintenance(
 
     # Проваленная работа срок НЕ двигает: перенос означал бы «исправно до
     # следующего раза» — просрочка ушла бы с экрана, а неисправность осталась.
-    shifted = (
-        payload.next_due is not None
-        and payload.result in FIRE_MAINTENANCE_PASSING_RESULTS
-    )
+    shifted = payload.next_due is not None and payload.result in FIRE_MAINTENANCE_PASSING_RESULTS
     if shifted:
         setattr(unit, FIRE_MAINTENANCE_DUE_FIELD[payload.kind], payload.next_due)
 
@@ -751,9 +736,7 @@ def _drill_read(drill: FireDrill, today: date) -> FireDrillRead:
         participants=drill.participants,
         outcome=drill.outcome,
         outcome_label=(
-            FIRE_DRILL_OUTCOMES.get(drill.outcome, drill.outcome)
-            if drill.outcome
-            else None
+            FIRE_DRILL_OUTCOMES.get(drill.outcome, drill.outcome) if drill.outcome else None
         ),
         findings=drill.findings,
         status=_drill_status(drill, today),
@@ -772,33 +755,25 @@ def _validate_drill(
 
     if kind is not None and kind not in FIRE_DRILL_KINDS:
         raise _unprocessable(
-            f"Неизвестный вид тренировки {kind!r}; допустимые: "
-            f"{', '.join(FIRE_DRILL_KINDS)}"
+            f"Неизвестный вид тренировки {kind!r}; допустимые: " f"{', '.join(FIRE_DRILL_KINDS)}"
         )
     if outcome is not None and outcome not in FIRE_DRILL_OUTCOMES:
         raise _unprocessable(
-            f"Неизвестный результат {outcome!r}; допустимые: "
-            f"{', '.join(FIRE_DRILL_OUTCOMES)}"
+            f"Неизвестный результат {outcome!r}; допустимые: " f"{', '.join(FIRE_DRILL_OUTCOMES)}"
         )
     if held_on is not None and held_on > date.today():
-        raise _unprocessable(
-            "Дата проведения не может быть в будущем — это план, а не протокол"
-        )
+        raise _unprocessable("Дата проведения не может быть в будущем — это план, а не протокол")
     if held_on is not None and outcome is None:
         raise _unprocessable(
-            "У проведённой тренировки обязателен результат: "
-            f"{', '.join(FIRE_DRILL_OUTCOMES)}"
+            "У проведённой тренировки обязателен результат: " f"{', '.join(FIRE_DRILL_OUTCOMES)}"
         )
     if outcome is not None and held_on is None and has_outcome_field:
         raise _unprocessable(
-            "Результат нельзя выставить, пока тренировка не проведена — "
-            "укажите дату проведения"
+            "Результат нельзя выставить, пока тренировка не проведена — " "укажите дату проведения"
         )
 
 
-async def _get_drill_or_404(
-    session: AsyncSession, tenant: Tenant, drill_id: str
-) -> FireDrill:
+async def _get_drill_or_404(session: AsyncSession, tenant: Tenant, drill_id: str) -> FireDrill:
     stmt = select(FireDrill).where(
         FireDrill.id == drill_id,
         FireDrill.tenant_id == tenant.id,

@@ -81,9 +81,7 @@ def upgrade() -> None:
         )
 
     granted = bind.execute(
-        sa.text(
-            "SELECT tenant_id FROM featureenablement WHERE feature_id = :fid"
-        ),
+        sa.text("SELECT tenant_id FROM featureenablement WHERE feature_id = :fid"),
         {"fid": feature_id},
     ).scalars()
     already = {str(row) for row in granted}
@@ -101,9 +99,7 @@ def upgrade() -> None:
         enabled.setdefault(str(tenant_id), set()).add(str(code))
 
     # Все арендаторы, у которых вообще есть строки выдачи.
-    known = bind.execute(
-        sa.text("SELECT DISTINCT tenant_id FROM featureenablement")
-    ).scalars()
+    known = bind.execute(sa.text("SELECT DISTINCT tenant_id FROM featureenablement")).scalars()
 
     previous = set(_PREVIOUS_CATALOG)
     for tenant_id in {str(row) for row in known} - already:
@@ -111,7 +107,7 @@ def upgrade() -> None:
         bind.execute(
             sa.text(
                 "INSERT INTO featureenablement "
-                "(id, tenant_id, feature_id, \"on\", config_json, created_at, updated_at, version) "
+                '(id, tenant_id, feature_id, "on", config_json, created_at, updated_at, version) '
                 "VALUES (:id, :tenant_id, :fid, :on, '{}', NOW(), NOW(), 1)"
             ),
             {

@@ -9,7 +9,6 @@ from app.schemas.base import BaseSchema
 
 
 class TemplateRead(BaseSchema):
-
     id: str
     code: str | None = None
     name: str
@@ -49,7 +48,6 @@ class TemplatePage(BaseSchema):
 
 
 class PipelineRunRead(BaseSchema):
-
     id: str
     status: str
     context: dict[str, Any] = Field(default_factory=dict)

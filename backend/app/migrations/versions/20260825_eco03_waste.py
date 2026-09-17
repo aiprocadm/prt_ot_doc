@@ -80,9 +80,7 @@ def upgrade() -> None:
         sa.Column("kind", sa.String(length=16), nullable=False),
         sa.Column("happened_on", sa.Date(), nullable=False),
         sa.Column("quantity_tons", sa.Numeric(14, 3), nullable=False),
-        sa.Column(
-            "contract_id", sa.String(length=36), sa.ForeignKey("contract.id"), nullable=True
-        ),
+        sa.Column("contract_id", sa.String(length=36), sa.ForeignKey("contract.id"), nullable=True),
         sa.Column("counterparty", sa.String(length=255), nullable=True),
         sa.Column("notes", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
@@ -90,9 +88,7 @@ def upgrade() -> None:
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
     )
     op.create_index("ix_waste_movement_passport_id", "waste_movement", ["passport_id"])
-    op.create_index(
-        "ix_waste_movement_tenant_date", "waste_movement", ["tenant_id", "happened_on"]
-    )
+    op.create_index("ix_waste_movement_tenant_date", "waste_movement", ["tenant_id", "happened_on"])
 
 
 def downgrade() -> None:

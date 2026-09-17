@@ -66,9 +66,9 @@ async def test_новый_арендатор_получает_модули_пр�
 
         enabled = await _enabled_codes(session, tenant.id)
 
-    assert enabled == set(PLANS[DEFAULT_PLAN_CODE].features), (
-        "новый арендатор обязан получить ровно модули простого тарифа"
-    )
+    assert enabled == set(
+        PLANS[DEFAULT_PLAN_CODE].features
+    ), "новый арендатор обязан получить ровно модули простого тарифа"
     assert enabled, "пустая выдача означала бы 404 на каждом продаваемом модуле"
 
 
@@ -97,10 +97,14 @@ async def test_выключенные_модули_записаны_строко
         _summary, tenant = await _bootstrap(session, monkeypatch, "plan-rows")
 
         total = (
-            await session.execute(
-                select(FeatureEnablement).where(FeatureEnablement.tenant_id == tenant.id)
+            (
+                await session.execute(
+                    select(FeatureEnablement).where(FeatureEnablement.tenant_id == tenant.id)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
     from app.modules.subscription.plans import FEATURE_CATALOG
 
@@ -138,9 +142,7 @@ async def test_консоль_видит_настоящий_тариф_а_не_�
 @pytest.mark.anyio
 async def test_тариф_можно_задать_явно(sessionmaker, monkeypatch) -> None:
     async with sessionmaker() as session:
-        _summary, tenant = await _bootstrap(
-            session, monkeypatch, "plan-explicit", plan_code="pro"
-        )
+        _summary, tenant = await _bootstrap(session, monkeypatch, "plan-explicit", plan_code="pro")
 
         enabled = await _enabled_codes(session, tenant.id)
 

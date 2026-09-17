@@ -86,9 +86,7 @@ def _attestation_read(record: Attestation) -> AttestationRead:
 
     data = AttestationRead.model_validate(record)
     if record.area_code:
-        data = data.model_copy(
-            update={"area_label": ATTESTATION_AREA_TITLES.get(record.area_code)}
-        )
+        data = data.model_copy(update={"area_label": ATTESTATION_AREA_TITLES.get(record.area_code)})
     return data
 
 
@@ -161,9 +159,7 @@ async def list_attestations(
     stmt = stmt.offset(offset).limit(limit)
     items = list((await session.execute(stmt)).scalars().all())
     total = await session.scalar(total_stmt)
-    return AttestationPage(
-        items=[_attestation_read(item) for item in items], total=int(total or 0)
-    )
+    return AttestationPage(items=[_attestation_read(item) for item in items], total=int(total or 0))
 
 
 @router.post("/attestations", response_model=AttestationRead, status_code=status.HTTP_201_CREATED)

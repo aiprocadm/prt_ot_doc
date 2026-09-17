@@ -93,9 +93,7 @@ def test_inactive_activities_are_skipped() -> None:
 def test_case_and_spaces_do_not_create_false_findings() -> None:
     """«ru» и « RU » — это тот же регион; иначе сторож нашёл бы нарушение на пустом месте."""
 
-    findings = residency.evaluate(
-        [_Activity("hr", "Кадры", " ru ")], settings=_settings("RU")
-    )
+    findings = residency.evaluate([_Activity("hr", "Кадры", " ru ")], settings=_settings("RU"))
     assert findings[0].verdict == residency.OK
 
 

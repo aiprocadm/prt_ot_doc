@@ -211,9 +211,7 @@ async def create_medical_exam(
     return MedicalExamRead.model_validate(exam)
 
 
-@router.get(
-    "/medical/exams/{exam_id}", response_model=MedicalExamRead
-)
+@router.get("/medical/exams/{exam_id}", response_model=MedicalExamRead)
 async def get_medical_exam(
     exam_id: str,
     tenant: TenantDep,
@@ -239,9 +237,7 @@ async def get_medical_exam(
     return MedicalExamRead.model_validate(record)
 
 
-@router.patch(
-    "/medical/exams/{exam_id}", response_model=MedicalExamRead
-)
+@router.patch("/medical/exams/{exam_id}", response_model=MedicalExamRead)
 async def update_medical_exam(
     exam_id: str,
     payload: MedicalExamUpdate,
@@ -269,9 +265,7 @@ async def update_medical_exam(
     return MedicalExamRead.model_validate(exam)
 
 
-@router.get(
-    "/medical/suspensions", response_model=MedicalSuspensionPage
-)
+@router.get("/medical/suspensions", response_model=MedicalSuspensionPage)
 async def list_suspensions(
     request: Request,
     response: Response,

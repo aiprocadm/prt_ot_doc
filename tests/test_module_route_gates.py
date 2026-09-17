@@ -129,11 +129,13 @@ def test_каждый_роут_модуля_гейтится(rel: str) -> None:
     if marker == "_common":
         # весь файл висит на общем router медицины — гейт обязан стоять там
         common = _MEDICAL_COMMON.read_text(encoding="utf-8")
-        assert "router.dependencies.append(Depends(require_medical_feature))" in common, (
-            "роутерный гейт медицины снят — все файлы medical/ остались без защиты"
-        )
+        assert (
+            "router.dependencies.append(Depends(require_medical_feature))" in common
+        ), "роутерный гейт медицины снят — все файлы medical/ остались без защиты"
         text = path.read_text(encoding="utf-8")
-        assert "from ._common import" in text or "from app.api.routes.medical._common import" in text
+        assert (
+            "from ._common import" in text or "from app.api.routes.medical._common import" in text
+        )
         return
 
     if marker is not None:

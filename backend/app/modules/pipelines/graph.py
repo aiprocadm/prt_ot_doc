@@ -146,7 +146,9 @@ def _eval_ast(node: ast.AST, ctx: dict[str, Any]) -> Any:
                                 else (
                                     left <= right
                                     if isinstance(op, ast.LtE)
-                                    else left > right if isinstance(op, ast.Gt) else left >= right
+                                    else left > right
+                                    if isinstance(op, ast.Gt)
+                                    else left >= right
                                 )
                             )
                         )

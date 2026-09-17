@@ -32,9 +32,7 @@ from app.models.master_data import Person
 __all__ = ["resolve_person_id", "resolve_user", "resolve_user_id"]
 
 
-async def resolve_person_id(
-    session: AsyncSession, tenant_id: Any, user_email: Any
-) -> str | None:
+async def resolve_person_id(session: AsyncSession, tenant_id: Any, user_email: Any) -> str | None:
     """Найти сотрудника, соответствующего пользователю, или вернуть ``None``."""
 
     if not user_email:

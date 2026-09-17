@@ -529,7 +529,11 @@ async def collect_fire_safety_deadlines_by_company(
     people = (
         await session.execute(
             select(
-                Person.id, Person.company_id, Person.last_name, Person.first_name, Person.middle_name
+                Person.id,
+                Person.company_id,
+                Person.last_name,
+                Person.first_name,
+                Person.middle_name,
             ).where(
                 Person.tenant_id == tenant_id,
                 Person.company_id.in_(wanted),

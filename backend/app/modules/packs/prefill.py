@@ -85,9 +85,7 @@ class Suggestion:
     source: str
 
 
-async def _road_safety_suggestions(
-    session: AsyncSession, tenant_id: str
-) -> dict[str, Suggestion]:
+async def _road_safety_suggestions(session: AsyncSession, tenant_id: str) -> dict[str, Suggestion]:
     """Подсказки для отчётности БДД — из реестров контура.
 
     Считается ТОЛЬКО то, что реестр знает точно:
@@ -133,9 +131,7 @@ async def _road_safety_suggestions(
         RoadAccident.occurred_at >= window_start,
     )
     accidents = int(
-        await session.scalar(
-            select(func.count()).select_from(RoadAccident).where(*accident_window)
-        )
+        await session.scalar(select(func.count()).select_from(RoadAccident).where(*accident_window))
         or 0
     )
     injured, fatalities = (
@@ -161,15 +157,9 @@ async def _road_safety_suggestions(
 
     window = f"за {_WINDOW_DAYS} дн."
     return {
-        "bdd_report_vehicles": Suggestion(
-            str(vehicles), "в эксплуатации сегодня по реестру ТС"
-        ),
-        "bdd_report_drivers": Suggestion(
-            str(drivers), "допущено сегодня по карточкам водителей"
-        ),
-        "bdd_report_accidents": Suggestion(
-            str(accidents), f"ДТП {window} по учёту ДТП"
-        ),
+        "bdd_report_vehicles": Suggestion(str(vehicles), "в эксплуатации сегодня по реестру ТС"),
+        "bdd_report_drivers": Suggestion(str(drivers), "допущено сегодня по карточкам водителей"),
+        "bdd_report_accidents": Suggestion(str(accidents), f"ДТП {window} по учёту ДТП"),
         # пострадавшие и погибшие в одном ответе, потому что и в форме они
         # одной строкой: разносить их по двум подсказкам значило бы
         # предлагать то, чего в документе нет
@@ -183,9 +173,7 @@ async def _road_safety_suggestions(
     }
 
 
-async def _ecology_suggestions(
-    session: AsyncSession, tenant_id: str
-) -> dict[str, Suggestion]:
+async def _ecology_suggestions(session: AsyncSession, tenant_id: str) -> dict[str, Suggestion]:
     """Подсказки для отчётности экологии — из реестров контура.
 
     ГОД БЕРЁТСЯ ПРОШЛЫЙ, И ЭТО РЕШЕНИЕ, А НЕ УМОЛЧАНИЕ. Экологическую
@@ -262,9 +250,7 @@ async def _ecology_suggestions(
         "eco_air_sources": Suggestion(
             str(sources), "источников выбросов сегодня по реестру источников"
         ),
-        "eco_pek_measurements": Suggestion(
-            str(measurements), f"замеров {window} по журналу ПЭК"
-        ),
+        "eco_pek_measurements": Suggestion(str(measurements), f"замеров {window} по журналу ПЭК"),
     }
 
     # Объект НВОС подсказывается ТОЛЬКО когда он ОДИН. У организации их бывает

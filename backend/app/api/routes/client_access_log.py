@@ -83,9 +83,7 @@ async def _resolve_outsourcer(tenant_slug: str) -> ServingOutsourcer | None:
         ).first()
     if row is None:
         return None
-    return ServingOutsourcer(
-        managed_client_id=row[0], tenant_id=row[1], tenant_name=row[2]
-    )
+    return ServingOutsourcer(managed_client_id=row[0], tenant_id=row[1], tenant_name=row[2])
 
 
 @router.get("", response_model=MyAccessLogPage)
@@ -128,9 +126,7 @@ async def read_my_access_log(
     async with _trusted_session() as session:
         total = int(
             (
-                await session.execute(
-                    select(func.count()).select_from(AuditLog).where(*conditions)
-                )
+                await session.execute(select(func.count()).select_from(AuditLog).where(*conditions))
             ).scalar_one_or_none()
             or 0
         )

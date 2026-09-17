@@ -95,9 +95,7 @@ def upgrade() -> None:
         ),
     )
     op.create_index("ix_emission_norm_source_id", "emission_norm", ["source_id"])
-    op.create_index(
-        "ix_emission_norm_tenant_valid", "emission_norm", ["tenant_id", "valid_until"]
-    )
+    op.create_index("ix_emission_norm_tenant_valid", "emission_norm", ["tenant_id", "valid_until"])
 
 
 def downgrade() -> None:

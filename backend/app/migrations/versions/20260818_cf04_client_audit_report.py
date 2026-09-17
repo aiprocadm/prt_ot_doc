@@ -59,9 +59,7 @@ def upgrade() -> None:
     )
     # Отчёты читаются по клиенту, свежие сверху; тем же индексом ищется
     # «отчёт за период уже есть» при дедупликации тика.
-    op.create_index(
-        _INDEX, _TABLE, ["tenant_id", "managed_client_id", "period_end"]
-    )
+    op.create_index(_INDEX, _TABLE, ["tenant_id", "managed_client_id", "period_end"])
 
     if not is_pg:
         return

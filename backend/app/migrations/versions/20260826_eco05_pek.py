@@ -109,12 +109,8 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
     )
-    op.create_index(
-        "ix_emission_measurement_plan_id", "emission_measurement", ["plan_id"]
-    )
-    op.create_index(
-        "ix_emission_measurement_source_id", "emission_measurement", ["source_id"]
-    )
+    op.create_index("ix_emission_measurement_plan_id", "emission_measurement", ["plan_id"])
+    op.create_index("ix_emission_measurement_source_id", "emission_measurement", ["source_id"])
     op.create_index(
         "ix_emission_measurement_tenant_date",
         "emission_measurement",
@@ -123,16 +119,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index(
-        "ix_emission_measurement_tenant_date", table_name="emission_measurement"
-    )
+    op.drop_index("ix_emission_measurement_tenant_date", table_name="emission_measurement")
     op.drop_index("ix_emission_measurement_source_id", table_name="emission_measurement")
     op.drop_index("ix_emission_measurement_plan_id", table_name="emission_measurement")
     op.drop_table("emission_measurement")
-    op.drop_index(
-        "ix_monitoring_plan_tenant_due", table_name="emission_monitoring_plan"
-    )
-    op.drop_index(
-        "ix_emission_monitoring_plan_source_id", table_name="emission_monitoring_plan"
-    )
+    op.drop_index("ix_monitoring_plan_tenant_due", table_name="emission_monitoring_plan")
+    op.drop_index("ix_emission_monitoring_plan_source_id", table_name="emission_monitoring_plan")
     op.drop_table("emission_monitoring_plan")

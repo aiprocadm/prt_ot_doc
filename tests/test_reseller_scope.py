@@ -46,9 +46,7 @@ class TestКомуОткрытКабинет:
         assert exc.value.code == "FLEET_ACCESS_FORBIDDEN"
 
     def test_приостановленный_партнёр_в_кабинет_не_входит(self) -> None:
-        suspended = TenantNode(
-            id="t-reseller", slug="partner", kind=RESELLER_KIND, is_active=False
-        )
+        suspended = TenantNode(id="t-reseller", slug="partner", kind=RESELLER_KIND, is_active=False)
         with pytest.raises(HierarchyViolation) as exc:
             resolve_fleet_scope(suspended, managing_slug=MANAGING)
         assert exc.value.code == "RESELLER_SUSPENDED"

@@ -120,9 +120,7 @@ class TestFeatureGate:
                 # Обновить-или-вставить: вторая строка выдачи ломает
                 # уникальность и делает ответ гейта неопределённым.
                 session.add(
-                    FeatureEnablement(
-                        tenant_id=str(tenant_id), feature_id=feature.id, on=False
-                    )
+                    FeatureEnablement(tenant_id=str(tenant_id), feature_id=feature.id, on=False)
                 )
             else:
                 row.on = False

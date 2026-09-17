@@ -19,15 +19,11 @@ class TestПотолокНабора:
         assert verdict.reason == ""
 
     def test_совпадающий_набор_проходит(self) -> None:
-        verdict = check_plan_ceiling(
-            plan_features={"sout"}, reseller_features={"sout"}
-        )
+        verdict = check_plan_ceiling(plan_features={"sout"}, reseller_features={"sout"})
         assert verdict.allowed
 
     def test_лишний_модуль_не_выдаётся(self) -> None:
-        verdict = check_plan_ceiling(
-            plan_features={"sout", "ppe"}, reseller_features={"sout"}
-        )
+        verdict = check_plan_ceiling(plan_features={"sout", "ppe"}, reseller_features={"sout"})
         assert not verdict.allowed
         assert verdict.missing == ("ppe",)
         assert "ppe" in verdict.reason
@@ -50,9 +46,7 @@ class TestПотолокНабора:
         assert verdict.allowed
 
     def test_партнёр_без_набора_ничего_не_выдаёт(self) -> None:
-        verdict = check_plan_ceiling(
-            plan_features={"sout"}, reseller_features=set()
-        )
+        verdict = check_plan_ceiling(plan_features={"sout"}, reseller_features=set())
         assert not verdict.allowed
 
 

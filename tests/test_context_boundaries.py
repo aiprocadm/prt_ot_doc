@@ -24,10 +24,9 @@ def test_no_new_cross_context_imports() -> None:
 
 def test_allowlist_has_no_stale_entries() -> None:
     _violations, stale = checker.scan()
-    assert (
-        not stale
-    ), "Stale ALLOWLIST entries (import no longer exists — remove them):\n" + "\n".join(
-        f"  {a} -> {b}" for a, b in stale
+    assert not stale, (
+        "Stale ALLOWLIST entries (import no longer exists — remove them):\n"
+        + "\n".join(f"  {a} -> {b}" for a, b in stale)
     )
 
 

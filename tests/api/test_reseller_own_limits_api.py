@@ -66,9 +66,7 @@ async def _set_usage(tenant_id: str, *, generations: int = 0, storage: int = 0) 
     async with AsyncSessionLocal(
         tenant="public", include_public=False, create_schema=False, rls_bypass=True
     ) as session:
-        session.add(
-            TenantCounter(tenant_id=tenant_id, yyyymm=PERIOD, doc_generations=generations)
-        )
+        session.add(TenantCounter(tenant_id=tenant_id, yyyymm=PERIOD, doc_generations=generations))
         session.add(
             BillingUsageCounter(
                 tenant_id=tenant_id, period_yyyymm=int(PERIOD), s3_bytes_used=storage
@@ -187,9 +185,7 @@ async def test_владелец_платформы_тоже_видит_свои_
 
 
 @pytest.mark.anyio
-async def test_клиенту_кабинет_лимитов_закрыт(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_клиенту_кабинет_лимитов_закрыт(async_client: AsyncClient, make_auth_headers) -> None:
     """Та же граница, что у остального кабинета флота: клиент сюда не ходит."""
 
     await _shape_tree()

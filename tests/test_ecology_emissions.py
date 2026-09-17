@@ -48,9 +48,7 @@ _FRONTEND_ECOLOGY_API = (
 
 async def _grant(sessionmaker, code: str = "ecology", on: bool = True) -> None:
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         feature = (
             await session.execute(select(Feature).where(Feature.code == code))
         ).scalar_one_or_none()
@@ -206,9 +204,7 @@ class TestИнвентаризацияИсточников:
             },
             headers=headers,
         )
-        assert same_number_other_facility.status_code == 201, (
-            same_number_other_facility.text
-        )
+        assert same_number_other_facility.status_code == 201, same_number_other_facility.text
 
 
 class TestНормативыПДВ:
@@ -253,13 +249,9 @@ class TestНормативыПДВ:
             "substance": "Углерода оксид",
             "limit_tons_per_year": "1.200",
         }
-        first = await async_client.post(
-            f"{_API}/emission-norms", json=payload, headers=headers
-        )
+        first = await async_client.post(f"{_API}/emission-norms", json=payload, headers=headers)
         assert first.status_code == 201, first.text
-        second = await async_client.post(
-            f"{_API}/emission-norms", json=payload, headers=headers
-        )
+        second = await async_client.post(f"{_API}/emission-norms", json=payload, headers=headers)
         assert second.status_code == 422
         assert "уже задан" in second.text
 
@@ -365,8 +357,7 @@ class TestСводкаВыбросов:
         await _source(async_client, headers, facility_id)
         after = (await async_client.get(f"{_API}/readiness", headers=headers)).json()
         assert (
-            after["emission_sources_without_norms"]
-            == before["emission_sources_without_norms"] + 1
+            after["emission_sources_without_norms"] == before["emission_sources_without_norms"] + 1
         )
 
     async def test_норматив_не_рассчитывается_платформой(
@@ -429,10 +420,5 @@ class TestСловарьВидовИсточниковНаФронте:
             re.S,
         )
         assert block is not None, "не нашёлся map EMISSION_SOURCE_KIND_TITLES"
-        front = dict(
-            re.findall(r'^\s*([A-Za-z_]+):\s*"([^"]+)"', block.group(1), re.M)
-        )
-        assert front == EMISSION_SOURCE_KINDS, sorted(
-            front.items() ^ EMISSION_SOURCE_KINDS.items()
-        )
-
+        front = dict(re.findall(r'^\s*([A-Za-z_]+):\s*"([^"]+)"', block.group(1), re.M))
+        assert front == EMISSION_SOURCE_KINDS, sorted(front.items() ^ EMISSION_SOURCE_KINDS.items())

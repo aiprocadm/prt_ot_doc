@@ -38,10 +38,7 @@ class CeilingVerdict:
     def reason(self) -> str:
         if self.allowed:
             return ""
-        return (
-            "нельзя выдать клиенту модули, которых нет у вас: "
-            + ", ".join(self.missing)
-        )
+        return "нельзя выдать клиенту модули, которых нет у вас: " + ", ".join(self.missing)
 
 
 def check_plan_ceiling(

@@ -115,9 +115,7 @@ async def _build_run_read(session: AsyncSession, run: DocumentJob) -> PipelineRu
 
 def _run_snapshot_hash(run_payload: PipelineRunRead) -> str:
     body = json.dumps(run_payload.model_dump(mode="json"), sort_keys=True, ensure_ascii=False)
-    return hashlib.sha1(
-        body.encode("utf-8"), usedforsecurity=False
-    ).hexdigest()  # nosec B324 - run-snapshot fingerprint, not security
+    return hashlib.sha1(body.encode("utf-8"), usedforsecurity=False).hexdigest()  # nosec B324 - run-snapshot fingerprint, not security
 
 
 @router.post("/profiles", response_model=PipelineProfileRead, status_code=status.HTTP_201_CREATED)

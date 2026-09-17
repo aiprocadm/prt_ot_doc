@@ -85,9 +85,7 @@ class TestКомплектОтчётности:
     def test_комплекты_не_пересекаются_шаблонами(self) -> None:
         """Один шаблон в двух комплектах — два места правки одного документа."""
 
-        base = {
-            t.code for t in PACK_DEFINITIONS_BY_CODE[PACK_CODE_CIVIL_DEFENCE].templates
-        }
+        base = {t.code for t in PACK_DEFINITIONS_BY_CODE[PACK_CODE_CIVIL_DEFENCE].templates}
         assert base & {t.code for t in _PACK.templates} == set()
 
 
@@ -104,9 +102,7 @@ class TestВопросыМастера:
         required = {f.name for f in questions_for(PACK_CODE_GOCHS_REPORTS) if f.required}
         assert required == {"gochs_report_author"}
 
-        bdd_required = {
-            f.name for f in questions_for(PACK_CODE_BDD_REPORTS) if f.required
-        }
+        bdd_required = {f.name for f in questions_for(PACK_CODE_BDD_REPORTS) if f.required}
         assert "bdd_report_period" in bdd_required
 
     def test_у_каждого_вопроса_есть_подпись(self) -> None:
@@ -141,9 +137,7 @@ class TestЧестныеУмолчания:
     def test_неустановленная_категория_названа_словами(self) -> None:
         """Прочерк в категории выглядит как «категории нет», а её не внесли."""
 
-        context = enrich_context(
-            PACK_CODE_GOCHS_REPORTS, {"company": {"name": "Тест"}}, {}
-        )
+        context = enrich_context(PACK_CODE_GOCHS_REPORTS, {"company": {"name": "Тест"}}, {})
         assert context["data"]["facility_category"] == "не установлена"
         assert context["data"]["gochs_responsible"] == "Ответственный не назначен"
         assert context["data"]["gochs_approved_by"] == "не утверждено"
@@ -174,6 +168,4 @@ class TestГраница:
         """
 
         keys = {f.name for f in questions_for(PACK_CODE_GOCHS_REPORTS)}
-        assert not any(
-            "deadline" in key or "autofill" in key or "auto_" in key for key in keys
-        )
+        assert not any("deadline" in key or "autofill" in key or "auto_" in key for key in keys)

@@ -24,6 +24,7 @@ from app.domains.managed_clients.readiness import (
     training_readiness,
     worst_light,
 )
+
 # Правила счёта переехали в общий сервис (BIZ-54-57 срез-3): тот же счёт
 # ведёт карточка площадки, поэтому проверяются они там, где живут.
 from app.services.discipline_numbers import _medical_counts, _ppe_counts
@@ -40,9 +41,7 @@ class TestEvaluateDirection:
         assert "Эталон не задан" in reason
 
     def test_разрыв_красит_красным_с_расшифровкой(self) -> None:
-        light, reason = evaluate_direction(
-            DirectionCounts(required=5, missing=2, lapsed=1)
-        )
+        light, reason = evaluate_direction(DirectionCounts(required=5, missing=2, lapsed=1))
         assert light is TrafficLight.RED
         assert "не оформлено вовсе: 2" in reason
         assert "истекло или не хватает: 1" in reason

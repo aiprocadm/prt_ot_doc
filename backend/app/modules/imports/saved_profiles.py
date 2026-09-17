@@ -108,9 +108,7 @@ def validate_draft(draft: ProfileDraft, *, known_targets: set[str]) -> None:
                 "сопоставлении: разбор молча не сработал бы"
             )
         if len(parts or []) < 2:
-            raise SavedProfileError(
-                f"Разбор колонки «{source}» должен называть минимум две части"
-            )
+            raise SavedProfileError(f"Разбор колонки «{source}» должен называть минимум две части")
 
 
 def to_import_profile(row) -> ImportProfile:
@@ -138,9 +136,7 @@ def to_import_profile(row) -> ImportProfile:
     )
 
 
-def merge_profiles(
-    builtin: list[ImportProfile], saved: list[ImportProfile]
-) -> list[ImportProfile]:
+def merge_profiles(builtin: list[ImportProfile], saved: list[ImportProfile]) -> list[ImportProfile]:
     """Перечень профилей: свои ВПЕРЕДИ и сильнее одноимённых встроенных.
 
     Арендатор знает свою прошлую систему лучше, чем догадка платформы.

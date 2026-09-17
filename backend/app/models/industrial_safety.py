@@ -57,9 +57,7 @@ class HazardousFacility(TenantBaseModel, SoftDeleteMixin):
 
     __tablename__ = "hazardous_facility"
 
-    site_id: Mapped[str | None] = mapped_column(
-        ForeignKey("site.id"), nullable=True, index=True
-    )
+    site_id: Mapped[str | None] = mapped_column(ForeignKey("site.id"), nullable=True, index=True)
     #: наименование как в свидетельстве о регистрации
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     #: регистрационный номер в госреестре (формат А01-12345-0001) — без него
@@ -80,9 +78,7 @@ class HazardousFacility(TenantBaseModel, SoftDeleteMixin):
     __table_args__ = (
         # Один госномер — один объект. Дубль означает, что объект завели
         # дважды, и любой счёт по классам стал бы враньём.
-        UniqueConstraint(
-            "tenant_id", "register_number", name="uq_hazardous_facility_register"
-        ),
+        UniqueConstraint("tenant_id", "register_number", name="uq_hazardous_facility_register"),
         Index("ix_hazardous_facility_tenant_class", "tenant_id", "hazard_class"),
     )
 
@@ -156,9 +152,7 @@ class TechnicalDevice(TenantBaseModel, SoftDeleteMixin):
 
     facility: Mapped[HazardousFacility] = relationship(backref="technical_devices")
 
-    __table_args__ = (
-        Index("ix_opo_device_tenant_epb", "tenant_id", "epb_valid_until"),
-    )
+    __table_args__ = (Index("ix_opo_device_tenant_epb", "tenant_id", "epb_valid_until"),)
 
 
 #: Виды работ по техническому устройству (разд. 54.2 «диагностика, история
@@ -275,9 +269,7 @@ class ProductionControlMeasure(TenantBaseModel, SoftDeleteMixin):
 
     plan: Mapped[ProductionControlPlan] = relationship(backref="measures")
 
-    __table_args__ = (
-        Index("ix_pc_measure_tenant_due", "tenant_id", "due_on"),
-    )
+    __table_args__ = (Index("ix_pc_measure_tenant_due", "tenant_id", "due_on"),)
 
 
 #: Состояние срока аттестации словами. «Срока нет» — отдельное состояние, а не
@@ -321,6 +313,4 @@ class DeviceWorkRecord(TenantBaseModel, SoftDeleteMixin):
 
     device: Mapped[TechnicalDevice] = relationship(backref="work_records")
 
-    __table_args__ = (
-        Index("ix_opo_device_work_tenant_performed", "tenant_id", "performed_on"),
-    )
+    __table_args__ = (Index("ix_opo_device_work_tenant_performed", "tenant_id", "performed_on"),)

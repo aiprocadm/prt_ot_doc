@@ -91,11 +91,7 @@ def decide(client, *, now: datetime | None = None, period_days: int = DEFAULT_PE
 def select_ready(clients, *, now: datetime | None = None, period_days: int = DEFAULT_PERIOD_DAYS):
     """Кому слать сейчас. Остальные не теряются — см. :func:`explain`."""
 
-    return [
-        client
-        for client in clients
-        if decide(client, now=now, period_days=period_days).ready
-    ]
+    return [client for client in clients if decide(client, now=now, period_days=period_days).ready]
 
 
 def explain(clients, *, now: datetime | None = None, period_days: int = DEFAULT_PERIOD_DAYS):

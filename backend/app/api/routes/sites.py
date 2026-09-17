@@ -50,11 +50,11 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 
 _manager_roles = ["admin"]
-# Роли берутся из единой карты прав экрана (core/screen_access): пункт меню
-# виден ровно тем, кого пускает ручка — иначе человек видит раздел и получает
-# 403 (docs/audit/ACCESS_MENU_VS_API.md, сторож tests/test_menu_matches_api.py).
-_SITE_READ_ROLES = list(screen_roles("reference.view"))
 _SITE_WRITE_ROLES = list(screen_roles("branch.manage"))
+# Кто может писать — обязан мочь читать (backend/tests/test_*_access_parity.py):
+# читатели = карта прав экрана ∪ писатели. Срез-217 дал чтению круг из карты, а
+# запись оставил на прежнем списке — и сотрудник мог создать, но не увидеть.
+_SITE_READ_ROLES = sorted(set(screen_roles("reference.view")) | set(_SITE_WRITE_ROLES))
 
 
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
@@ -262,15 +262,12 @@ async def get_site_overview(
                     for discipline, count in overview.facts.permits.by_discipline.items()
                 },
                 without_discipline=overview.facts.permits.without_discipline,
-                without_discipline_titles=list(
-                    overview.facts.permits.without_discipline_titles
-                ),
+                without_discipline_titles=list(overview.facts.permits.without_discipline_titles),
                 without_discipline_reason=overview.facts.permits.without_discipline_reason,
             ),
         ),
         not_counted=[
-            SiteNotCountedRead(title=title, reason=reason)
-            for title, reason in overview.not_counted
+            SiteNotCountedRead(title=title, reason=reason) for title, reason in overview.not_counted
         ],
     )
 

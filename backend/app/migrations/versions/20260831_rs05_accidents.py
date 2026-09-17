@@ -87,9 +87,7 @@ def upgrade() -> None:
     op.create_index("ix_road_accident_vehicle_id", "road_accident", ["vehicle_id"])
     op.create_index("ix_road_accident_driver_id", "road_accident", ["driver_id"])
     op.create_index("ix_road_accident_incident_id", "road_accident", ["incident_id"])
-    op.create_index(
-        "ix_accident_tenant_occurred", "road_accident", ["tenant_id", "occurred_at"]
-    )
+    op.create_index("ix_accident_tenant_occurred", "road_accident", ["tenant_id", "occurred_at"])
 
 
 def downgrade() -> None:

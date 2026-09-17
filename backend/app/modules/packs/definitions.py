@@ -741,7 +741,6 @@ def _civil_defence_journal() -> bytes:
     )
 
 
-
 def _bdd_management_regulation() -> bytes:
     """Положение о системе управления БДД.
 
@@ -813,7 +812,6 @@ def _bdd_vehicle_assignment_order() -> bytes:
         "Ответственный за БДД: {{ data.bdd_responsible }}",
         footer="Руководитель: {{ data.bdd_approved_by }} · {{ stamp }}",
     )
-
 
 
 def _gochs_rsches_regulation() -> bytes:
@@ -1020,6 +1018,7 @@ def _road_safety_briefing_program() -> bytes:
         "Инструктаж провёл: {{ data.bdd_responsible }}",
         footer="Отметка о проведении: {{ data.bdd_briefing_date }}",
     )
+
 
 DEFAULT_PACKS: Sequence[PackDefinition] = (
     PackDefinition(
@@ -1862,8 +1861,7 @@ PACKS_WITHOUT_DISCIPLINE: dict[str, str] = {
         "значило бы выбрать её за специалиста"
     ),
     PACK_CODE_CEO_SHIELD: (
-        "комплект руководителя: распределение ответственности не относится "
-        "к одной дисциплине"
+        "комплект руководителя: распределение ответственности не относится " "к одной дисциплине"
     ),
     PACK_CODE_CONTRACTOR: (
         "общая охрана труда: допуск подрядчика одинаков для всех дисциплин, "

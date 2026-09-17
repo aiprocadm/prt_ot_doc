@@ -62,8 +62,9 @@ async def _partner_headers(make_auth_headers) -> dict[str, str]:
     )
 
 
-async def _upload(async_client, headers, *, kind: str = "logo", data: bytes = PNG,
-                  content_type: str = "image/png"):
+async def _upload(
+    async_client, headers, *, kind: str = "logo", data: bytes = PNG, content_type: str = "image/png"
+):
     return await async_client.put(
         f"{OWN}/{kind}",
         headers=headers,
@@ -114,9 +115,7 @@ async def test_чужой_арендатор_логотип_партнёра_н�
 
 
 @pytest.mark.anyio
-async def test_favicon_принимает_ico(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_favicon_принимает_ico(async_client: AsyncClient, make_auth_headers) -> None:
     await _shape_tree()
     uploaded = await _upload(
         async_client,
@@ -173,9 +172,7 @@ async def test_заголовок_клиента_игнорируется_в_о�
 
 
 @pytest.mark.anyio
-async def test_webp_не_годится_в_favicon(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_webp_не_годится_в_favicon(async_client: AsyncClient, make_auth_headers) -> None:
     """Safari не понимает WebP-иконки — «не показывается» выглядело бы нашей поломкой."""
 
     await _shape_tree()

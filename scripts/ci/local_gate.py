@@ -29,6 +29,7 @@ GitHub Actions на репозитории отключены/недоступн
   python scripts/ci/local_gate.py --keep-db        # не гасить PG после прогона
   python scripts/ci/local_gate.py -- -k enum -x    # доп. аргументы pytest
 """
+
 from __future__ import annotations
 
 import argparse

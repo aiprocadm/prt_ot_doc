@@ -52,9 +52,7 @@ _FRONTEND_ECOLOGY_API = (
 
 async def _grant(sessionmaker, code: str = "ecology", on: bool = True) -> None:
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         feature = (
             await session.execute(select(Feature).where(Feature.code == code))
         ).scalar_one_or_none()
@@ -71,9 +69,7 @@ async def _grant(sessionmaker, code: str = "ecology", on: bool = True) -> None:
             )
         ).scalar_one_or_none()
         if grant is None:
-            session.add(
-                FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=on)
-            )
+            session.add(FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=on))
         else:
             grant.on = on
         await session.commit()
@@ -121,9 +117,7 @@ async def _norm(
         payload["limit_grams_per_second"] = grams
     if tons is not None:
         payload["limit_tons_per_year"] = tons
-    response = await async_client.post(
-        f"{_API}/emission-norms", json=payload, headers=headers
-    )
+    response = await async_client.post(f"{_API}/emission-norms", json=payload, headers=headers)
     assert response.status_code == 201, response.text
     return response.json()["id"]
 
@@ -160,9 +154,7 @@ async def _setup(async_client, headers, sessionmaker, suffix: str = "0001") -> s
 
 
 class TestПланГрафикЗамеров:
-    async def test_без_выдачи_модуль_невидим(
-        self, async_client, make_auth_headers
-    ) -> None:
+    async def test_без_выдачи_модуль_невидим(self, async_client, make_auth_headers) -> None:
         headers = await make_auth_headers()
         response = await async_client.get(f"{_API}/monitoring-plan", headers=headers)
         assert response.status_code == 404
@@ -450,9 +442,7 @@ class TestЗамерыИСравнениеСНормативом:
         headers = await make_auth_headers()
         source_id = await _setup(async_client, headers, sessionmaker, "0019")
         due = date.today() + timedelta(days=20)
-        plan_id = await _plan_item(
-            async_client, headers, source_id, months=3, next_due_on=due
-        )
+        plan_id = await _plan_item(async_client, headers, source_id, months=3, next_due_on=due)
         response = await async_client.post(
             f"{_API}/emission-measurements",
             json={
@@ -581,11 +571,6 @@ class TestТиповыеПериодичностиНаФронте:
         assert block is not None, "не нашёлся map MONITORING_PERIODICITY_TITLES"
         front = {
             int(months): title
-            for months, title in re.findall(
-                r'^\s*"(\d+)":\s*"([^"]+)"', block.group(1), re.M
-            )
+            for months, title in re.findall(r'^\s*"(\d+)":\s*"([^"]+)"', block.group(1), re.M)
         }
-        assert front == PERIODICITY_LABELS, sorted(
-            front.items() ^ PERIODICITY_LABELS.items()
-        )
-
+        assert front == PERIODICITY_LABELS, sorted(front.items() ^ PERIODICITY_LABELS.items())

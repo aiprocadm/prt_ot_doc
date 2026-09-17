@@ -506,12 +506,14 @@ def _columns_created_by_migration(tree: ast.Module) -> dict[tuple[str, str], str
     return out
 
 
-def _build_column_type_index() -> tuple[
-    dict[str, dict[tuple[str, str], str]],
-    dict[str, set[str]],
-    dict[str, str],
-    dict[str, Path],
-]:
+def _build_column_type_index() -> (
+    tuple[
+        dict[str, dict[tuple[str, str], str]],
+        dict[str, set[str]],
+        dict[str, str],
+        dict[str, Path],
+    ]
+):
     """One pass over ``MIGRATIONS_DIR`` building:
 
     * ``per_migration``: ``rev → {(table, col): type_label}`` from upgrade()

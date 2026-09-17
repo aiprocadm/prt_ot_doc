@@ -84,9 +84,7 @@ def _front_map(name: str) -> dict[str, str]:
 
 async def _grant(sessionmaker, code: str = "road_safety", on: bool = True) -> None:
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         feature = (
             await session.execute(select(Feature).where(Feature.code == code))
         ).scalar_one_or_none()
@@ -103,9 +101,7 @@ async def _grant(sessionmaker, code: str = "road_safety", on: bool = True) -> No
             )
         ).scalar_one_or_none()
         if grant is None:
-            session.add(
-                FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=on)
-            )
+            session.add(FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=on))
         else:
             grant.on = on
         await session.commit()
@@ -126,9 +122,7 @@ async def _company(session, tenant) -> Company:
 
 async def _person(sessionmaker, last_name: str = "Шофёров") -> str:
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         company = await _company(session, tenant)
         person = Person(
             tenant_id=tenant.id,
@@ -148,9 +142,7 @@ async def _incident(sessionmaker) -> str:
     """Ядровое расследование: контур БДД инцидентов НЕ заводит."""
 
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         company = await _company(session, tenant)
         site = (
             (await session.execute(select(Site).where(Site.tenant_id == tenant.id)))
@@ -180,9 +172,7 @@ async def _capa(sessionmaker, accident_id: str, *, status: str = "open") -> str:
     """Мероприятие в ЯДРОВОМ CAPA: своей таблицы контур БДД не заводит."""
 
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         action = CorrectiveAction(
             tenant_id=tenant.id,
             source_type="road_accident",
@@ -251,9 +241,7 @@ async def _accident(
     expect: int = 201,
 ) -> dict:
     payload: dict[str, object] = {
-        "occurred_at": (
-            occurred_at or datetime.now(timezone.utc) - timedelta(days=1)
-        ).isoformat(),
+        "occurred_at": (occurred_at or datetime.now(timezone.utc) - timedelta(days=1)).isoformat(),
         "place": place,
         "vehicle_id": vehicle["id"],
         "kind": kind,
@@ -265,17 +253,13 @@ async def _accident(
         payload["driver_id"] = driver["id"]
     if incident_id is not None:
         payload["incident_id"] = incident_id
-    response = await async_client.post(
-        f"{_API}/accidents", json=payload, headers=headers
-    )
+    response = await async_client.post(f"{_API}/accidents", json=payload, headers=headers)
     assert response.status_code == expect, response.text
     return response.json()
 
 
 class TestРегистрацияДТП:
-    async def test_без_выдачи_модуль_невидим(
-        self, async_client, make_auth_headers
-    ) -> None:
+    async def test_без_выдачи_модуль_невидим(self, async_client, make_auth_headers) -> None:
         headers = await make_auth_headers()
         response = await async_client.get(f"{_API}/accidents", headers=headers)
         assert response.status_code == 404
@@ -315,9 +299,7 @@ class TestРегистрацияДТП:
         headers = await make_auth_headers()
         await _grant(sessionmaker)
         vehicle = await _vehicle(async_client, headers)
-        body = await _accident(
-            async_client, headers, vehicle, kind="parked_vehicle"
-        )
+        body = await _accident(async_client, headers, vehicle, kind="parked_vehicle")
         assert body["driver_id"] is None
         assert body["driver_name"] is None
 
@@ -368,9 +350,7 @@ class TestЗаднимЧислом:
 
         headers = await make_auth_headers()
         await _grant(sessionmaker)
-        vehicle = await _vehicle(
-            async_client, headers, plate="В001ВВ99", status="decommissioned"
-        )
+        vehicle = await _vehicle(async_client, headers, plate="В001ВВ99", status="decommissioned")
         body = await _accident(async_client, headers, vehicle, kind="rollover")
         assert body["vehicle_plate"] == "В001ВВ99"
 
@@ -432,9 +412,7 @@ class TestПоследствия:
         headers = await make_auth_headers()
         await _grant(sessionmaker)
         vehicle = await _vehicle(async_client, headers)
-        body = await _accident(
-            async_client, headers, vehicle, injured=3, fatalities=1
-        )
+        body = await _accident(async_client, headers, vehicle, injured=3, fatalities=1)
         assert body["consequences"] == "fatal"
 
     async def test_тяжесть_снаружи_не_записывается(
@@ -477,9 +455,7 @@ class TestСвязьСЯдром:
         headers = await make_auth_headers()
         await _grant(sessionmaker)
         vehicle = await _vehicle(async_client, headers)
-        await _accident(
-            async_client, headers, vehicle, incident_id="нет-такого", expect=404
-        )
+        await _accident(async_client, headers, vehicle, incident_id="нет-такого", expect=404)
 
     async def test_привязка_к_расследованию_снимает_дыру_в_разборе(
         self, async_client, make_auth_headers, sessionmaker
@@ -488,9 +464,7 @@ class TestСвязьСЯдром:
         await _grant(sessionmaker)
         vehicle = await _vehicle(async_client, headers)
         incident_id = await _incident(sessionmaker)
-        body = await _accident(
-            async_client, headers, vehicle, injured=1, incident_id=incident_id
-        )
+        body = await _accident(async_client, headers, vehicle, injured=1, incident_id=incident_id)
         assert body["incident_id"] == incident_id
         # мероприятий ещё нет, но расследование заведено — «не начато» это уже
         # неправда
@@ -528,9 +502,7 @@ class TestСвязьСЯдром:
         await _grant(sessionmaker)
         vehicle = await _vehicle(async_client, headers)
         incident_id = await _incident(sessionmaker)
-        body = await _accident(
-            async_client, headers, vehicle, incident_id=incident_id
-        )
+        body = await _accident(async_client, headers, vehicle, incident_id=incident_id)
         response = await async_client.patch(
             f"{_API}/accidents/{body['id']}",
             json={"incident_id": None},
@@ -660,9 +632,7 @@ class TestРеестрИСводка:
         assert len(items) == 1
         assert items[0]["vehicle_plate"] == "Е003ЕЕ99"
 
-    async def test_окно_сводки_годовое(
-        self, async_client, make_auth_headers, sessionmaker
-    ) -> None:
+    async def test_окно_сводки_годовое(self, async_client, make_auth_headers, sessionmaker) -> None:
         """У листов окно месячное, у ДТП — годовое: за месяц их обычно ноль."""
 
         headers = await make_auth_headers()
@@ -701,9 +671,7 @@ class TestРеестрИСводка:
         await _grant(sessionmaker)
         vehicle = await _vehicle(async_client, headers)
         without = await _accident(async_client, headers, vehicle, place="без разбора")
-        with_capa = await _accident(
-            async_client, headers, vehicle, place="с мероприятием"
-        )
+        with_capa = await _accident(async_client, headers, vehicle, place="с мероприятием")
         await _capa(sessionmaker, with_capa["id"])
         body = (await async_client.get(f"{_API}/readiness", headers=headers)).json()
         assert body["accidents_total"] == 2
@@ -743,4 +711,3 @@ class TestСловариДтпНаФронте:
     def test_вина_на_фронте_совпадает_с_бэкендом(self) -> None:
         front = _front_map("ACCIDENT_FAULT_TITLES")
         assert front == ACCIDENT_FAULT, sorted(front.items() ^ ACCIDENT_FAULT.items())
-

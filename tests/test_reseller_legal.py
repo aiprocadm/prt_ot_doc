@@ -31,9 +31,7 @@ class TestЧейТекстПоказать:
         assert result.source == "reseller"
 
     def test_свой_текст_побеждает_текст_партнёра(self) -> None:
-        result = resolve_legal_document(
-            OFFER, own=_doc("self"), reseller=_doc("reseller")
-        )
+        result = resolve_legal_document(OFFER, own=_doc("self"), reseller=_doc("reseller"))
         assert result is not None
         assert result.source == "self"
 
@@ -55,9 +53,7 @@ class TestДокументНеСмешивается:
     def test_возвращается_целая_редакция_а_не_склейка(self) -> None:
         """Половина оферты партнёра и половина платформенной — это подделка."""
 
-        own = LegalDocument(
-            kind=OFFER, title="Своя", body="Своё тело", version=7, source="self"
-        )
+        own = LegalDocument(kind=OFFER, title="Своя", body="Своё тело", version=7, source="self")
         reseller = LegalDocument(
             kind=OFFER, title="Партнёрская", body="Чужое тело", version=2, source="reseller"
         )

@@ -111,7 +111,7 @@ Evidence quality requirements (unchanged since 2026-05-29):
 | Gate | Command | Notes |
 |---|---|---|
 | PG16 migrations + enum parity + ARCH-3 boundaries | `python scripts/ci/local_gate.py --db-only` (или `make gate` для полного режима) | Docker + PG16 (python:3.12 gate-образ); `test_alembic_postgres_upgrade` + enum-parity guards + `check_context_boundaries`. Канонический прогон миграций — alembic-цепочка исторически не запускается на SQLite (initial_schema = JSONB) |
-| Lint | `make lint` | ruff + black + frontend eslint |
+| Lint | `make lint` | ruff check + ruff format --check + frontend eslint (black убран, срез-218) |
 | Static gates (ruff F821 + staged mypy) | `bash scripts/ci/static_gates.sh` | Windows/кириллический путь: exe-шимы venv ломаются молча — вызывать `python -m mypy` / `python -m bandit` |
 | SAST | `python -m bandit -r backend/app -lll -iii` | Fail = HIGH severity + HIGH confidence |
 | Script security gates | `python scripts/ci/{check_security_exceptions,check_default_secrets,check_runtime_artifacts,check_scoped_queries}.py` | Все четыре — exit 0 обязателен |

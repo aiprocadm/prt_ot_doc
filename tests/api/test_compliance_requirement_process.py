@@ -82,8 +82,7 @@ class TestСловарьПроцессов:
         """
 
         assert (
-            discipline_of_event("compliance_requirement", {"process_code": GENERAL_PROCESS})
-            is None
+            discipline_of_event("compliance_requirement", {"process_code": GENERAL_PROCESS}) is None
         )
 
 
@@ -179,9 +178,7 @@ async def test_процесс_из_словаря_принимается_и_во
 
 
 @pytest.mark.anyio
-async def test_правка_тоже_проверяет_процесс(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_правка_тоже_проверяет_процесс(async_client: AsyncClient, make_auth_headers) -> None:
     """Проверка только на создании оставила бы вторую дверь открытой."""
 
     headers = await make_auth_headers(RoleEnum.ADMIN)

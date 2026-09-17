@@ -113,7 +113,7 @@ def _command_material(settings) -> KeyMaterial:
     if not command:
         raise KeyProviderError(
             "APP_SECRET_KEY_PROVIDER=command requires APP_SECRET_KEY_COMMAND "
-            "(a command printing {\"keys\": \"kid:key,...\"} to stdout)"
+            '(a command printing {"keys": "kid:key,..."} to stdout)'
         )
     timeout = float(
         getattr(settings, "secret_key_command_timeout_seconds", DEFAULT_TIMEOUT_SECONDS)
@@ -156,9 +156,7 @@ def _command_material(settings) -> KeyMaterial:
     keys = str(payload.get("keys") or "").strip()
     legacy = str(payload.get("key") or "").strip()
     if not keys and not legacy:
-        raise KeyProviderError(
-            "APP_SECRET_KEY_COMMAND printed no keys (expected 'keys' or 'key')"
-        )
+        raise KeyProviderError("APP_SECRET_KEY_COMMAND printed no keys (expected 'keys' or 'key')")
     return KeyMaterial(
         keys=keys,
         legacy_key=legacy,

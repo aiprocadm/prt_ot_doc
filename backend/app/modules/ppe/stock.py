@@ -352,7 +352,8 @@ async def deplete_for_issue(
         candidates = [await _load_batch(session, tenant_id, batch_id, item_id=item_id)]
     else:
         stmt = (
-            select(PPEStockBatch).where(
+            select(PPEStockBatch)
+            .where(
                 PPEStockBatch.tenant_id == tenant_id,
                 PPEStockBatch.item_id == item_id,
                 PPEStockBatch.deleted_at.is_(None),

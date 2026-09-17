@@ -5,7 +5,6 @@ VENV_BIN=.venv/bin
 PYTHON=$(if $(wildcard $(VENV_BIN)/python),$(VENV_BIN)/python,python)
 PYTEST=$(if $(wildcard $(VENV_BIN)/pytest),$(VENV_BIN)/pytest,pytest)
 RUFF=$(if $(wildcard $(VENV_BIN)/ruff),$(VENV_BIN)/ruff,ruff)
-BLACK=$(if $(wildcard $(VENV_BIN)/black),$(VENV_BIN)/black,black)
 UVICORN=$(if $(wildcard $(VENV_BIN)/uvicorn),$(VENV_BIN)/uvicorn,uvicorn)
 ALEMBIC=$(if $(wildcard $(VENV_BIN)/alembic),$(VENV_BIN)/alembic,alembic)
 
@@ -22,14 +21,16 @@ install-pip:
 	$(PYTHON) -m pip install --upgrade pip
 	$(PYTHON) -m pip install -r requirements.txt -r requirements-dev.txt
 
+# Срез-218: форматтер один — ruff format (black убран: он не стоял ни в одном
+# гейте, а `black --check` был красным на 170 файлах, и этого никто не видел).
 lint:
 	$(RUFF) check --no-fix $(LINT_PATHS)
-	$(BLACK) --check $(LINT_PATHS)
+	$(RUFF) format --check $(LINT_PATHS)
 	$(MAKE) lint-frontend
 
 format:
 	$(RUFF) check --fix $(LINT_PATHS)
-	$(BLACK) $(LINT_PATHS)
+	$(RUFF) format $(LINT_PATHS)
 	$(MAKE) format-frontend
 
 test:

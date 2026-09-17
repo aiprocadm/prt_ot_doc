@@ -1,5 +1,6 @@
 # backend/app/api/routes/work_permits.py
 """Endpoints for work permits (наряды-допуски)."""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone

@@ -63,9 +63,7 @@ def _front_map(name: str) -> dict[str, str]:
 
 async def _grant(sessionmaker, code: str = "civil_defense", on: bool = True) -> None:
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         feature = (
             await session.execute(select(Feature).where(Feature.code == code))
         ).scalar_one_or_none()
@@ -82,9 +80,7 @@ async def _grant(sessionmaker, code: str = "civil_defense", on: bool = True) -> 
             )
         ).scalar_one_or_none()
         if grant is None:
-            session.add(
-                FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=on)
-            )
+            session.add(FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=on))
         else:
             grant.on = on
         await session.commit()
@@ -94,14 +90,12 @@ async def _person(sessionmaker, last_name: str = "Спасателев") -> str:
     """Человек из ЯДРА: формирование не заводит своих «бойцов»."""
 
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         company = (
-            await session.execute(
-                select(Company).where(Company.tenant_id == tenant.id)
-            )
-        ).scalars().first()
+            (await session.execute(select(Company).where(Company.tenant_id == tenant.id)))
+            .scalars()
+            .first()
+        )
         if company is None:
             company = Company(tenant_id=tenant.id, name="Головная компания")
             session.add(company)
@@ -129,17 +123,13 @@ async def _formation(
     payload: dict[str, object] = {"name": name, "kind": kind}
     if commander_id is not None:
         payload["commander_person_id"] = commander_id
-    response = await async_client.post(
-        f"{_API}/formations", json=payload, headers=headers
-    )
+    response = await async_client.post(f"{_API}/formations", json=payload, headers=headers)
     assert response.status_code == 201, response.text
     return response.json()
 
 
 class TestРеестрФормирований:
-    async def test_без_выдачи_модуль_невидим(
-        self, async_client, make_auth_headers
-    ) -> None:
+    async def test_без_выдачи_модуль_невидим(self, async_client, make_auth_headers) -> None:
         headers = await make_auth_headers()
         response = await async_client.get(f"{_API}/formations", headers=headers)
         assert response.status_code == 404
@@ -281,9 +271,7 @@ class TestСоставФормирования:
         headers = await make_auth_headers()
         await _grant(sessionmaker)
         first = await _formation(async_client, headers, name="Звено оповещения")
-        second = await _formation(
-            async_client, headers, name="Эвакуационная группа", kind="nfgo"
-        )
+        second = await _formation(async_client, headers, name="Эвакуационная группа", kind="nfgo")
         person_id = await _person(sessionmaker, "Совместителев")
         for formation in (first, second):
             response = await async_client.post(
@@ -368,9 +356,7 @@ class TestСводкаИГраница:
             name="Звено пожаротушения",
             commander_id=commander_id,
         )
-        await _formation(
-            async_client, headers, name="Эвакуационная группа", kind="nfgo"
-        )
+        await _formation(async_client, headers, name="Эвакуационная группа", kind="nfgo")
         member_id = await _person(sessionmaker, "Членов")
         former_id = await _person(sessionmaker, "Бывший")
         for pid in (member_id, former_id):
@@ -383,9 +369,7 @@ class TestСводкаИГраница:
             f"{_API}/formations/{with_commander['id']}/members", headers=headers
         )
         former_row = next(
-            row
-            for row in listed.json()["items"]
-            if row["person_name"].startswith("Бывший")
+            row for row in listed.json()["items"] if row["person_name"].startswith("Бывший")
         )
         await async_client.patch(
             f"{_API}/formations/{with_commander['id']}/members/{former_row['id']}",
@@ -443,7 +427,4 @@ class TestСловарьВидовФормированийНаФронте:
 
     def test_виды_формирований_на_фронте_совпадают_с_бэкендом(self) -> None:
         front = _front_map("CD_FORMATION_KIND_TITLES")
-        assert front == CD_FORMATION_KINDS, sorted(
-            front.items() ^ CD_FORMATION_KINDS.items()
-        )
-
+        assert front == CD_FORMATION_KINDS, sorted(front.items() ^ CD_FORMATION_KINDS.items())

@@ -119,9 +119,7 @@ class Vehicle(TenantBaseModel, SoftDeleteMixin):
     vin: Mapped[str | None] = mapped_column(String(32))
     year_made: Mapped[int | None] = mapped_column(Integer, nullable=True)
     #: площадка приписки; ТС может быть общим для организации
-    site_id: Mapped[str | None] = mapped_column(
-        ForeignKey("site.id"), nullable=True, index=True
-    )
+    site_id: Mapped[str | None] = mapped_column(ForeignKey("site.id"), nullable=True, index=True)
     #: диагностическая карта действительна до; пусто — СВЕДЕНИЙ НЕТ
     inspection_due: Mapped[date | None] = mapped_column(Date, nullable=True)
     #: полис ОСАГО действителен до; пусто — СВЕДЕНИЙ НЕТ
@@ -130,9 +128,7 @@ class Vehicle(TenantBaseModel, SoftDeleteMixin):
     #: платформа не решает, требуется ли лицензия
     license_number: Mapped[str | None] = mapped_column(String(128))
     license_due: Mapped[date | None] = mapped_column(Date, nullable=True)
-    tachograph_installed: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False
-    )
+    tachograph_installed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     #: поверка блока СКЗИ тахографа до
     tachograph_due: Mapped[date | None] = mapped_column(Date, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text)
@@ -207,9 +203,7 @@ class Driver(TenantBaseModel, SoftDeleteMixin):
     __tablename__ = "road_driver"
 
     #: человек из ядра; ФИО и должность живут там и здесь не повторяются
-    person_id: Mapped[str] = mapped_column(
-        ForeignKey("person.id"), nullable=False, index=True
-    )
+    person_id: Mapped[str] = mapped_column(ForeignKey("person.id"), nullable=False, index=True)
     #: номер водительского удостоверения — уникален у арендатора: один и тот
     #: же номер у двух людей это ошибка ввода, а не два водителя
     license_number: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -312,19 +306,13 @@ class Waybill(TenantBaseModel, SoftDeleteMixin):
     vehicle_id: Mapped[str] = mapped_column(
         ForeignKey("road_vehicle.id"), nullable=False, index=True
     )
-    driver_id: Mapped[str] = mapped_column(
-        ForeignKey("road_driver.id"), nullable=False, index=True
-    )
+    driver_id: Mapped[str] = mapped_column(ForeignKey("road_driver.id"), nullable=False, index=True)
     #: дата выдачи — по ней лист попадает в журнал за период
     issued_on: Mapped[date] = mapped_column(Date, nullable=False)
     #: выезд и возвращение; пусто — сведений нет. Время в рейсе СЧИТАЕТСЯ ПРИ
     #: ЧТЕНИИ из этой пары и числом не хранится
-    departure_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    return_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    departure_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    return_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     #: три отметки контроля; по умолчанию «сведения не внесены» — свежий лист
     #: не считается ни пройденным, ни проваленным
     pre_trip_medical: Mapped[str] = mapped_column(
@@ -435,9 +423,7 @@ class RoadAccident(TenantBaseModel, SoftDeleteMixin):
     __tablename__ = "road_accident"
 
     #: когда; будущее отклоняется — ДТП это свершившийся факт
-    occurred_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     #: где — СВОБОДНАЯ СТРОКА, а не ссылка на площадку: ДТП происходит на
     #: дороге, и «45 км трассы М-4» площадкой арендатора не является
     place: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -454,9 +440,7 @@ class RoadAccident(TenantBaseModel, SoftDeleteMixin):
     #: числа, а не «тяжесть»: тяжесть считается при чтении
     injured_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     fatalities_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    fault: Mapped[str] = mapped_column(
-        String(24), nullable=False, default="not_established"
-    )
+    fault: Mapped[str] = mapped_column(String(24), nullable=False, default="not_established")
     #: реквизиты материала ГИБДД — строка, потому что форма их номеров
     #: платформе неизвестна и словарём не закрывается
     gibdd_reference: Mapped[str | None] = mapped_column(String(128))
@@ -532,9 +516,7 @@ class TrafficViolation(TenantBaseModel, SoftDeleteMixin):
     driver_id: Mapped[str | None] = mapped_column(
         ForeignKey("road_driver.id"), nullable=True, index=True
     )
-    occurred_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     source: Mapped[str] = mapped_column(String(16), nullable=False, default="camera")
     #: статья КоАП свободной строкой: словарь отстанет от поправок
     article: Mapped[str | None] = mapped_column(String(64))
@@ -549,6 +531,4 @@ class TrafficViolation(TenantBaseModel, SoftDeleteMixin):
     vehicle: Mapped[Vehicle] = relationship(backref="violations")
     driver: Mapped[Driver | None] = relationship(backref="violations")
 
-    __table_args__ = (
-        Index("ix_violation_tenant_occurred", "tenant_id", "occurred_at"),
-    )
+    __table_args__ = (Index("ix_violation_tenant_occurred", "tenant_id", "occurred_at"),)

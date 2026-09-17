@@ -43,7 +43,7 @@ PYTHONPATH=backend python scripts/ci/run_dependency_audit.py
 образ, требует Docker и в этот скрипт не входит — он запускается отдельно.
 
 **Ближайшая работа (сроки исключений истекают 30.09.2026):** пять мажорных
-подъёмов инструментов разработки — `pytest` 9, `black` 26, `vitest` 4, `vite` 8,
+подъёмов инструментов разработки — `pytest` 9, `vitest` 4, `vite` 8, (`black` 26 снят с повестки: пакет убран, срез-218)
 цепочка `eslint` 10. Каждый меняет поведение сборки или формат кода, поэтому
 каждый — отдельный срез с полным прогоном.
 
@@ -54,7 +54,7 @@ PYTHONPATH=backend python scripts/ci/run_dependency_audit.py
   вычищена подъёмом `python-multipart` 0.0.31 / `python-dotenv` 1.2.2 /
   `click` 8.3.3 (+`typer` 0.27.0 — typer<0.16 ломается на click>=8.2); осознанный
   остаток принят записями `tool: pip-audit` в `.github/security-exceptions.yml`
-  (ecdsa — апстрим-фикса нет; pytest 9 и black 26 — dev-only мажоры отдельными
+  (ecdsa — апстрим-фикса нет; pytest 9 — dev-only мажор отдельным PR; black убран вовсе (срез-218)
   PR; блок starlette ×7 СНЯТ 2026-07-31 подъёмом fastapi 0.141.1 /
   starlette 1.3.1). Записи имеют срок
   `expires_on`, просрочку валит `check_security_exceptions.py`; в команду
@@ -107,15 +107,16 @@ PYTHONPATH=backend python scripts/ci/run_dependency_audit.py
 2. ~~Отдельной задачей — `fastapi`/`starlette` до версий без advisories~~ —
    **сделано 2026-07-31**: fastapi 0.141.1 + starlette 1.3.1 (+schemathesis
    4.10.2), полный прогон набора и db-гейта. Остаются (отдельными PR): `pytest` 9.x
-   (тянет совместимость pytest-asyncio/cov/timeout/xdist) и `black` 26.x
-   (меняет стиль — потребует переформатирования под `make lint`).
+   (тянет совместимость pytest-asyncio/cov/timeout/xdist). `black` 26.x не
+   понадобился: срез-218 убрал black — он не стоял ни в одном гейте, а
+   `black --check` был красным на 170 файлах; форматтер один — `ruff format`.
 3. ~~Для остатка — записи в `.github/security-exceptions.yml`~~ — **сделано**:
    11 записей `tool: pip-audit` со сроками; в CLI попадают через
    `scripts/ci/render_pip_audit_ignores.py` (аналог `render_trivyignore.py`).
 4. Убрать `continue-on-error`: у `pip-audit` — **сделано** (шаг «pip-audit gate»
    в `ci.yml`); у `npm audit` — **сделано 2026-07-31** (шаг «npm audit gate» +
    `check_npm_audit.py`). Весь план выполнен; остаток долга — только мажорные
-   бампы из п. 2 (pytest 9, black 26, vite 8, vitest 4, eslint-цепочка;
+   бампы из п. 2 (pytest 9, vite 8, vitest 4, eslint-цепочка; black убран;
    fastapi/starlette закрыт 2026-07-31), каждый снимает свои записи из
    security-exceptions.yml.
 

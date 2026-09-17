@@ -47,9 +47,7 @@ _API = "/api/v1/fire-safety"
 
 async def _grant(sessionmaker, code: str = "fire_safety", on: bool = True) -> None:
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         feature = (
             await session.execute(select(Feature).where(Feature.code == code))
         ).scalar_one_or_none()
@@ -360,13 +358,9 @@ class TestСловариТренировокНаФронте:
     @staticmethod
     def _front_map(name: str) -> dict[str, str]:
         text = _FRONTEND_FIRE_API.read_text(encoding="utf-8")
-        block = re.search(
-            rf"{name}:\s*Record<[^>]+>\s*=\s*\{{(.*?)\n\}}", text, re.S
-        )
+        block = re.search(rf"{name}:\s*Record<[^>]+>\s*=\s*\{{(.*?)\n\}}", text, re.S)
         assert block is not None, f"не нашёлся map {name}"
-        pairs = re.findall(
-            r'([a-z_]+):\s*\n?\s*"([^"]+)"', block.group(1), re.M
-        )
+        pairs = re.findall(r'([a-z_]+):\s*\n?\s*"([^"]+)"', block.group(1), re.M)
         return dict(pairs)
 
     def test_виды_тренировок_на_фронте_совпадают_с_бэкендом(self) -> None:
@@ -375,7 +369,4 @@ class TestСловариТренировокНаФронте:
 
     def test_результаты_на_фронте_совпадают_с_бэкендом(self) -> None:
         front = self._front_map("FIRE_DRILL_OUTCOME_TITLES")
-        assert front == FIRE_DRILL_OUTCOMES, sorted(
-            front.items() ^ FIRE_DRILL_OUTCOMES.items()
-        )
-
+        assert front == FIRE_DRILL_OUTCOMES, sorted(front.items() ^ FIRE_DRILL_OUTCOMES.items())

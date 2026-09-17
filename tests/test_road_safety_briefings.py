@@ -81,9 +81,7 @@ ROAD_TYPES = {
 
 async def _grant(sessionmaker, code: str = "road_safety", on: bool = True) -> None:
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         feature = (
             await session.execute(select(Feature).where(Feature.code == code))
         ).scalar_one_or_none()
@@ -100,9 +98,7 @@ async def _grant(sessionmaker, code: str = "road_safety", on: bool = True) -> No
             )
         ).scalar_one_or_none()
         if grant is None:
-            session.add(
-                FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=on)
-            )
+            session.add(FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=on))
         else:
             grant.on = on
         await session.commit()
@@ -118,15 +114,9 @@ async def _briefing(
     """Запись заводится ЯДРОВЫМ механизмом: своего реестра у БДД нет."""
 
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         company = (
-            (
-                await session.execute(
-                    select(Company).where(Company.tenant_id == tenant.id)
-                )
-            )
+            (await session.execute(select(Company).where(Company.tenant_id == tenant.id)))
             .scalars()
             .first()
         )
@@ -210,10 +200,7 @@ class TestКопииСловаря:
         Подстраховки нет: ``labelFor`` печатает ключ как есть.
         """
 
-        page = (
-            _REPO_ROOT / "frontend" / "src" / "pages" / "employees"
-            / "EmployeeCardPage.tsx"
-        )
+        page = _REPO_ROOT / "frontend" / "src" / "pages" / "employees" / "EmployeeCardPage.tsx"
         block = re.search(
             r"BRIEFING_TYPE_LABELS:\s*Record<string,\s*string>\s*=\s*\{(.*?)\n\};",
             page.read_text(encoding="utf-8"),
@@ -289,12 +276,8 @@ class TestСводка:
         headers = await make_auth_headers()
         await _grant(sessionmaker)
         now = datetime.now(timezone.utc)
-        await _briefing(
-            sessionmaker, briefing_type="repeat", valid_until=now - timedelta(days=5)
-        )
-        await _briefing(
-            sessionmaker, briefing_type="fire_ptm", valid_until=now - timedelta(days=5)
-        )
+        await _briefing(sessionmaker, briefing_type="repeat", valid_until=now - timedelta(days=5))
+        await _briefing(sessionmaker, briefing_type="fire_ptm", valid_until=now - timedelta(days=5))
         body = (await async_client.get(f"{_API}/readiness", headers=headers)).json()
         assert body["road_briefings_total"] == 0
         assert body["road_briefings_overdue"] == 0
@@ -306,9 +289,7 @@ class TestСводка:
 
         headers = await make_auth_headers()
         await _grant(sessionmaker)
-        await _briefing(
-            sessionmaker, briefing_type="road_pre_trip", valid_until=None
-        )
+        await _briefing(sessionmaker, briefing_type="road_pre_trip", valid_until=None)
         body = (await async_client.get(f"{_API}/readiness", headers=headers)).json()
         assert body["road_briefings_total"] == 1
         assert body["road_briefings_overdue"] == 0

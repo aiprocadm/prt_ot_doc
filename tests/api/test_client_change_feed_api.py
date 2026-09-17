@@ -37,9 +37,7 @@ async def _tenant_id(slug: str = "test") -> str:
     async with AsyncSessionLocal(
         tenant="public", include_public=False, create_schema=False, rls_bypass=True
     ) as session:
-        return (
-            await session.execute(select(Tenant.id).where(Tenant.slug == slug))
-        ).scalar_one()
+        return (await session.execute(select(Tenant.id).where(Tenant.slug == slug))).scalar_one()
 
 
 async def _client(tenant_id: str, name: str = "ООО Ромашка") -> str:
@@ -76,9 +74,7 @@ async def test_изменение_записывается_с_подсказка
     mcid = await _client(await _tenant_id())
     headers = await make_auth_headers(RoleEnum.ADMIN)
 
-    response = await async_client.post(
-        f"{BASE}/{mcid}/changes", json=_change(), headers=headers
-    )
+    response = await async_client.post(f"{BASE}/{mcid}/changes", json=_change(), headers=headers)
 
     assert response.status_code == 201, response.text
     body = response.json()
@@ -88,9 +84,7 @@ async def test_изменение_записывается_с_подсказка
 
 
 @pytest.mark.anyio
-async def test_запись_ничего_не_создаёт_сама(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_запись_ничего_не_создаёт_сама(async_client: AsyncClient, make_auth_headers) -> None:
     """ТЗ говорит «предложить/сделать», но начинать с «сделать» нельзя.
 
     Одна загрузка штатки на сто человек породила бы сотни задач, разгребать
@@ -108,16 +102,12 @@ async def test_запись_ничего_не_создаёт_сама(
     async with AsyncSessionLocal(
         tenant="public", include_public=False, create_schema=False, rls_bypass=True
     ) as session:
-        tasks = (
-            await session.execute(select(Task).where(Task.tenant_id == tenant_id))
-        ).all()
+        tasks = (await session.execute(select(Task).where(Task.tenant_id == tenant_id))).all()
     assert tasks == []
 
 
 @pytest.mark.anyio
-async def test_лента_показывает_свежие_сверху(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_лента_показывает_свежие_сверху(async_client: AsyncClient, make_auth_headers) -> None:
     mcid = await _client(await _tenant_id())
     headers = await make_auth_headers(RoleEnum.ADMIN)
     await async_client.post(
@@ -168,9 +158,7 @@ async def test_пустая_лента_объясняется_словами(
 
 
 @pytest.mark.anyio
-async def test_разбор_фиксирует_кто_и_когда(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_разбор_фиксирует_кто_и_когда(async_client: AsyncClient, make_auth_headers) -> None:
     tenant_id = await _tenant_id()
     mcid = await _client(tenant_id)
     headers = await make_auth_headers(RoleEnum.ADMIN)
@@ -265,9 +253,7 @@ async def test_счётчик_внимания_не_зависит_от_филь
 
 
 @pytest.mark.anyio
-async def test_чужой_клиент_недоступен(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_чужой_клиент_недоступен(async_client: AsyncClient, make_auth_headers) -> None:
     """Та же граница, что у остального кабинета аутсорсера."""
 
     other_tenant = await _tenant_id("acme")

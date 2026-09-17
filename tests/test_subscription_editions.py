@@ -85,8 +85,7 @@ class TestДвойникиОбъясняются:
                 continue
             explained = [item for item in shared if item.beyond_modules.strip()]
             assert len(explained) >= len(shared) - 1, (
-                f"тариф {plan_code}: редакций {len(shared)}, "
-                f"объяснена только {len(explained)}"
+                f"тариф {plan_code}: редакций {len(shared)}, " f"объяснена только {len(explained)}"
             )
 
     def test_enterprise_holding_объясняет_отличие_условиями(self) -> None:

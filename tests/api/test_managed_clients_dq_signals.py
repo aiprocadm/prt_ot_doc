@@ -58,9 +58,7 @@ async def served_client(sessionmaker, data_factory):
 
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
-        company = await data_factory.create_company(
-            tenant=tenant, name="АКМЕ", session=session
-        )
+        company = await data_factory.create_company(tenant=tenant, name="АКМЕ", session=session)
         person = await data_factory.create_person(
             tenant=tenant,
             company=company,
@@ -165,7 +163,12 @@ class TestDataQualityFeedsTheChangeLog:
         assert len(await _feed(tenant.id)) == 1
 
     async def test_свои_сотрудники_в_ленту_не_идут(
-        self, async_client: AsyncClient, make_auth_headers, served_client, data_factory, sessionmaker
+        self,
+        async_client: AsyncClient,
+        make_auth_headers,
+        served_client,
+        data_factory,
+        sessionmaker,
     ) -> None:
         """Компания без карточки клиента — не клиент: её просрочки остаются
         в отчёте качества данных и честно названы в итоге."""
@@ -221,7 +224,12 @@ class TestDataQualityFeedsTheChangeLog:
         assert outcome["summary"] == "Просрочек не найдено"
 
     async def test_слагаемые_итога_сходятся(
-        self, async_client: AsyncClient, make_auth_headers, served_client, data_factory, sessionmaker
+        self,
+        async_client: AsyncClient,
+        make_auth_headers,
+        served_client,
+        data_factory,
+        sessionmaker,
     ) -> None:
         tenant, _, person, _ = served_client
         await _add_expired_exam(tenant.id, person.id, EXPIRED)

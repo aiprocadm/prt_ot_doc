@@ -44,11 +44,7 @@ _API = "/api/v1/industrial-safety"
 
 
 _FRONTEND_OPO_API = (
-    Path(__file__).resolve().parents[1]
-    / "frontend"
-    / "src"
-    / "api"
-    / "industrialSafety.ts"
+    Path(__file__).resolve().parents[1] / "frontend" / "src" / "api" / "industrialSafety.ts"
 )
 
 
@@ -63,9 +59,7 @@ def _front_map(name: str) -> dict[str, str]:
 
 async def _grant(sessionmaker, code: str = "industrial_safety", on: bool = True) -> None:
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         feature = (
             await session.execute(select(Feature).where(Feature.code == code))
         ).scalar_one_or_none()
@@ -364,11 +358,8 @@ class TestСловариОпоНаФронте:
 
     def test_классы_опасности_на_фронте_совпадают_с_бэкендом(self) -> None:
         front = _front_map("OPO_HAZARD_CLASS_TITLES")
-        assert front == OPO_HAZARD_CLASSES, sorted(
-            front.items() ^ OPO_HAZARD_CLASSES.items()
-        )
+        assert front == OPO_HAZARD_CLASSES, sorted(front.items() ^ OPO_HAZARD_CLASSES.items())
 
     def test_состояния_объекта_на_фронте_совпадают_с_бэкендом(self) -> None:
         front = _front_map("OPO_STATUS_TITLES")
         assert front == OPO_STATUSES, sorted(front.items() ^ OPO_STATUSES.items())
-

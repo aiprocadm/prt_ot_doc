@@ -26,7 +26,9 @@ async def _set_grant(sessionmaker, slug: str, code: str, *, on: bool) -> None:
     """Выдать или отобрать модуль напрямую — как это делает консоль платформы."""
 
     async with sessionmaker() as session:
-        tenant_id = (await session.execute(select(Tenant.id).where(Tenant.slug == slug))).scalar_one()
+        tenant_id = (
+            await session.execute(select(Tenant.id).where(Tenant.slug == slug))
+        ).scalar_one()
         feature = (
             await session.execute(select(Feature).where(Feature.code == code))
         ).scalar_one_or_none()
@@ -45,9 +47,7 @@ async def _set_grant(sessionmaker, slug: str, code: str, *, on: bool) -> None:
         if row is None:
             # Обновить-или-вставить: вторая строка выдачи ломает уникальность
             # и делает ответ гейта неопределённым.
-            session.add(
-                FeatureEnablement(tenant_id=str(tenant_id), feature_id=feature.id, on=on)
-            )
+            session.add(FeatureEnablement(tenant_id=str(tenant_id), feature_id=feature.id, on=on))
         else:
             row.on = on
             row.expires_at = None
@@ -108,9 +108,7 @@ async def test_answer_follows_the_real_grant_not_the_billing_plan(
 
 
 @pytest.mark.anyio
-async def test_plain_user_gets_the_list_too(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_plain_user_gets_the_list_too(async_client: AsyncClient, make_auth_headers) -> None:
     """Меню рисуют всем, а не только владельцу.
 
     Прежний источник признаков был закрыт ролью owner/admin: у рядового

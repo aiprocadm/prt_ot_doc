@@ -74,9 +74,7 @@ async def _events(tenant_id: str) -> list[Outbox]:
     async with await _trusted() as session:
         rows = (
             await session.execute(
-                select(Outbox).where(
-                    Outbox.tenant_id == tenant_id, Outbox.event_type == EVENT
-                )
+                select(Outbox).where(Outbox.tenant_id == tenant_id, Outbox.event_type == EVENT)
             )
         ).scalars()
         return list(rows)
@@ -139,7 +137,12 @@ class TestChangeBecomesEvent:
         assert events[0].payload["source"] == "data_quality"
 
     async def test_правило_конструктора_реально_срабатывает(
-        self, async_client: AsyncClient, make_auth_headers, served_client, sessionmaker, data_factory
+        self,
+        async_client: AsyncClient,
+        make_auth_headers,
+        served_client,
+        sessionmaker,
+        data_factory,
     ) -> None:
         """Смысл среза: «если у клиента X → сделать Y» строится в готовом
         конструкторе. Правило на событие ленты обязано сработать, а не
@@ -150,17 +153,13 @@ class TestChangeBecomesEvent:
         tenant, _, mcid = served_client
         async with sessionmaker() as session:
             feature = (
-                await session.execute(
-                    select(Feature).where(Feature.code == "rules_engine")
-                )
+                await session.execute(select(Feature).where(Feature.code == "rules_engine"))
             ).scalar_one_or_none()
             if feature is None:
                 feature = Feature(code="rules_engine", title="Движок правил")
                 session.add(feature)
                 await session.flush()
-            session.add(
-                FeatureEnablement(tenant_id=str(tenant.id), feature_id=feature.id, on=True)
-            )
+            session.add(FeatureEnablement(tenant_id=str(tenant.id), feature_id=feature.id, on=True))
             session.add(
                 AutomationRule(
                     tenant_id=str(tenant.id),
@@ -168,9 +167,7 @@ class TestChangeBecomesEvent:
                     event_type=EVENT,
                     conditions_json={
                         "match": "all",
-                        "conditions": [
-                            {"field": "kind", "op": "eq", "value": "employee_hired"}
-                        ],
+                        "conditions": [{"field": "kind", "op": "eq", "value": "employee_hired"}],
                     },
                     actions_json=[{"type": "webhook"}],
                 )

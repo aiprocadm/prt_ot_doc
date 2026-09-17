@@ -48,9 +48,7 @@ def upgrade() -> None:
             index=True,
         ),
         sa.Column("version", sa.Integer(), nullable=False, server_default="1"),
-        sa.Column(
-            "site_id", sa.String(length=36), sa.ForeignKey("site.id"), nullable=False
-        ),
+        sa.Column("site_id", sa.String(length=36), sa.ForeignKey("site.id"), nullable=False),
         sa.Column("category", sa.String(length=16), nullable=False),
         sa.Column("decision_number", sa.String(length=128), nullable=True),
         sa.Column("decision_date", sa.Date(), nullable=True),
@@ -77,9 +75,7 @@ def upgrade() -> None:
         sa.Column("kind", sa.String(length=32), nullable=False),
         sa.Column("title", sa.String(length=255), nullable=False),
         sa.Column("number", sa.String(length=64), nullable=True),
-        sa.Column(
-            "site_id", sa.String(length=36), sa.ForeignKey("site.id"), nullable=True
-        ),
+        sa.Column("site_id", sa.String(length=36), sa.ForeignKey("site.id"), nullable=True),
         sa.Column("approved_on", sa.Date(), nullable=True),
         sa.Column("review_due", sa.Date(), nullable=True),
         sa.Column("responsible", sa.String(length=255), nullable=True),
@@ -95,9 +91,7 @@ def upgrade() -> None:
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
     )
     op.create_index("ix_cd_document_site_id", "cd_document", ["site_id"])
-    op.create_index(
-        "ix_cd_document_tenant_review", "cd_document", ["tenant_id", "review_due"]
-    )
+    op.create_index("ix_cd_document_tenant_review", "cd_document", ["tenant_id", "review_due"])
 
 
 def downgrade() -> None:

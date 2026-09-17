@@ -15,6 +15,7 @@ Pure-core design: :func:`evaluate` takes plain dicts (coverage.json + baseline)
 and returns a structured verdict with zero I/O, so the gate logic is unit-tested
 deterministically without a real (CI-only) coverage run.
 """
+
 from __future__ import annotations
 
 import argparse

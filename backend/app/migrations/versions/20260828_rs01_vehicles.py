@@ -48,14 +48,10 @@ def upgrade() -> None:
         sa.Column("plate_number", sa.String(length=32), nullable=False),
         sa.Column("brand_model", sa.String(length=255), nullable=False),
         sa.Column("kind", sa.String(length=16), nullable=False),
-        sa.Column(
-            "status", sa.String(length=16), nullable=False, server_default="in_service"
-        ),
+        sa.Column("status", sa.String(length=16), nullable=False, server_default="in_service"),
         sa.Column("vin", sa.String(length=32), nullable=True),
         sa.Column("year_made", sa.Integer(), nullable=True),
-        sa.Column(
-            "site_id", sa.String(length=36), sa.ForeignKey("site.id"), nullable=True
-        ),
+        sa.Column("site_id", sa.String(length=36), sa.ForeignKey("site.id"), nullable=True),
         sa.Column("inspection_due", sa.Date(), nullable=True),
         sa.Column("insurance_due", sa.Date(), nullable=True),
         sa.Column("license_number", sa.String(length=128), nullable=True),

@@ -122,9 +122,7 @@ async def get_pack_scenario_fields(
                 name=field.name,
                 label=field.label,
                 required=field.required,
-                suggested=(
-                    suggestions[field.name].value if field.name in suggestions else None
-                ),
+                suggested=(suggestions[field.name].value if field.name in suggestions else None),
                 suggested_source=(
                     suggestions[field.name].source if field.name in suggestions else None
                 ),

@@ -65,9 +65,7 @@ class EnvironmentalFacility(TenantBaseModel, SoftDeleteMixin):
 
     __tablename__ = "nvos_facility"
 
-    site_id: Mapped[str | None] = mapped_column(
-        ForeignKey("site.id"), nullable=True, index=True
-    )
+    site_id: Mapped[str | None] = mapped_column(ForeignKey("site.id"), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     #: код объекта в государственном реестре объектов НВОС (формат
     #: 12-0177-001234-П) — без него объект не считается поставленным на учёт
@@ -139,14 +137,10 @@ class WastePassport(TenantBaseModel, SoftDeleteMixin):
     #: годовой лимит образования/размещения в тоннах — ИЗ ДОКУМЕНТА (НООЛР или
     #: декларации). Платформа лимит НЕ РАССЧИТЫВАЕТ: без внесённого значения
     #: никакого суждения о превышении быть не может.
-    annual_limit_tons: Mapped[Decimal | None] = mapped_column(
-        Numeric(14, 3), nullable=True
-    )
+    annual_limit_tons: Mapped[Decimal | None] = mapped_column(Numeric(14, 3), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text)
 
-    facility: Mapped[EnvironmentalFacility | None] = relationship(
-        backref="waste_passports"
-    )
+    facility: Mapped[EnvironmentalFacility | None] = relationship(backref="waste_passports")
 
     __table_args__ = (
         # Один код ФККО — один паспорт: два паспорта на один код это один вид
@@ -176,18 +170,14 @@ class WasteMovement(TenantBaseModel, SoftDeleteMixin):
     happened_on: Mapped[date] = mapped_column(Date, nullable=False)
     quantity_tons: Mapped[Decimal] = mapped_column(Numeric(14, 3), nullable=False)
     #: договор с оператором по обращению с отходами — ссылка на ядро
-    contract_id: Mapped[str | None] = mapped_column(
-        ForeignKey("contract.id"), nullable=True
-    )
+    contract_id: Mapped[str | None] = mapped_column(ForeignKey("contract.id"), nullable=True)
     #: контрагент строкой, когда договор в системе не заведён
     counterparty: Mapped[str | None] = mapped_column(String(255))
     notes: Mapped[str | None] = mapped_column(Text)
 
     passport: Mapped[WastePassport] = relationship(backref="movements")
 
-    __table_args__ = (
-        Index("ix_waste_movement_tenant_date", "tenant_id", "happened_on"),
-    )
+    __table_args__ = (Index("ix_waste_movement_tenant_date", "tenant_id", "happened_on"),)
 
 
 #: Типы стационарных источников выбросов (разд. 55.2 «инвентаризация»).
@@ -263,13 +253,9 @@ class EmissionNorm(TenantBaseModel, SoftDeleteMixin):
     #: закрывать его словарём в коде значило бы гарантированно отстать
     substance: Mapped[str] = mapped_column(String(255), nullable=False)
     #: разовый норматив, г/с
-    limit_grams_per_second: Mapped[Decimal | None] = mapped_column(
-        Numeric(14, 6), nullable=True
-    )
+    limit_grams_per_second: Mapped[Decimal | None] = mapped_column(Numeric(14, 6), nullable=True)
     #: валовый норматив, т/год
-    limit_tons_per_year: Mapped[Decimal | None] = mapped_column(
-        Numeric(14, 3), nullable=True
-    )
+    limit_tons_per_year: Mapped[Decimal | None] = mapped_column(Numeric(14, 3), nullable=True)
     permit_number: Mapped[str | None] = mapped_column(String(64))
     valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text)
@@ -277,9 +263,7 @@ class EmissionNorm(TenantBaseModel, SoftDeleteMixin):
     source: Mapped[EmissionSource] = relationship(backref="norms")
 
     __table_args__ = (
-        UniqueConstraint(
-            "tenant_id", "source_id", "substance", name="uq_emission_norm_substance"
-        ),
+        UniqueConstraint("tenant_id", "source_id", "substance", name="uq_emission_norm_substance"),
         Index("ix_emission_norm_tenant_valid", "tenant_id", "valid_until"),
     )
 
@@ -373,21 +357,15 @@ class EmissionMeasurement(TenantBaseModel, SoftDeleteMixin):
     substance: Mapped[str] = mapped_column(String(255), nullable=False)
     measured_on: Mapped[date] = mapped_column(Date, nullable=False)
     #: результат замера, приведённый к г/с — как в протоколе лаборатории
-    value_grams_per_second: Mapped[Decimal] = mapped_column(
-        Numeric(14, 6), nullable=False
-    )
+    value_grams_per_second: Mapped[Decimal] = mapped_column(Numeric(14, 6), nullable=False)
     protocol_number: Mapped[str | None] = mapped_column(String(64))
     laboratory: Mapped[str | None] = mapped_column(String(255))
     notes: Mapped[str | None] = mapped_column(Text)
 
     source: Mapped[EmissionSource] = relationship(backref="measurements")
-    plan_item: Mapped[EmissionMonitoringPlanItem | None] = relationship(
-        backref="measurements"
-    )
+    plan_item: Mapped[EmissionMonitoringPlanItem | None] = relationship(backref="measurements")
 
-    __table_args__ = (
-        Index("ix_emission_measurement_tenant_date", "tenant_id", "measured_on"),
-    )
+    __table_args__ = (Index("ix_emission_measurement_tenant_date", "tenant_id", "measured_on"),)
 
 
 #: Типы точек водопользования — ЗАКРЫТЫЙ словарь. Забор и сброс лежат в одном
@@ -461,18 +439,14 @@ class WaterUsagePoint(TenantBaseModel, SoftDeleteMixin):
     permit_number: Mapped[str | None] = mapped_column(String(64))
     permit_valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
     #: годовой лимит из разрешения, м³ — ВНЕСЁННЫЙ, платформа его не считает
-    annual_limit_cubic_meters: Mapped[Decimal | None] = mapped_column(
-        Numeric(16, 3), nullable=True
-    )
+    annual_limit_cubic_meters: Mapped[Decimal | None] = mapped_column(Numeric(16, 3), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text)
 
     facility: Mapped[EnvironmentalFacility] = relationship(backref="water_points")
 
     __table_args__ = (
         # Номер уникален В ПРЕДЕЛАХ ОБЪЕКТА — как у источников выбросов.
-        UniqueConstraint(
-            "tenant_id", "facility_id", "point_number", name="uq_water_point_number"
-        ),
+        UniqueConstraint("tenant_id", "facility_id", "point_number", name="uq_water_point_number"),
         Index("ix_water_point_tenant_permit", "tenant_id", "permit_valid_until"),
     )
 
@@ -555,9 +529,7 @@ class NvosFeeRate(TenantBaseModel, SoftDeleteMixin):
     notes: Mapped[str | None] = mapped_column(Text)
 
     __table_args__ = (
-        UniqueConstraint(
-            "tenant_id", "year", "impact_kind", "subject", name="uq_fee_rate_subject"
-        ),
+        UniqueConstraint("tenant_id", "year", "impact_kind", "subject", name="uq_fee_rate_subject"),
         Index("ix_fee_rate_tenant_year", "tenant_id", "year"),
     )
 

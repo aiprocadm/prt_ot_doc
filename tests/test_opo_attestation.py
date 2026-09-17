@@ -59,14 +59,14 @@ def _front_map(name: str) -> dict[str, str]:
     assert block is not None, f"не нашёлся map {name}"
     pairs = re.findall(r'"?([A-Za-zА-Яа-я.0-9_]+)"?:\s*\n?\s*"([^"]+)"', block.group(1))
     return dict(pairs)
+
+
 _CORE = "/api/v1/attestations"
 
 
 async def _grant(sessionmaker, code: str = "industrial_safety", on: bool = True) -> None:
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         feature = (
             await session.execute(select(Feature).where(Feature.code == code))
         ).scalar_one_or_none()
@@ -93,13 +93,9 @@ async def _person(sessionmaker, last_name: str = "Петров", first_name: str
     """Человек с компанией: ``Person.company_id`` — NOT NULL."""
 
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         company = (
-            await session.execute(
-                select(Company).where(Company.tenant_id == tenant.id).limit(1)
-            )
+            await session.execute(select(Company).where(Company.tenant_id == tenant.id).limit(1))
         ).scalar_one_or_none()
         if company is None:
             company = Company(tenant_id=str(tenant.id), name="ООО «Тест»")
@@ -182,9 +178,7 @@ class TestОбластьАттестации:
         assert response.json()["area_code"] is None
         assert response.json()["area_label"] is None
 
-    async def test_область_правится(
-        self, async_client, make_auth_headers, sessionmaker
-    ) -> None:
+    async def test_область_правится(self, async_client, make_auth_headers, sessionmaker) -> None:
         headers = await make_auth_headers()
         person_id = await _person(sessionmaker, "Сидоров", "Сидор")
         created = await async_client.post(
@@ -282,9 +276,7 @@ class TestВидимостьВКонтуреПромБеза:
             headers=headers,
         )
         listed = await async_client.get(f"{_API}/attestations", headers=headers)
-        row = next(
-            r for r in listed.json()["items"] if r["person_name"] == "Просроченный Работник"
-        )
+        row = next(r for r in listed.json()["items"] if r["person_name"] == "Просроченный Работник")
         assert row["validity_status"] == "overdue"
         assert row["validity_status_label"] == "Просрочена"
 
@@ -422,4 +414,3 @@ class TestСловариАттестацииНаФронте:
         assert set(front) == {member.value for member in AttestationStatus}, sorted(
             set(front) ^ {member.value for member in AttestationStatus}
         )
-

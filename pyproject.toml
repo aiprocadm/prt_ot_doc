@@ -43,10 +43,6 @@ ignore = ["E501"]
 # будущий API, импортов для него ещё нет — F821 там ожидаем.
 "backend/tests/test_operational_dashboard.py" = ["F821", "F841"]
 
-[tool.black]
-line-length = 100
-target-version = ["py312"]
-
 [tool.mypy]
 python_version = "3.12"
 # pydantic-плагин: без него mypy не понимает @computed_field поверх @property.

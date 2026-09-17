@@ -46,7 +46,6 @@ async def test_active_suspension_blocks_admission(sessionmaker, data_factory):
 
 @pytest.mark.asyncio
 async def test_norm_aware_blocks_when_required_exam_missing(sessionmaker, data_factory):
-
     from app.models.models import MedicalExamKind, MedicalNorm, Position
 
     async with sessionmaker() as session:

@@ -54,18 +54,14 @@ def _front_map(name: str) -> dict[str, str]:
     """Читает map подписей из ``frontend/src/api/ecology.ts``."""
 
     text = _FRONTEND_ECOLOGY_API.read_text(encoding="utf-8")
-    block = re.search(
-        rf"{name}:\s*Record<string,\s*string>\s*=\s*\{{(.*?)\}}", text, re.S
-    )
+    block = re.search(rf"{name}:\s*Record<string,\s*string>\s*=\s*\{{(.*?)\}}", text, re.S)
     assert block is not None, f"не нашёлся map {name}"
     return dict(re.findall(r'^\s*([A-Za-z_]+):\s*"([^"]+)"', block.group(1), re.M))
 
 
 async def _grant(sessionmaker, code: str = "ecology", on: bool = True) -> None:
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         feature = (
             await session.execute(select(Feature).where(Feature.code == code))
         ).scalar_one_or_none()
@@ -361,4 +357,3 @@ class TestСловариНаФронте:
     def test_состояния_на_фронте_совпадают_с_бэкендом(self) -> None:
         front = _front_map("NVOS_STATUS_TITLES")
         assert front == NVOS_STATUSES, sorted(front.items() ^ NVOS_STATUSES.items())
-

@@ -87,9 +87,7 @@ class DqSignalsOutcome:
 def _expired_on(issue: DataQualityIssue) -> date | None:
     """Дата истечения из находки; без неё факт не разобрать."""
 
-    raw: Any = issue.additional_info.get("valid_until") or issue.additional_info.get(
-        "expires_at"
-    )
+    raw: Any = issue.additional_info.get("valid_until") or issue.additional_info.get("expires_at")
     if isinstance(raw, date):
         return raw
     text = str(raw or "").strip()
@@ -117,9 +115,7 @@ async def _person_map(
     rows = (
         (
             await session.execute(
-                select(Person).where(
-                    Person.tenant_id == tenant_id, Person.id.in_(list(person_ids))
-                )
+                select(Person).where(Person.tenant_id == tenant_id, Person.id.in_(list(person_ids)))
             )
         )
         .scalars()
@@ -147,9 +143,7 @@ async def _clients_by_company(session: AsyncSession, tenant_id: str) -> dict[str
     return {str(company_id): str(mcid) for company_id, mcid in rows if company_id}
 
 
-async def _existing_refs(
-    session: AsyncSession, tenant_id: str, refs: list[str]
-) -> set[str]:
+async def _existing_refs(session: AsyncSession, tenant_id: str, refs: list[str]) -> set[str]:
     if not refs:
         return set()
     rows = (

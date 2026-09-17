@@ -141,9 +141,7 @@ def enforce_signup_attempts(request: Request | None, *, settings=None) -> None:
     ip = _client_ip(request)
     if not guard.limiter.hit(guard.signup, _SIGNUP_PREFIX, ip):
         logger.warning("signup.anti_abuse.rate_limited", extra={"ip": ip})
-        raise _too_many(
-            "SIGNUP_RATE_LIMITED", "Too many registration attempts from this address"
-        )
+        raise _too_many("SIGNUP_RATE_LIMITED", "Too many registration attempts from this address")
 
 
 def assert_not_locked_out(request: Request | None, *, settings=None) -> None:

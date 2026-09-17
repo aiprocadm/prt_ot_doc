@@ -264,9 +264,7 @@ async def read_pwa_manifest(
     )
 
 
-def _require_brand_editor(
-    credentials: HTTPAuthorizationCredentials | None, tenant: Tenant
-) -> None:
+def _require_brand_editor(credentials: HTTPAuthorizationCredentials | None, tenant: Tenant) -> None:
     """Правка бренда — владельцу платформы и партнёру, каждому только своего.
 
     Проверка переиспользует область флота (BIZ-52 срез-2): кто имеет кабинет,
@@ -316,9 +314,7 @@ async def update_own_branding(
 
     _require_brand_editor(credentials, tenant)
     row = (
-        await session.execute(
-            select(TenantBranding).where(TenantBranding.tenant_id == tenant.id)
-        )
+        await session.execute(select(TenantBranding).where(TenantBranding.tenant_id == tenant.id))
     ).scalar_one_or_none()
     if row is None:
         # update-or-insert, а не add: вторая строка сделала бы ответ ручки
@@ -335,9 +331,7 @@ async def update_own_branding(
 
 async def _own_row(session: AsyncSession, tenant_id: str) -> TenantBranding | None:
     return (
-        await session.execute(
-            select(TenantBranding).where(TenantBranding.tenant_id == tenant_id)
-        )
+        await session.execute(select(TenantBranding).where(TenantBranding.tenant_id == tenant_id))
     ).scalar_one_or_none()
 
 

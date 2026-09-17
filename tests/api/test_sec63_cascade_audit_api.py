@@ -87,9 +87,7 @@ async def _cascade_audit_rows() -> list[AuditLog]:
 
 
 @pytest.mark.anyio
-async def test_предупреждение_до_нажатия(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_предупреждение_до_нажатия(async_client: AsyncClient, make_auth_headers) -> None:
     """Оператор должен видеть последствие ДО приостановки, а не по жалобам."""
 
     ids = await _shape_tree()
@@ -106,9 +104,7 @@ async def test_предупреждение_до_нажатия(
 
 
 @pytest.mark.anyio
-async def test_предпросмотр_ничего_не_меняет(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_предпросмотр_ничего_не_меняет(async_client: AsyncClient, make_auth_headers) -> None:
     ids = await _shape_tree()
 
     await async_client.get(
@@ -118,9 +114,7 @@ async def test_предпросмотр_ничего_не_меняет(
     async with AsyncSessionLocal(
         tenant="public", include_public=False, create_schema=False, rls_bypass=True
     ) as session:
-        partner = (
-            await session.execute(select(Tenant).where(Tenant.slug == "beta"))
-        ).scalar_one()
+        partner = (await session.execute(select(Tenant).where(Tenant.slug == "beta"))).scalar_one()
         assert partner.is_active is True
     assert await _cascade_audit_rows() == []
 
@@ -144,9 +138,7 @@ async def test_приостановка_возвращает_кого_задел
 
 
 @pytest.mark.anyio
-async def test_каскад_попадает_в_аудит(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_каскад_попадает_в_аудит(async_client: AsyncClient, make_auth_headers) -> None:
     """Без следа нельзя доказать, кого задело и что данные не тронуты."""
 
     ids = await _shape_tree()
@@ -187,9 +179,7 @@ async def test_возобновление_тоже_оставляет_след(
 
 
 @pytest.mark.anyio
-async def test_у_обычного_клиента_каскада_нет(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_у_обычного_клиента_каскада_нет(async_client: AsyncClient, make_auth_headers) -> None:
     """Приостановка клиента не пишет каскадную запись: каскада у него нет."""
 
     ids = await _shape_tree()

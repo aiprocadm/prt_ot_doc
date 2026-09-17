@@ -90,22 +90,14 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
-        sa.UniqueConstraint(
-            "tenant_id", "formation_id", "person_id", name="uq_cd_member_person"
-        ),
+        sa.UniqueConstraint("tenant_id", "formation_id", "person_id", name="uq_cd_member_person"),
     )
-    op.create_index(
-        "ix_cd_formation_member_formation_id", "cd_formation_member", ["formation_id"]
-    )
-    op.create_index(
-        "ix_cd_formation_member_person_id", "cd_formation_member", ["person_id"]
-    )
+    op.create_index("ix_cd_formation_member_formation_id", "cd_formation_member", ["formation_id"])
+    op.create_index("ix_cd_formation_member_person_id", "cd_formation_member", ["person_id"])
 
 
 def downgrade() -> None:
     op.drop_index("ix_cd_formation_member_person_id", table_name="cd_formation_member")
-    op.drop_index(
-        "ix_cd_formation_member_formation_id", table_name="cd_formation_member"
-    )
+    op.drop_index("ix_cd_formation_member_formation_id", table_name="cd_formation_member")
     op.drop_table("cd_formation_member")
     op.drop_table("cd_formation")

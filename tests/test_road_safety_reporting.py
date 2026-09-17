@@ -156,9 +156,7 @@ class TestЧестныеУмолчания:
     def test_неназначенный_ответственный_назван_словами(self) -> None:
         """Документ с прочерком выглядит оформленным, хотя ответственного нет."""
 
-        context = enrich_context(
-            PACK_CODE_BDD_REPORTS, {"company": {"name": "Тест"}}, {}
-        )
+        context = enrich_context(PACK_CODE_BDD_REPORTS, {"company": {"name": "Тест"}}, {})
         assert context["data"]["bdd_responsible"] == "Ответственный не назначен"
         assert context["data"]["bdd_approved_by"] == "не утверждено"
 
@@ -173,6 +171,4 @@ class TestГраница:
         """
 
         keys = {f.name for f in questions_for(PACK_CODE_BDD_REPORTS)}
-        assert not any(
-            "autofill" in key or "auto_" in key or "computed" in key for key in keys
-        )
+        assert not any("autofill" in key or "auto_" in key or "computed" in key for key in keys)

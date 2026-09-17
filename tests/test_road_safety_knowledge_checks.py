@@ -74,9 +74,7 @@ _CORE = "/api/v1/attestations"
 
 async def _grant(sessionmaker, code: str, on: bool = True) -> None:
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         feature = (
             await session.execute(select(Feature).where(Feature.code == code))
         ).scalar_one_or_none()
@@ -93,9 +91,7 @@ async def _grant(sessionmaker, code: str, on: bool = True) -> None:
             )
         ).scalar_one_or_none()
         if grant is None:
-            session.add(
-                FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=on)
-            )
+            session.add(FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=on))
         else:
             grant.on = on
         await session.commit()
@@ -103,13 +99,9 @@ async def _grant(sessionmaker, code: str, on: bool = True) -> None:
 
 async def _person(sessionmaker, last_name: str = "Водителев") -> str:
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         company = (
-            await session.execute(
-                select(Company).where(Company.tenant_id == tenant.id).limit(1)
-            )
+            await session.execute(select(Company).where(Company.tenant_id == tenant.id).limit(1))
         ).scalar_one_or_none()
         if company is None:
             company = Company(tenant_id=str(tenant.id), name="ООО «Тест»")
@@ -341,9 +333,7 @@ class TestСводкаБДД:
         headers = await make_auth_headers()
         await _grant(sessionmaker, "road_safety")
         person_id = await _person(sessionmaker, last_name="Бессрочев")
-        await _attestation(
-            async_client, headers, person_id, area_code="ПДД", expires_at=None
-        )
+        await _attestation(async_client, headers, person_id, area_code="ПДД", expires_at=None)
         body = (await async_client.get(f"{_API}/readiness", headers=headers)).json()
         assert body["knowledge_checks_total"] == 1
         assert body["knowledge_checks_overdue"] == 0

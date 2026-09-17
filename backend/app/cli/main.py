@@ -83,7 +83,7 @@ async def _resolve_template(
 
 
 def _extract_payload(
-    data: dict[str, Any]
+    data: dict[str, Any],
 ) -> tuple[dict[str, Any], dict[str, str] | None, str | None, str | None, str | None]:
     context = data.get("context") if isinstance(data.get("context"), dict) else data
     replacements = data.get("replacements")

@@ -378,9 +378,7 @@ class BootstrapTenantService:
         # До этого он только клался в `settings` целым куском, который не читал
         # никто, — а отчёт при этом рапортовал «starter_pack created». Новый
         # клиент получал пустые справочники и уверенность, что они заполнены.
-        await self._apply_reference_data(
-            tenant_id=tenant_id, payload=payload, summary=summary
-        )
+        await self._apply_reference_data(tenant_id=tenant_id, payload=payload, summary=summary)
         summary.mark(entity="starter_pack", created=True)
 
     async def apply_config(
@@ -398,9 +396,7 @@ class BootstrapTenantService:
         """
 
         summary = BootstrapTenantSummary(tenant_slug=tenant_id, dry_run=False)
-        await self._apply_reference_data(
-            tenant_id=tenant_id, payload=payload, summary=summary
-        )
+        await self._apply_reference_data(tenant_id=tenant_id, payload=payload, summary=summary)
         await self.session.commit()
         return summary
 
@@ -454,9 +450,7 @@ class BootstrapTenantService:
         if created_any:
             await self.session.flush()
 
-    async def _seed_positions(
-        self, tenant_id: str, company_id: str, names: list[str]
-    ) -> bool:
+    async def _seed_positions(self, tenant_id: str, company_id: str, names: list[str]) -> bool:
         existing = {
             str(name).casefold()
             for name in (
@@ -469,9 +463,7 @@ class BootstrapTenantService:
         for name in names:
             if name.casefold() in existing:
                 continue
-            self.session.add(
-                Position(tenant_id=tenant_id, company_id=company_id, name=name)
-            )
+            self.session.add(Position(tenant_id=tenant_id, company_id=company_id, name=name))
             existing.add(name.casefold())
             created = True
         return created
@@ -499,9 +491,7 @@ class BootstrapTenantService:
         existing = {
             str(name).casefold()
             for name in (
-                await self.session.execute(
-                    select(model.name).where(model.tenant_id == tenant_id)
-                )
+                await self.session.execute(select(model.name).where(model.tenant_id == tenant_id))
             ).scalars()
         }
         rows: list[dict[str, Any]] = []

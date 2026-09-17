@@ -47,15 +47,9 @@ async def _hazards_of(slug: str) -> list[str]:
     async with AsyncSessionLocal(
         tenant="public", include_public=False, create_schema=False, rls_bypass=True
     ) as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == slug))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == slug))).scalar_one()
         rows = (
-            (
-                await session.execute(
-                    select(Hazard.name).where(Hazard.tenant_id == tenant.id)
-                )
-            )
+            (await session.execute(select(Hazard.name).where(Hazard.tenant_id == tenant.id)))
             .scalars()
             .all()
         )
@@ -66,15 +60,9 @@ async def _positions_of(slug: str) -> list[str]:
     async with AsyncSessionLocal(
         tenant="public", include_public=False, create_schema=False, rls_bypass=True
     ) as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == slug))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == slug))).scalar_one()
         rows = (
-            (
-                await session.execute(
-                    select(Position.name).where(Position.tenant_id == tenant.id)
-                )
-            )
+            (await session.execute(select(Position.name).where(Position.tenant_id == tenant.id)))
             .scalars()
             .all()
         )
@@ -82,9 +70,7 @@ async def _positions_of(slug: str) -> list[str]:
 
 
 @pytest.mark.anyio
-async def test_список_отраслей_отдаёт_сервер(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_список_отраслей_отдаёт_сервер(async_client: AsyncClient, make_auth_headers) -> None:
     """Зашитая копия списка на фронте разошлась бы при первой новой отрасли."""
 
     headers = await make_auth_headers(RoleEnum.ADMIN)
@@ -144,12 +130,8 @@ async def test_разные_отрасли_дают_разное_наполне�
     async_client: AsyncClient, make_auth_headers
 ) -> None:
     headers = await make_auth_headers(RoleEnum.ADMIN)
-    await async_client.post(
-        BASE, json=_payload("energoco", industry="energy"), headers=headers
-    )
-    await async_client.post(
-        BASE, json=_payload("transco", industry="transport"), headers=headers
-    )
+    await async_client.post(BASE, json=_payload("energoco", industry="energy"), headers=headers)
+    await async_client.post(BASE, json=_payload("transco", industry="transport"), headers=headers)
 
     energy = await _hazards_of("energoco")
     transport = await _hazards_of("transco")
@@ -160,9 +142,7 @@ async def test_разные_отрасли_дают_разное_наполне�
 
 
 @pytest.mark.anyio
-async def test_без_отрасли_прежнее_поведение(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_без_отрасли_прежнее_поведение(async_client: AsyncClient, make_auth_headers) -> None:
     """Клиенты, заведённые как раньше, получают тот же общий набор."""
 
     headers = await make_auth_headers(RoleEnum.ADMIN)

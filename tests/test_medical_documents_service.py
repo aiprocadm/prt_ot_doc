@@ -136,4 +136,3 @@ async def test_отпускник_и_отстранённый_в_докумен�
     assert "Уволен" not in surnames, named
     # Численность в «контингенте» считается тем же правилом: трое работающих.
     assert register[0]["headcount"] == 3, register
-
