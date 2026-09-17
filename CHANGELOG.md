@@ -1,5 +1,68 @@
 # CHANGELOG
 
+## 2026-09-17 (feat/tz-continue-222 — срез-222: мёртвые инструменты без исключений сняты — `isort`, `rollup`, `ts-node`, `tsconfig-paths`)
+
+### Зачем
+
+Срезы 218–221 закрыли очередь исключений 30.09, и каждый раз причина была
+одна: инструмент, которого никто не звал, сидел в манифесте и тянул
+уязвимости (`black`, `schemathesis`, `eslint-plugin-import`). Handoff среза-221
+назвал оставшихся той же породы: `isort`, `rollup`, `ts-node`. Такой пакет —
+не «запас на будущее», а будущая запись-исключение: его однажды придётся
+поднимать или оправдывать «потому что уязвимость», хотя он ничего не делает.
+
+### Сверка: кто их звал
+
+* `isort` — никто: `pip show isort` → «Required-by» пуст; сортировку импортов
+  держит ruff-правило `I` (`pyproject.toml`, `select = ["E", "F", "I"]`), в
+  `Makefile` и pre-commit isort не упоминается. Подсказки `# isort: off/on` и
+  `isort:skip` в коде остаются — их читает сам ruff.
+* `rollup` — никто напрямую: `rollupOptions` в `vite.config.ts` — это настройка
+  vite, а не импорт пакета; сборщик vite приносит своё.
+* `ts-node` и `tsconfig-paths` — ни один скрипт `package.json`, ни один конфиг.
+  Живой сосед `vite-tsconfig-paths` (его импортируют `vite.config.ts` и
+  `vitest.critical.config.ts`) остаётся.
+
+### Что сделано
+
+* `requirements-dev.txt`: `isort` убран; `pip uninstall` в venv.
+* `frontend/package.json`: `rollup`, `ts-node`, `tsconfig-paths` убраны через
+  `npm uninstall` — без ERESOLVE; из `package-lock.json` ушло 17 пакетов,
+  ни одного не добавилось.
+* Аудит зависимостей перезапущен: **ЧИСТО** — витрина 0 корневых advisory,
+  бэкенд 1 находка (ecdsa), принята записью.
+* `docs/security/DEPENDENCY_AUDIT.md`: два абзаца, изувеченных правками
+  срезов 218–221 (обрывки «цепочка eslint 10», «black убран вовсе (срез-218) PR»),
+  переписаны начисто; названы три оставшиеся записи и их сроки.
+
+### Сторож
+
+`tests/test_dead_dev_tools.py` — один список мёртвых инструментов бэкенда
+(`black`, `schemathesis`, `isort`) и витрины (`rollup`, `ts-node`,
+`tsconfig-paths`, `eslint-plugin-import`); ни один не возвращается в манифесты.
+Третий тест проверяет, что сторож различает мёртвый `tsconfig-paths` и живой
+`vite-tsconfig-paths`. Доказано поломкой: возврат `isort` в пины и `ts-node` в
+манифест красят сторож.
+
+### Проверка
+
+* сторож: 3 passed, две мутации — красные;
+* витрина: `eslint --max-warnings=0`, типы, полный прогон, сборка — итог в PR;
+* `tests/test_frontend_toolchain.py`, `test_single_formatter.py`,
+  `test_test_runner_toolchain.py`, `test_dependency_audit_freshness.py` —
+  зелёные (соседние стражи той же темы).
+
+### Границы
+
+* vite 8 подсказывает, что `vite-tsconfig-paths` заменяется встроенной
+  `resolve.tsconfigPaths: true` — отдельный маленький срез.
+* `rollup` остаётся в lock как транзитивная зависимость сборщика — это
+  нормально; сторож смотрит только прямые пины `package.json`.
+* Три записи-исключения с поздними сроками не трогались: `ecdsa` (31.10 —
+  апстрим-фикса нет, решение владельца), `setuptools` и `msgpack` в образе
+  (30.11).
+
+
 ## 2026-09-17 (feat/tz-continue-221 — срез-221: typescript-eslint 8; три исключения `minimatch` сняты — очередь 30.09 закрыта)
 
 ### Зачем
