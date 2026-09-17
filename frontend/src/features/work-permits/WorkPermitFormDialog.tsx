@@ -180,7 +180,11 @@ export const WorkPermitFormDialog = ({
   const selected = new Set(form.watch("safety_systems") ?? []);
   const toggleSystem = (code: (typeof SAFETY_SYSTEM_CODES)[number]) => {
     const next = new Set(form.getValues("safety_systems") ?? []);
-    next.has(code) ? next.delete(code) : next.add(code);
+    if (next.has(code)) {
+      next.delete(code);
+    } else {
+      next.add(code);
+    }
     form.setValue(
       "safety_systems",
       Array.from(next) as WorkPermitFormValues["safety_systems"],
@@ -202,7 +206,11 @@ export const WorkPermitFormDialog = ({
       string[] | undefined
     >;
     const next = new Set(current[field] ?? []);
-    next.has(code) ? next.delete(code) : next.add(code);
+    if (next.has(code)) {
+      next.delete(code);
+    } else {
+      next.add(code);
+    }
     form.setValue("type_specific", {
       ...current,
       [field]: Array.from(next),
