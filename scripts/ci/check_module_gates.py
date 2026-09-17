@@ -51,8 +51,7 @@ _GATE_CALL = re.compile(r"is_(?:module|feature)_enabled\((?:[^()]|\([^()]*\))*\)
 
 #: Модули БЕЗ backend-гейта — с причиной. Пустой список означал бы «у всех
 #: гейт есть», и однажды это прочитали бы как факт.
-MODULES_WITHOUT_BACKEND_GATE: dict[str, str] = {
-}
+MODULES_WITHOUT_BACKEND_GATE: dict[str, str] = {}
 
 
 def _gated_codes() -> set[str]:
@@ -140,9 +139,7 @@ def main(argv: list[str] | None = None) -> int:
     errors: list[str] = []
 
     missing = sorted(
-        code
-        for code in catalog
-        if code not in gated and code not in MODULES_WITHOUT_BACKEND_GATE
+        code for code in catalog if code not in gated and code not in MODULES_WITHOUT_BACKEND_GATE
     )
     if missing:
         errors.append(

@@ -87,9 +87,7 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | No
 
 Access = Annotated[
     AccessContext,
-    Depends(
-        abac(_tenant_resource_id, required_roles=_ROLES, action="manage civil defense")
-    ),
+    Depends(abac(_tenant_resource_id, required_roles=_ROLES, action="manage civil defense")),
 ]
 
 _FEATURE_CODE = "civil_defense"
@@ -135,9 +133,7 @@ def _full_name(person: Person) -> str:
     return " ".join(part for part in parts if part)
 
 
-async def _get_person_or_404(
-    session: AsyncSession, tenant: Tenant, person_id: str
-) -> Person:
+async def _get_person_or_404(session: AsyncSession, tenant: Tenant, person_id: str) -> Person:
     stmt = select(Person).where(
         Person.id == person_id,
         Person.tenant_id == tenant.id,
@@ -229,9 +225,7 @@ async def _commander_names(
     rows = (
         (
             await session.execute(
-                select(Person).where(
-                    Person.tenant_id == tenant.id, Person.id.in_(person_ids)
-                )
+                select(Person).where(Person.tenant_id == tenant.id, Person.id.in_(person_ids))
             )
         )
         .scalars()
@@ -260,9 +254,7 @@ def _formation_read(
     )
 
 
-def _member_read(
-    member: CivilDefenseFormationMember, person_name: str
-) -> FormationMemberRead:
+def _member_read(member: CivilDefenseFormationMember, person_name: str) -> FormationMemberRead:
     status_value = "released" if member.released_on is not None else "active"
     return FormationMemberRead(
         id=member.id,
@@ -296,9 +288,7 @@ async def list_formations(
     )
     if kind:
         stmt = stmt.where(CivilDefenseFormation.kind == kind)
-    total = int(
-        await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
-    )
+    total = int(await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
     rows = (
         (
             await session.execute(
@@ -325,9 +315,7 @@ async def list_formations(
     )
 
 
-@router.post(
-    "/formations", response_model=FormationRead, status_code=status.HTTP_201_CREATED
-)
+@router.post("/formations", response_model=FormationRead, status_code=status.HTTP_201_CREATED)
 async def create_formation(
     request: Request,
     payload: FormationCreate,
@@ -341,9 +329,7 @@ async def create_formation(
     await _ensure_name_free(session, tenant, name)
     commander_name: str | None = None
     if payload.commander_person_id:
-        commander = await _get_person_or_404(
-            session, tenant, payload.commander_person_id
-        )
+        commander = await _get_person_or_404(session, tenant, payload.commander_person_id)
         commander_name = _full_name(commander)
 
     formation = CivilDefenseFormation(
@@ -462,15 +448,11 @@ async def list_members(
         CivilDefenseFormationMember.formation_id == formation_id,
         CivilDefenseFormationMember.deleted_at.is_(None),
     )
-    total = int(
-        await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
-    )
+    total = int(await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
     rows = (
         (
             await session.execute(
-                stmt.order_by(CivilDefenseFormationMember.created_at)
-                .offset(offset)
-                .limit(limit)
+                stmt.order_by(CivilDefenseFormationMember.created_at).offset(offset).limit(limit)
             )
         )
         .scalars()
@@ -518,9 +500,7 @@ async def add_member(
     ).scalar_one_or_none()
     if existing is not None:
         if existing.released_on is None:
-            raise _unprocessable(
-                f"{_full_name(person)} уже в составе этого формирования"
-            )
+            raise _unprocessable(f"{_full_name(person)} уже в составе этого формирования")
         existing.released_on = None
         if payload.assigned_on is not None:
             existing.assigned_on = payload.assigned_on
@@ -534,9 +514,7 @@ async def add_member(
             ip=request.client.host if request.client else "unknown",
             request_id=getattr(request.state, "trace_id", None),
             user_agent=request.headers.get("user-agent"),
-            changed_fields={
-                "fields": {"released_on": {"before": "set", "after": None}}
-            },
+            changed_fields={"fields": {"released_on": {"before": "set", "after": None}}},
             details={"entity": "CivilDefenseFormationMember", "rejoined": True},
         )
         await session.commit()
@@ -657,9 +635,7 @@ def _drill_status(drill: CivilDefenseDrill, today: date) -> str:
     return "overdue" if drill.planned_on < today else "planned"
 
 
-def _drill_read(
-    drill: CivilDefenseDrill, today: date, formation_name: str | None
-) -> DrillRead:
+def _drill_read(drill: CivilDefenseDrill, today: date, formation_name: str | None) -> DrillRead:
     status_value = _drill_status(drill, today)
     return DrillRead(
         id=drill.id,
@@ -675,9 +651,7 @@ def _drill_read(
         participants=drill.participants,
         outcome=drill.outcome,
         outcome_label=(
-            CD_DRILL_OUTCOMES.get(drill.outcome, drill.outcome)
-            if drill.outcome
-            else None
+            CD_DRILL_OUTCOMES.get(drill.outcome, drill.outcome) if drill.outcome else None
         ),
         findings=drill.findings,
         status=status_value,
@@ -702,27 +676,21 @@ def _validate_drill(
 
     if kind is not None and kind not in CD_DRILL_KINDS:
         raise _unprocessable(
-            f"Неизвестный вид учения {kind!r}; допустимые: "
-            f"{', '.join(CD_DRILL_KINDS)}"
+            f"Неизвестный вид учения {kind!r}; допустимые: " f"{', '.join(CD_DRILL_KINDS)}"
         )
     if outcome is not None and outcome not in CD_DRILL_OUTCOMES:
         raise _unprocessable(
-            f"Неизвестный результат {outcome!r}; допустимые: "
-            f"{', '.join(CD_DRILL_OUTCOMES)}"
+            f"Неизвестный результат {outcome!r}; допустимые: " f"{', '.join(CD_DRILL_OUTCOMES)}"
         )
     if held_on is not None and held_on > date.today():
-        raise _unprocessable(
-            "Дата проведения не может быть в будущем — это план, а не протокол"
-        )
+        raise _unprocessable("Дата проведения не может быть в будущем — это план, а не протокол")
     if held_on is not None and outcome is None:
         raise _unprocessable(
-            "У проведённого учения обязателен результат: "
-            f"{', '.join(CD_DRILL_OUTCOMES)}"
+            "У проведённого учения обязателен результат: " f"{', '.join(CD_DRILL_OUTCOMES)}"
         )
     if outcome is not None and held_on is None and has_outcome_field:
         raise _unprocessable(
-            "Результат нельзя выставить, пока учение не проведено — "
-            "укажите дату проведения"
+            "Результат нельзя выставить, пока учение не проведено — " "укажите дату проведения"
         )
 
 
@@ -806,15 +774,11 @@ async def list_drills(
             CivilDefenseDrill.held_on.is_(None),
             CivilDefenseDrill.planned_on < today,
         )
-    total = int(
-        await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
-    )
+    total = int(await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
     rows = (
         (
             await session.execute(
-                stmt.order_by(CivilDefenseDrill.planned_on.desc())
-                .offset(offset)
-                .limit(limit)
+                stmt.order_by(CivilDefenseDrill.planned_on.desc()).offset(offset).limit(limit)
             )
         )
         .scalars()
@@ -824,9 +788,7 @@ async def list_drills(
         session, tenant, [r.formation_id for r in rows if r.formation_id]
     )
     return DrillPage(
-        items=[
-            _drill_read(r, today, names.get(r.formation_id or "")) for r in rows
-        ],
+        items=[_drill_read(r, today, names.get(r.formation_id or "")) for r in rows],
         total=total,
     )
 
@@ -842,14 +804,10 @@ async def create_drill(
     """Завести учение в план-график. Рождается ЗАПЛАНИРОВАННЫМ."""
 
     TenantContextValidator.ensure_tenant_context(tenant)
-    _validate_drill(
-        kind=payload.kind, outcome=None, held_on=None, has_outcome_field=False
-    )
+    _validate_drill(kind=payload.kind, outcome=None, held_on=None, has_outcome_field=False)
     formation_name: str | None = None
     if payload.formation_id:
-        formation = await _get_formation_or_404(
-            session, tenant, payload.formation_id
-        )
+        formation = await _get_formation_or_404(session, tenant, payload.formation_id)
         formation_name = formation.name
 
     drill = CivilDefenseDrill(
@@ -1037,18 +995,12 @@ async def _get_site_or_404(session: AsyncSession, tenant: Tenant, site_id: str) 
     return site
 
 
-async def _site_names(
-    session: AsyncSession, tenant: Tenant, site_ids: list[str]
-) -> dict[str, str]:
+async def _site_names(session: AsyncSession, tenant: Tenant, site_ids: list[str]) -> dict[str, str]:
     ids = [sid for sid in site_ids if sid]
     if not ids:
         return {}
     rows = (
-        (
-            await session.execute(
-                select(Site).where(Site.tenant_id == tenant.id, Site.id.in_(ids))
-            )
-        )
+        (await session.execute(select(Site).where(Site.tenant_id == tenant.id, Site.id.in_(ids))))
         .scalars()
         .all()
     )
@@ -1102,9 +1054,7 @@ async def list_profiles(
     )
     if category:
         stmt = stmt.where(CivilDefenseProfile.category == category)
-    total = int(
-        await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
-    )
+    total = int(await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
     rows = (
         (
             await session.execute(
@@ -1115,14 +1065,10 @@ async def list_profiles(
         .all()
     )
     names = await _site_names(session, tenant, [r.site_id for r in rows])
-    return ProfilePage(
-        items=[_profile_read(r, names.get(r.site_id)) for r in rows], total=total
-    )
+    return ProfilePage(items=[_profile_read(r, names.get(r.site_id)) for r in rows], total=total)
 
 
-@router.post(
-    "/profiles", response_model=ProfileRead, status_code=status.HTTP_201_CREATED
-)
+@router.post("/profiles", response_model=ProfileRead, status_code=status.HTTP_201_CREATED)
 async def create_profile(
     request: Request,
     payload: ProfileCreate,
@@ -1252,9 +1198,7 @@ async def list_cd_documents(
         stmt = stmt.where(CivilDefenseDocument.kind == kind)
     if site_id:
         stmt = stmt.where(CivilDefenseDocument.site_id == site_id)
-    total = int(
-        await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
-    )
+    total = int(await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
     rows = (
         (
             await session.execute(
@@ -1265,14 +1209,10 @@ async def list_cd_documents(
         .all()
     )
     today = date.today()
-    return CdDocumentPage(
-        items=[_cd_document_read(r, today) for r in rows], total=total
-    )
+    return CdDocumentPage(items=[_cd_document_read(r, today) for r in rows], total=total)
 
 
-@router.post(
-    "/documents", response_model=CdDocumentRead, status_code=status.HTTP_201_CREATED
-)
+@router.post("/documents", response_model=CdDocumentRead, status_code=status.HTTP_201_CREATED)
 async def create_cd_document(
     request: Request,
     payload: CdDocumentCreate,
@@ -1407,9 +1347,7 @@ async def update_cd_document(
 _DISCIPLINE_CODE = "civil_defense"
 
 
-async def _training_programs(
-    session: AsyncSession, tenant: Tenant
-) -> list[TrainingCourse]:
+async def _training_programs(session: AsyncSession, tenant: Tenant) -> list[TrainingCourse]:
     """Учебные программы, размеченные дисциплиной ГО и ЧС.
 
     Реестром программ контур ГО НЕ владеет: заводятся и правятся они в разделе
@@ -1565,19 +1503,13 @@ async def civil_defense_readiness(
             1 for d in planning_docs if _review_status(d.review_due, today) == "overdue"
         ),
         drills_total=len(drills),
-        drills_overdue=sum(
-            1 for d in drills if _drill_status(d, today) == "overdue"
-        ),
+        drills_overdue=sum(1 for d in drills if _drill_status(d, today) == "overdue"),
         drills_held_this_year=sum(
-            1
-            for d in drills
-            if d.held_on is not None and d.held_on.year == today.year
+            1 for d in drills if d.held_on is not None and d.held_on.year == today.year
         ),
         total_formations=len(formations),
         by_kind=by_kind,
-        without_commander=sum(
-            1 for f in formations if f.commander_person_id is None
-        ),
+        without_commander=sum(1 for f in formations if f.commander_person_id is None),
         members_active=members_active,
         # Доп. №1 разд. 57.4: открытые происшествия контура — той же формулой,
         # что разрез «по дисциплинам» у директора (срез-49).

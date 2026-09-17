@@ -38,7 +38,9 @@ async def test_выгрузка_файлом_собирает_настоящий
     # Кладём настоящий файл документа в хранилище: без него выгрузка обязана
     # отказать, и это проверяется отдельным тестом ниже.
     storage = FileStorageService.default()
-    storage.put(version.file_key, b"PK real document bytes", content_type="application/octet-stream")
+    storage.put(
+        version.file_key, b"PK real document bytes", content_type="application/octet-stream"
+    )
 
     settings = config_module.get_settings()
     monkeypatch.setattr(settings, "edo_provider", "file", raising=False)

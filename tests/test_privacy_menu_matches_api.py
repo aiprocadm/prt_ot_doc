@@ -102,9 +102,9 @@ def test_роль_получающая_права_скопом_исключен�
     block = re.search(r"ot_pb_head: ALL_PERMISSIONS\.filter\((.*?)\),\n", text, re.S)
 
     assert block is not None, "блок ot_pb_head изменился — сторож надо обновить"
-    assert "PERMISSIONS.PRIVACY_VIEW" in block.group(1), (
-        "роль ot_pb_head получает право ПДн скопом, а ручки её не пускают"
-    )
+    assert "PERMISSIONS.PRIVACY_VIEW" in block.group(
+        1
+    ), "роль ot_pb_head получает право ПДн скопом, а ручки её не пускают"
 
 
 def test_разбор_видит_выдачу_права() -> None:

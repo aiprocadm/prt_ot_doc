@@ -27,9 +27,7 @@ async def _bootstrap(session, monkeypatch, slug: str):
         return None
 
     monkeypatch.setattr("app.services.tenants.bootstrap.service.seed_authz_catalog", _noop)
-    monkeypatch.setattr(
-        "app.services.tenants.bootstrap.service.aensure_tenant_schema", _noop
-    )
+    monkeypatch.setattr("app.services.tenants.bootstrap.service.aensure_tenant_schema", _noop)
     service = BootstrapTenantService(session)
     monkeypatch.setattr(service, "_ensure_tenant_settings", _noop)
     monkeypatch.setattr(service, "_ensure_plan", _noop)
@@ -42,9 +40,7 @@ async def _bootstrap(session, monkeypatch, slug: str):
         owner_password="Secret123!",
     )
     await session.flush()
-    tenant = (
-        await session.execute(select(Tenant).where(Tenant.slug == slug))
-    ).scalar_one()
+    tenant = (await session.execute(select(Tenant).where(Tenant.slug == slug))).scalar_one()
     return summary, tenant
 
 
@@ -56,9 +52,7 @@ async def test_должности_эталона_становятся_строк
         names = {
             name
             for name in (
-                await session.execute(
-                    select(Position.name).where(Position.tenant_id == tenant.id)
-                )
+                await session.execute(select(Position.name).where(Position.tenant_id == tenant.id))
             ).scalars()
         }
 
@@ -74,9 +68,7 @@ async def test_опасности_и_меры_становятся_строка�
         hazards = {
             name
             for name in (
-                await session.execute(
-                    select(Hazard.name).where(Hazard.tenant_id == tenant.id)
-                )
+                await session.execute(select(Hazard.name).where(Hazard.tenant_id == tenant.id))
             ).scalars()
         }
         measures = {
@@ -93,29 +85,21 @@ async def test_опасности_и_меры_становятся_строка�
 
 
 @pytest.mark.anyio
-async def test_должности_привязаны_к_организации_арендатора(
-    sessionmaker, monkeypatch
-) -> None:
+async def test_должности_привязаны_к_организации_арендатора(sessionmaker, monkeypatch) -> None:
     """Должность требует организацию — проверяем, что взята СВОЯ, а не чужая."""
 
     async with sessionmaker() as session:
         _summary, tenant = await _bootstrap(session, monkeypatch, "sp-company")
 
         rows = (
-            (
-                await session.execute(
-                    select(Position).where(Position.tenant_id == tenant.id)
-                )
-            )
+            (await session.execute(select(Position).where(Position.tenant_id == tenant.id)))
             .scalars()
             .all()
         )
         own_company_ids = {
             cid
             for cid in (
-                await session.execute(
-                    select(Company.id).where(Company.tenant_id == tenant.id)
-                )
+                await session.execute(select(Company.id).where(Company.tenant_id == tenant.id))
             ).scalars()
         }
 
@@ -124,9 +108,7 @@ async def test_должности_привязаны_к_организации_�
 
 
 @pytest.mark.anyio
-async def test_повторная_выдача_не_удваивает_справочник(
-    sessionmaker, monkeypatch
-) -> None:
+async def test_повторная_выдача_не_удваивает_справочник(sessionmaker, monkeypatch) -> None:
     """Выдача повторяется (ретрай, повторный вызов) — второй проход не должен дублировать."""
 
     async with sessionmaker() as session:
@@ -139,9 +121,7 @@ async def test_повторная_выдача_не_удваивает_спра�
         hazards = [
             name
             for name in (
-                await session.execute(
-                    select(Hazard.name).where(Hazard.tenant_id == tenant.id)
-                )
+                await session.execute(select(Hazard.name).where(Hazard.tenant_id == tenant.id))
             ).scalars()
         ]
 

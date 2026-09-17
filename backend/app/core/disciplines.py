@@ -238,8 +238,7 @@ UNCLASSIFIED_SOURCES: dict[str, str] = {
         "поимённого учёта у проверок нет вовсе"
     ),
     "compliance_deadline": (
-        "Срок соответствия: привязан к произвольной сущности, "
-        "дисциплина не хранится"
+        "Срок соответствия: привязан к произвольной сущности, " "дисциплина не хранится"
     ),
     "calendar_event": (
         "Свободное событие календаря: вид задаёт пользователь, "
@@ -324,9 +323,7 @@ PERMIT_WORK_TYPE_DISCIPLINE: dict[str, Discipline] = {
 }
 
 #: Виды работ без дисциплины — с общей причиной, а не молчанием.
-UNMAPPED_PERMIT_WORK_TYPES: str = (
-    "общая охрана труда: отдельной дисциплины для неё в словаре нет"
-)
+UNMAPPED_PERMIT_WORK_TYPES: str = "общая охрана труда: отдельной дисциплины для неё в словаре нет"
 
 
 #: Виды инструктажа — закрытый словарь (Доп. №1 разд. 54.1 называет пожарные
@@ -442,11 +439,7 @@ ATTESTATION_AREA_TITLES: dict[str, str] = {
 #: промбезопасности. Отбирать теперь нужно ПО ДИСЦИПЛИНЕ, а не по «заполнено
 #: ли поле» (см. ``areas_of_discipline``).
 ATTESTATION_AREA_DISCIPLINE: dict[str, Discipline] = {
-    **{
-        code: Discipline.INDUSTRIAL_SAFETY
-        for code in ATTESTATION_AREA_TITLES
-        if code != "ПДД"
-    },
+    **{code: Discipline.INDUSTRIAL_SAFETY for code in ATTESTATION_AREA_TITLES if code != "ПДД"},
     "ПДД": Discipline.ROAD_SAFETY,
 }
 
@@ -459,11 +452,8 @@ def areas_of_discipline(discipline: Discipline) -> tuple[str, ...]:
     молча испортила бы отбор у первых двух.
     """
 
-    return tuple(
-        code
-        for code, value in ATTESTATION_AREA_DISCIPLINE.items()
-        if value is discipline
-    )
+    return tuple(code for code, value in ATTESTATION_AREA_DISCIPLINE.items() if value is discipline)
+
 
 ATTESTATION_AREAS: tuple[str, ...] = tuple(ATTESTATION_AREA_TITLES)
 

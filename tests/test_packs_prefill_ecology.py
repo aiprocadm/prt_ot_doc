@@ -56,9 +56,7 @@ _LAST_YEAR = date.today().year - 1
 
 async def _grant(sessionmaker, code: str = "ecology") -> None:
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         feature = (
             await session.execute(select(Feature).where(Feature.code == code))
         ).scalar_one_or_none()
@@ -75,9 +73,7 @@ async def _grant(sessionmaker, code: str = "ecology") -> None:
             )
         ).scalar_one_or_none()
         if grant is None:
-            session.add(
-                FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=True)
-            )
+            session.add(FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=True))
         else:
             grant.on = True
         await session.commit()
@@ -85,9 +81,7 @@ async def _grant(sessionmaker, code: str = "ecology") -> None:
 
 async def _tenant_id(sessionmaker) -> str:
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         return str(tenant.id)
 
 
@@ -110,11 +104,7 @@ async def _waste(sessionmaker, *, kind: str, tons: str, year: int) -> None:
     async with sessionmaker() as session:
         tid = await _tenant_id(sessionmaker)
         passport = (
-            (
-                await session.execute(
-                    select(WastePassport).where(WastePassport.tenant_id == tid)
-                )
-            )
+            (await session.execute(select(WastePassport).where(WastePassport.tenant_id == tid)))
             .scalars()
             .first()
         )
@@ -140,9 +130,7 @@ async def _waste(sessionmaker, *, kind: str, tons: str, year: int) -> None:
 
 
 async def _fields(async_client, headers) -> dict:
-    response = await async_client.get(
-        f"{_FIELDS}/{PACK_CODE_ECO_REPORTS}/fields", headers=headers
-    )
+    response = await async_client.get(f"{_FIELDS}/{PACK_CODE_ECO_REPORTS}/fields", headers=headers)
     assert response.status_code == 200, response.text
     body = response.json()
     return {f["name"]: f for f in body["fields"]} | {"__body__": body}

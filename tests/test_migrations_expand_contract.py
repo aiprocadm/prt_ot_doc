@@ -122,9 +122,7 @@ def test_каталог_миграций_на_месте() -> None:
     assert len(_all_migrations()) > 100
 
 
-@pytest.mark.parametrize(
-    "path", _destructive_migrations(), ids=lambda p: p.name
-)
+@pytest.mark.parametrize("path", _destructive_migrations(), ids=lambda p: p.name)
 def test_разрушительная_миграция_объявлена_шагом_contract(path: pathlib.Path) -> None:
     """Удаление в ``upgrade`` допустимо только как осознанный шаг contract.
 
@@ -139,14 +137,12 @@ def test_разрушительная_миграция_объявлена_шаг
     ops = sorted(_destructive_ops_in_upgrade(path))
     assert step == "contract", (
         f"{path.name}: в upgrade есть {ops}, но шаг не объявлен. Либо разнесите "
-        f'на два выката (expand → код → contract), либо объявите '
+        f"на два выката (expand → код → contract), либо объявите "
         f'EXPAND_CONTRACT_STEP = "contract" с причиной.'
     )
 
 
-@pytest.mark.parametrize(
-    "path", _destructive_migrations(), ids=lambda p: p.name
-)
+@pytest.mark.parametrize("path", _destructive_migrations(), ids=lambda p: p.name)
 def test_у_шага_contract_названа_причина(path: pathlib.Path) -> None:
     """«Шаг contract» без объяснения — то же удаление вслепую, только с ярлыком."""
 
@@ -155,8 +151,7 @@ def test_у_шага_contract_названа_причина(path: pathlib.Path) 
 
     reason = _module_constant(path, "EXPAND_CONTRACT_REASON")
     assert reason and reason.strip(), (
-        f"{path.name}: объявлен contract, но не сказано, почему удалять "
-        f"безопасно именно сейчас"
+        f"{path.name}: объявлен contract, но не сказано, почему удалять " f"безопасно именно сейчас"
     )
 
 
@@ -182,9 +177,9 @@ class TestСписокДолгаНеПротух:
     def test_объявленный_contract_не_числится_долгом(self, name: str) -> None:
         """Одно из двух: либо миграция объявила contract, либо она в долге."""
 
-        assert _module_constant(MIGRATIONS / name, "EXPAND_CONTRACT_STEP") != "contract", (
-            f"{name}: миграция объявила contract — уберите её из ACCEPTED_LEGACY"
-        )
+        assert (
+            _module_constant(MIGRATIONS / name, "EXPAND_CONTRACT_STEP") != "contract"
+        ), f"{name}: миграция объявила contract — уберите её из ACCEPTED_LEGACY"
 
 
 # ---------------------------------------------------------------------------

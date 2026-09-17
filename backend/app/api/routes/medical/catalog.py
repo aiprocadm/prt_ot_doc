@@ -134,9 +134,7 @@ async def create_medical_norm(
     return MedicalNormRead.model_validate(record)
 
 
-@router.get(
-    "/medical/norms/{norm_id}", response_model=MedicalNormRead
-)
+@router.get("/medical/norms/{norm_id}", response_model=MedicalNormRead)
 async def get_medical_norm(
     norm_id: str,
     tenant: TenantDep,
@@ -149,9 +147,7 @@ async def get_medical_norm(
     return MedicalNormRead.model_validate(record)
 
 
-@router.patch(
-    "/medical/norms/{norm_id}", response_model=MedicalNormRead
-)
+@router.patch("/medical/norms/{norm_id}", response_model=MedicalNormRead)
 async def update_medical_norm(
     request: Request,
     norm_id: str,
@@ -219,9 +215,7 @@ async def delete_medical_norm(
 # ---------------------------------------------------------------------------
 
 
-@router.get(
-    "/medical/referrals", response_model=MedicalReferralPage
-)
+@router.get("/medical/referrals", response_model=MedicalReferralPage)
 async def list_medical_referrals(
     request: Request,
     response: Response,

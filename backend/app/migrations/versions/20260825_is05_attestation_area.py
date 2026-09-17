@@ -39,9 +39,7 @@ def upgrade() -> None:
         "attestation",
         sa.Column("area_code", sa.String(length=16), nullable=True),
     )
-    op.create_index(
-        "ix_attestation_area", "attestation", ["tenant_id", "area_code"]
-    )
+    op.create_index("ix_attestation_area", "attestation", ["tenant_id", "area_code"])
 
 
 def downgrade() -> None:

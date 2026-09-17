@@ -49,7 +49,9 @@ class ComplianceChecker:
         status = (
             "ok"
             if linked_total and not missing_required and effective_status in {"active", "draft"}
-            else "partial" if linked_total or missing_required else "draft"
+            else "partial"
+            if linked_total or missing_required
+            else "draft"
         )
         if effective_status == "expired":
             status = "stale"
@@ -65,7 +67,9 @@ class ComplianceChecker:
         severity = (
             "high"
             if missing_required or effective_status == "expired"
-            else "medium" if linked_total == 0 else "low"
+            else "medium"
+            if linked_total == 0
+            else "low"
         )
         return {
             "jurisdiction": self.jurisdiction,

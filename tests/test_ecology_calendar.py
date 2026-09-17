@@ -71,9 +71,7 @@ async def _facility(session: AsyncSession, tenant_id: str) -> EnvironmentalFacil
     return facility
 
 
-async def _source(
-    session: AsyncSession, tenant_id: str, facility_id: str
-) -> EmissionSource:
+async def _source(session: AsyncSession, tenant_id: str, facility_id: str) -> EmissionSource:
     source = EmissionSource(
         tenant_id=tenant_id,
         facility_id=facility_id,
@@ -112,9 +110,7 @@ class TestИсточникиЭкологииВКалендаре:
         )
         await test_db_session.commit()
 
-        service = CalendarAggregatorService(
-            tenant_id=str(tenant.id), db=test_db_session
-        )
+        service = CalendarAggregatorService(tenant_id=str(tenant.id), db=test_db_session)
         response = await service.list_events(source_types=["ecology_permit"])
         assert response.total == 1
         item = response.items[0]
@@ -151,9 +147,7 @@ class TestИсточникиЭкологииВКалендаре:
         )
         await test_db_session.commit()
 
-        service = CalendarAggregatorService(
-            tenant_id=str(tenant.id), db=test_db_session
-        )
+        service = CalendarAggregatorService(tenant_id=str(tenant.id), db=test_db_session)
         response = await service.list_events(source_types=["ecology_permit"])
         assert response.total == 0
         assert response.items == []
@@ -178,9 +172,7 @@ class TestИсточникиЭкологииВКалендаре:
         )
         await test_db_session.commit()
 
-        service = CalendarAggregatorService(
-            tenant_id=str(tenant.id), db=test_db_session
-        )
+        service = CalendarAggregatorService(tenant_id=str(tenant.id), db=test_db_session)
         response = await service.list_events(source_types=["ecology_permit"])
         assert response.total == 1
         assert "Скважина №1" in response.items[0].title
@@ -202,9 +194,7 @@ class TestИсточникиЭкологииВКалендаре:
         )
         await test_db_session.commit()
 
-        service = CalendarAggregatorService(
-            tenant_id=str(tenant.id), db=test_db_session
-        )
+        service = CalendarAggregatorService(tenant_id=str(tenant.id), db=test_db_session)
         response = await service.list_events(source_types=["ecology_permit"])
         assert response.items[0].is_overdue is True
         assert response.overdue_count == 1
@@ -226,9 +216,7 @@ class TestИсточникиЭкологииВКалендаре:
         )
         await test_db_session.commit()
 
-        service = CalendarAggregatorService(
-            tenant_id=str(tenant.id), db=test_db_session
-        )
+        service = CalendarAggregatorService(tenant_id=str(tenant.id), db=test_db_session)
         response = await service.list_events(source_types=["ecology_measurement"])
         assert response.total == 1
         item = response.items[0]
@@ -264,14 +252,10 @@ class TestИсточникиЭкологииВКалендаре:
         )
         await test_db_session.commit()
 
-        service = CalendarAggregatorService(
-            tenant_id=str(tenant.id), db=test_db_session
-        )
+        service = CalendarAggregatorService(tenant_id=str(tenant.id), db=test_db_session)
         only_permits = await service.list_events(source_types=["ecology_permit"])
         assert only_permits.total == 1
-        only_measurements = await service.list_events(
-            source_types=["ecology_measurement"]
-        )
+        only_measurements = await service.list_events(source_types=["ecology_measurement"])
         assert only_measurements.total == 1
         both = await service.list_events(source_types=list(_ECOLOGY_SOURCES))
         assert both.total == 2
@@ -305,9 +289,7 @@ class TestИсточникиЭкологииВКалендаре:
         """Ноль по источнику должен отличаться от «источник не пришёл»."""
 
         tenant = await data_factory.ensure_tenant(session=test_db_session)
-        service = CalendarAggregatorService(
-            tenant_id=str(tenant.id), db=test_db_session
-        )
+        service = CalendarAggregatorService(tenant_id=str(tenant.id), db=test_db_session)
         response = await service.list_events()
         codes = {row.source_type for row in response.by_source}
         assert set(_ECOLOGY_SOURCES) <= codes

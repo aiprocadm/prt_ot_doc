@@ -83,9 +83,7 @@ def _front_map(name: str) -> dict[str, str]:
 
 async def _grant(sessionmaker, code: str = "road_safety", on: bool = True) -> None:
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         feature = (
             await session.execute(select(Feature).where(Feature.code == code))
         ).scalar_one_or_none()
@@ -102,9 +100,7 @@ async def _grant(sessionmaker, code: str = "road_safety", on: bool = True) -> No
             )
         ).scalar_one_or_none()
         if grant is None:
-            session.add(
-                FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=on)
-            )
+            session.add(FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=on))
         else:
             grant.on = on
         await session.commit()
@@ -112,15 +108,9 @@ async def _grant(sessionmaker, code: str = "road_safety", on: bool = True) -> No
 
 async def _person(sessionmaker, last_name: str = "Шофёров") -> str:
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         company = (
-            (
-                await session.execute(
-                    select(Company).where(Company.tenant_id == tenant.id)
-                )
-            )
+            (await session.execute(select(Company).where(Company.tenant_id == tenant.id)))
             .scalars()
             .first()
         )
@@ -228,9 +218,7 @@ async def _waybill(
 
 
 class TestПутевойЛист:
-    async def test_без_выдачи_модуль_невидим(
-        self, async_client, make_auth_headers
-    ) -> None:
+    async def test_без_выдачи_модуль_невидим(self, async_client, make_auth_headers) -> None:
         headers = await make_auth_headers()
         response = await async_client.get(f"{_API}/waybills", headers=headers)
         assert response.status_code == 404
@@ -257,9 +245,7 @@ class TestПутевойЛист:
         await _grant(sessionmaker)
         vehicle, driver = await _pair(async_client, headers, sessionmaker)
         await _waybill(async_client, headers, vehicle, driver, number="ПЛ-777")
-        await _waybill(
-            async_client, headers, vehicle, driver, number="ПЛ-777", expect=422
-        )
+        await _waybill(async_client, headers, vehicle, driver, number="ПЛ-777", expect=422)
 
     async def test_неизвестное_состояние_отметки_отвергается(
         self, async_client, make_auth_headers, sessionmaker
@@ -459,9 +445,7 @@ class TestВремяВРейсе:
         await _grant(sessionmaker)
         vehicle, driver = await _pair(async_client, headers, sessionmaker)
         departure = datetime(2026, 8, 30, 8, 0, tzinfo=timezone.utc)
-        body = await _waybill(
-            async_client, headers, vehicle, driver, departure_at=departure
-        )
+        body = await _waybill(async_client, headers, vehicle, driver, departure_at=departure)
         assert body["trip_hours"] is None
         response = await async_client.patch(
             f"{_API}/waybills/{body['id']}",
@@ -478,9 +462,7 @@ class TestВремяВРейсе:
         await _grant(sessionmaker)
         vehicle, driver = await _pair(async_client, headers, sessionmaker)
         departure = datetime(2026, 8, 30, 12, 0, tzinfo=timezone.utc)
-        body = await _waybill(
-            async_client, headers, vehicle, driver, departure_at=departure
-        )
+        body = await _waybill(async_client, headers, vehicle, driver, departure_at=departure)
         response = await async_client.patch(
             f"{_API}/waybills/{body['id']}",
             json={"return_at": (departure - timedelta(hours=1)).isoformat()},
@@ -523,9 +505,7 @@ class TestВремяВРейсе:
             return_at=departure + timedelta(hours=16),
         )
         assert body["trip_hours"] == 16.0
-        assert not any(
-            key in body for key in ("overtime", "rest_violation", "driving_hours")
-        )
+        assert not any(key in body for key in ("overtime", "rest_violation", "driving_hours"))
 
 
 class TestЦелостностьРейса:
@@ -534,16 +514,10 @@ class TestЦелостностьРейса:
     ) -> None:
         headers = await make_auth_headers()
         await _grant(sessionmaker)
-        vehicle = await _vehicle(
-            async_client, headers, plate="В001ВВ99", status="decommissioned"
-        )
+        vehicle = await _vehicle(async_client, headers, plate="В001ВВ99", status="decommissioned")
         person_id = await _person(sessionmaker, last_name="Списанов")
-        driver = await _driver(
-            async_client, headers, person_id, license_number="9900 000111"
-        )
-        await _waybill(
-            async_client, headers, vehicle, driver, number="ПЛ-СПИС", expect=422
-        )
+        driver = await _driver(async_client, headers, person_id, license_number="9900 000111")
+        await _waybill(async_client, headers, vehicle, driver, number="ПЛ-СПИС", expect=422)
 
     async def test_на_отстранённого_водителя_лист_не_выписывается(
         self, async_client, make_auth_headers, sessionmaker
@@ -561,9 +535,7 @@ class TestЦелостностьРейса:
             license_number="9900 000222",
             status="suspended",
         )
-        await _waybill(
-            async_client, headers, vehicle, driver, number="ПЛ-ОТСТР", expect=422
-        )
+        await _waybill(async_client, headers, vehicle, driver, number="ПЛ-ОТСТР", expect=422)
 
     async def test_машину_и_водителя_сменить_нельзя(
         self, async_client, make_auth_headers, sessionmaker
@@ -625,9 +597,7 @@ class TestЖурналЗаПериод:
             number="ПЛ-СТАРЫЙ",
             issued_on=today - timedelta(days=60),
         )
-        await _waybill(
-            async_client, headers, vehicle, driver, number="ПЛ-СВЕЖИЙ", issued_on=today
-        )
+        await _waybill(async_client, headers, vehicle, driver, number="ПЛ-СВЕЖИЙ", issued_on=today)
         response = await async_client.get(
             f"{_API}/waybills",
             params={
@@ -654,9 +624,7 @@ class TestЖурналЗаПериод:
             number="ПЛ-01",
             issued_on=today - timedelta(days=3),
         )
-        await _waybill(
-            async_client, headers, vehicle, driver, number="ПЛ-02", issued_on=today
-        )
+        await _waybill(async_client, headers, vehicle, driver, number="ПЛ-02", issued_on=today)
         response = await async_client.get(f"{_API}/waybills", headers=headers)
         assert [row["number"] for row in response.json()["items"]] == ["ПЛ-02", "ПЛ-01"]
 
@@ -720,9 +688,7 @@ class TestЖурналЗаПериод:
 
         for verdict in ("confirmed", "unconfirmed", "blocked"):
             # что говорит вердикт при чтении
-            expected = sorted(
-                row["number"] for row in rows if row["release_status"] == verdict
-            )
+            expected = sorted(row["number"] for row in rows if row["release_status"] == verdict)
             # что отобрала база
             response = await async_client.get(
                 f"{_API}/waybills",
@@ -738,9 +704,11 @@ class TestЖурналЗаПериод:
 
         # заодно проверяем, что девять листов разложились по всем трём
         # вердиктам — иначе проверка выше сравнивала бы пустое с пустым
-        assert sorted(
-            {row["release_status"] for row in rows}
-        ) == ["blocked", "confirmed", "unconfirmed"]
+        assert sorted({row["release_status"] for row in rows}) == [
+            "blocked",
+            "confirmed",
+            "unconfirmed",
+        ]
 
     async def test_неизвестный_вердикт_в_отборе_отвергается(
         self, async_client, make_auth_headers, sessionmaker
@@ -771,9 +739,7 @@ class TestСводка:
             number="ПЛ-ДАВНО",
             issued_on=today - timedelta(days=90),
         )
-        await _waybill(
-            async_client, headers, vehicle, driver, number="ПЛ-СЕЙЧАС", issued_on=today
-        )
+        await _waybill(async_client, headers, vehicle, driver, number="ПЛ-СЕЙЧАС", issued_on=today)
         response = await async_client.get(f"{_API}/readiness", headers=headers)
         assert response.status_code == 200, response.text
         body = response.json()
@@ -847,8 +813,7 @@ class TestСводка:
         await _grant(sessionmaker)
         body = (await async_client.get(f"{_API}/readiness", headers=headers)).json()
         assert not any(
-            key in body
-            for key in ("release_legal", "compliant", "violations", "rest_violations")
+            key in body for key in ("release_legal", "compliant", "violations", "rest_violations")
         )
 
 
@@ -862,13 +827,8 @@ class TestСловариЛистаНаФронте:
 
     def test_отметки_на_фронте_совпадают_с_бэкендом(self) -> None:
         front = _front_map("WAYBILL_MARK_TITLES")
-        assert front == WAYBILL_MARK_STATUSES, sorted(
-            front.items() ^ WAYBILL_MARK_STATUSES.items()
-        )
+        assert front == WAYBILL_MARK_STATUSES, sorted(front.items() ^ WAYBILL_MARK_STATUSES.items())
 
     def test_состояния_листа_на_фронте_совпадают_с_бэкендом(self) -> None:
         front = _front_map("WAYBILL_STATUS_TITLES")
-        assert front == WAYBILL_STATUSES, sorted(
-            front.items() ^ WAYBILL_STATUSES.items()
-        )
-
+        assert front == WAYBILL_STATUSES, sorted(front.items() ^ WAYBILL_STATUSES.items())

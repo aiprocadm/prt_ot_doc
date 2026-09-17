@@ -35,9 +35,7 @@ async def _shape_tree() -> None:
         rows = {
             record.slug: record
             for record in (
-                (
-                    await session.execute(select(Tenant).where(Tenant.slug.in_(["beta", "acme"])))
-                )
+                (await session.execute(select(Tenant).where(Tenant.slug.in_(["beta", "acme"]))))
                 .scalars()
                 .all()
             )
@@ -71,9 +69,7 @@ async def test_манифест_отдаётся_без_токена(async_clien
 
 
 @pytest.mark.anyio
-async def test_арендатор_берётся_из_адреса(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_арендатор_берётся_из_адреса(async_client: AsyncClient, make_auth_headers) -> None:
     # Заголовок арендатора в такой запрос не поставить — браузер шлёт его сам.
     await _shape_tree()
     await _publish_brand(async_client, make_auth_headers)
@@ -148,9 +144,7 @@ async def test_логотип_отдаётся_по_слагу_из_адреса
 
     await _shape_tree()
 
-    response = await async_client.get(
-        "/api/v1/public/branding/logo", params={"tenant": "acme"}
-    )
+    response = await async_client.get("/api/v1/public/branding/logo", params={"tenant": "acme"})
 
     # Логотип не загружен — 404 это нормально; важно, что запрос БЕЗ заголовка
     # арендатора дошёл до обработчика, а не упал на резолвере.

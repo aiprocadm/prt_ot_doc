@@ -28,9 +28,7 @@ import pytest
 
 from app.core.product_spec import SECURITY_QUESTION, SIX_QUESTIONS
 
-TEMPLATE = (
-    pathlib.Path(__file__).resolve().parents[1] / ".github" / "PULL_REQUEST_TEMPLATE.md"
-)
+TEMPLATE = pathlib.Path(__file__).resolve().parents[1] / ".github" / "PULL_REQUEST_TEMPLATE.md"
 
 
 @pytest.fixture(scope="module")
@@ -85,7 +83,7 @@ class TestСкелетШаблона:
             "### 60.5 Единообразие и доступность",
             "### 60.6 Тест «нового пользователя»",
         ],
-        ids=lambda s: s.strip("#"). strip(),
+        ids=lambda s: s.strip("#").strip(),
     )
     def test_секция_на_месте(self, template_text: str, section: str) -> None:
         assert section in template_text, section

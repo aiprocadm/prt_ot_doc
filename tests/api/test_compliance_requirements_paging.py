@@ -130,12 +130,18 @@ async def test_счётчик_просрочки_виден_даже_когда_
     clause = act["clauses"][0]
 
     await _create(
-        async_client, headers, npa_id=act["id"], clause_id=clause["id"],
+        async_client,
+        headers,
+        npa_id=act["id"],
+        clause_id=clause["id"],
         next_due_at=PAST.isoformat(),
     )
     for _ in range(3):
         await _create(
-            async_client, headers, npa_id=act["id"], clause_id=clause["id"],
+            async_client,
+            headers,
+            npa_id=act["id"],
+            clause_id=clause["id"],
             next_due_at=FAR_FUTURE.isoformat(),
         )
 
@@ -158,7 +164,10 @@ async def test_страницы_не_теряют_и_не_дублируют_с�
     clause = act["clauses"][0]
     for _ in range(7):
         await _create(
-            async_client, headers, npa_id=act["id"], clause_id=clause["id"],
+            async_client,
+            headers,
+            npa_id=act["id"],
+            clause_id=clause["id"],
             next_due_at=FAR_FUTURE.isoformat(),
         )
 
@@ -174,9 +183,7 @@ async def test_страницы_не_теряют_и_не_дублируют_с�
 
 
 @pytest.mark.anyio
-async def test_счётчики_учитывают_фильтр(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_счётчики_учитывают_фильтр(async_client: AsyncClient, make_auth_headers) -> None:
     """«Всего» при фильтре — это всего ПРИ ФИЛЬТРЕ.
 
     Иначе экран с фильтром по одному акту показывал бы число из другого мира.
@@ -186,12 +193,18 @@ async def test_счётчики_учитывают_фильтр(
     mine = await _act(async_client, headers)
     other = await _act(async_client, headers)
     await _create(
-        async_client, headers, npa_id=mine["id"], clause_id=mine["clauses"][0]["id"],
+        async_client,
+        headers,
+        npa_id=mine["id"],
+        clause_id=mine["clauses"][0]["id"],
         next_due_at=FAR_FUTURE.isoformat(),
     )
     for _ in range(3):
         await _create(
-            async_client, headers, npa_id=other["id"], clause_id=other["clauses"][0]["id"],
+            async_client,
+            headers,
+            npa_id=other["id"],
+            clause_id=other["clauses"][0]["id"],
             next_due_at=FAR_FUTURE.isoformat(),
         )
 
@@ -224,7 +237,10 @@ async def test_умолчание_не_режет_маленький_реест�
     act = await _act(async_client, headers)
     for _ in range(3):
         await _create(
-            async_client, headers, npa_id=act["id"], clause_id=act["clauses"][0]["id"],
+            async_client,
+            headers,
+            npa_id=act["id"],
+            clause_id=act["clauses"][0]["id"],
             next_due_at=FAR_FUTURE.isoformat(),
         )
     response = await async_client.get(BASE, headers=headers)

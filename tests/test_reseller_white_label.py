@@ -33,9 +33,7 @@ class TestЦепочкаНаследования:
         assert brand.source == "reseller"
 
     def test_свой_бренд_побеждает_бренд_партнёра(self) -> None:
-        brand = resolve_app_brand(
-            own=BrandOverride(app_name="ООО «Своё имя»"), reseller=PARTNER
-        )
+        brand = resolve_app_brand(own=BrandOverride(app_name="ООО «Своё имя»"), reseller=PARTNER)
         assert brand.app_name == "ООО «Своё имя»"
         assert brand.source == "self"
 
@@ -47,9 +45,7 @@ class TestЦепочкаНаследования:
         запрещает.
         """
 
-        brand = resolve_app_brand(
-            own=BrandOverride(primary_color="0 80% 50%"), reseller=PARTNER
-        )
+        brand = resolve_app_brand(own=BrandOverride(primary_color="0 80% 50%"), reseller=PARTNER)
         assert brand.primary_color == "0 80% 50%"
         assert brand.app_name == "Охрана труда «Партнёр»"
         assert brand.support_email == "help@partner.ru"
@@ -67,9 +63,7 @@ class TestЦепочкаНаследования:
         assert brand.source == "platform"
 
     def test_частичный_бренд_партнёра_дополняется_платформой(self) -> None:
-        brand = resolve_app_brand(
-            own=None, reseller=BrandOverride(app_name="Только имя")
-        )
+        brand = resolve_app_brand(own=None, reseller=BrandOverride(app_name="Только имя"))
         assert brand.app_name == "Только имя"
         assert brand.primary_color == DEFAULT_PRIMARY_COLOR
         assert brand.source == "reseller"

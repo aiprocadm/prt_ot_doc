@@ -16,6 +16,7 @@ Modes:
 
 Baseline: docs/stabilization/celery_tasks_baseline.json
 """
+
 from __future__ import annotations
 
 import argparse

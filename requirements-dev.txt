@@ -1,5 +1,4 @@
 bandit==1.7.10
-black==24.10.0
 coverage==7.6.0
 moto==5.0.7
 mypy==1.11.2

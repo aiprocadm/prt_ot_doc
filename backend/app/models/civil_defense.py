@@ -59,9 +59,7 @@ class CivilDefenseFormation(TenantBaseModel, SoftDeleteMixin):
     #: назначение — свободная строка (профилей десятки, см. словарь выше)
     purpose: Mapped[str | None] = mapped_column(String(255))
     #: командир — человек из ЯДРА, назначение необязательно
-    commander_person_id: Mapped[str | None] = mapped_column(
-        ForeignKey("person.id"), nullable=True
-    )
+    commander_person_id: Mapped[str | None] = mapped_column(ForeignKey("person.id"), nullable=True)
     #: оснащение первым срезом — заметкой; отдельный реестр оснащения, СИЗ ГО
     #: и средств оповещения — следующие срезы
     equipment_notes: Mapped[str | None] = mapped_column(Text)
@@ -93,9 +91,7 @@ class CivilDefenseFormationMember(TenantBaseModel, SoftDeleteMixin):
     formation_id: Mapped[str] = mapped_column(
         ForeignKey("cd_formation.id"), nullable=False, index=True
     )
-    person_id: Mapped[str] = mapped_column(
-        ForeignKey("person.id"), nullable=False, index=True
-    )
+    person_id: Mapped[str] = mapped_column(ForeignKey("person.id"), nullable=False, index=True)
     #: роль в формировании (связной, санитар…) — свободная строка
     role_in_formation: Mapped[str | None] = mapped_column(String(128))
     assigned_on: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -107,9 +103,7 @@ class CivilDefenseFormationMember(TenantBaseModel, SoftDeleteMixin):
     person: Mapped[Person] = relationship()
 
     __table_args__ = (
-        UniqueConstraint(
-            "tenant_id", "formation_id", "person_id", name="uq_cd_member_person"
-        ),
+        UniqueConstraint("tenant_id", "formation_id", "person_id", name="uq_cd_member_person"),
     )
 
 
@@ -171,9 +165,7 @@ class CivilDefenseDrill(TenantBaseModel, SoftDeleteMixin):
     formation_id: Mapped[str | None] = mapped_column(
         ForeignKey("cd_formation.id"), nullable=True, index=True
     )
-    site_id: Mapped[str | None] = mapped_column(
-        ForeignKey("site.id"), nullable=True, index=True
-    )
+    site_id: Mapped[str | None] = mapped_column(ForeignKey("site.id"), nullable=True, index=True)
     #: вводная обстановка по сценарию учения
     scenario: Mapped[str | None] = mapped_column(Text)
     participants: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -185,9 +177,7 @@ class CivilDefenseDrill(TenantBaseModel, SoftDeleteMixin):
     formation: Mapped[CivilDefenseFormation | None] = relationship(backref="drills")
     site: Mapped[Site | None] = relationship(backref="cd_drills")
 
-    __table_args__ = (
-        Index("ix_cd_drill_tenant_planned", "tenant_id", "planned_on"),
-    )
+    __table_args__ = (Index("ix_cd_drill_tenant_planned", "tenant_id", "planned_on"),)
 
 
 #: Категории объектов по гражданской обороне — ЗАКРЫТЫЙ словарь из четырёх
@@ -243,9 +233,7 @@ class CivilDefenseProfile(TenantBaseModel, SoftDeleteMixin):
 
     __tablename__ = "cd_profile"
 
-    site_id: Mapped[str] = mapped_column(
-        ForeignKey("site.id"), nullable=False, index=True
-    )
+    site_id: Mapped[str] = mapped_column(ForeignKey("site.id"), nullable=False, index=True)
     category: Mapped[str] = mapped_column(String(16), nullable=False)
     #: реквизиты решения о категорировании — как в оригинале
     decision_number: Mapped[str | None] = mapped_column(String(128))
@@ -256,9 +244,7 @@ class CivilDefenseProfile(TenantBaseModel, SoftDeleteMixin):
 
     site: Mapped[Site] = relationship(backref="civil_defense_profile")
 
-    __table_args__ = (
-        UniqueConstraint("tenant_id", "site_id", name="uq_cd_profile_site"),
-    )
+    __table_args__ = (UniqueConstraint("tenant_id", "site_id", name="uq_cd_profile_site"),)
 
 
 class CivilDefenseDocument(TenantBaseModel, SoftDeleteMixin):
@@ -280,22 +266,16 @@ class CivilDefenseDocument(TenantBaseModel, SoftDeleteMixin):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     number: Mapped[str | None] = mapped_column(String(64))
     #: план ГО организации не привязан к одному объекту — площадка не обязательна
-    site_id: Mapped[str | None] = mapped_column(
-        ForeignKey("site.id"), nullable=True, index=True
-    )
+    site_id: Mapped[str | None] = mapped_column(ForeignKey("site.id"), nullable=True, index=True)
     approved_on: Mapped[date | None] = mapped_column(Date, nullable=True)
     #: срок пересмотра/актуализации; NULL — документ бессрочный
     review_due: Mapped[date | None] = mapped_column(Date, nullable=True)
     responsible: Mapped[str | None] = mapped_column(String(255))
     #: если документ выпущен документной фабрикой — ссылка на него; иначе NULL
     #: (бумага из органа управления ГОЧС существует вне платформы)
-    document_id: Mapped[str | None] = mapped_column(
-        ForeignKey("document.id"), nullable=True
-    )
+    document_id: Mapped[str | None] = mapped_column(ForeignKey("document.id"), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text)
 
     site: Mapped[Site | None] = relationship(backref="cd_documents")
 
-    __table_args__ = (
-        Index("ix_cd_document_tenant_review", "tenant_id", "review_due"),
-    )
+    __table_args__ = (Index("ix_cd_document_tenant_review", "tenant_id", "review_due"),)

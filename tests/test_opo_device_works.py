@@ -39,11 +39,7 @@ _API = "/api/v1/industrial-safety"
 
 
 _FRONTEND_OPO_API = (
-    Path(__file__).resolve().parents[1]
-    / "frontend"
-    / "src"
-    / "api"
-    / "industrialSafety.ts"
+    Path(__file__).resolve().parents[1] / "frontend" / "src" / "api" / "industrialSafety.ts"
 )
 
 
@@ -58,9 +54,7 @@ def _front_map(name: str) -> dict[str, str]:
 
 async def _grant(sessionmaker, code: str = "industrial_safety", on: bool = True) -> None:
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         feature = (
             await session.execute(select(Feature).where(Feature.code == code))
         ).scalar_one_or_none()
@@ -242,9 +236,7 @@ class TestЖурналРабот:
         )
         assert listed.json()["total"] == 2
         # «последняя» — по ДАТЕ РАБОТЫ, а не по порядку внесения
-        assert listed.json()["items"][0]["performed_on"] == str(
-            today - timedelta(days=30)
-        )
+        assert listed.json()["items"][0]["performed_on"] == str(today - timedelta(days=30))
 
     async def test_неизвестный_вид_работы_отвергается_словами(
         self, async_client, make_auth_headers, sessionmaker
@@ -320,10 +312,7 @@ class TestСводкаРабот:
 
         device_id = await _device(async_client, headers, "0008")
         after = (await async_client.get(f"{_API}/readiness", headers=headers)).json()
-        assert (
-            after["devices_without_work_record"]
-            == before["devices_without_work_record"] + 1
-        )
+        assert after["devices_without_work_record"] == before["devices_without_work_record"] + 1
 
         await async_client.post(
             f"{_API}/device-works",
@@ -336,10 +325,7 @@ class TestСводкаРабот:
             headers=headers,
         )
         closed = (await async_client.get(f"{_API}/readiness", headers=headers)).json()
-        assert (
-            closed["devices_without_work_record"]
-            == before["devices_without_work_record"]
-        )
+        assert closed["devices_without_work_record"] == before["devices_without_work_record"]
 
 
 class TestИзоляцияАрендатора:
@@ -375,7 +361,4 @@ class TestСловариРаботНаФронте:
 
     def test_результаты_работ_на_фронте_совпадают_с_бэкендом(self) -> None:
         front = _front_map("OPO_WORK_RESULT_TITLES")
-        assert front == OPO_WORK_RESULTS, sorted(
-            front.items() ^ OPO_WORK_RESULTS.items()
-        )
-
+        assert front == OPO_WORK_RESULTS, sorted(front.items() ^ OPO_WORK_RESULTS.items())

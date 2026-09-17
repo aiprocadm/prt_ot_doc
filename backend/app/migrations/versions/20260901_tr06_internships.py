@@ -68,9 +68,7 @@ def upgrade() -> None:
         sa.Column("completed_shifts", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("started_on", sa.Date(), nullable=True),
         sa.Column("finished_on", sa.Date(), nullable=True),
-        sa.Column(
-            "status", sa.String(length=16), nullable=False, server_default="planned"
-        ),
+        sa.Column("status", sa.String(length=16), nullable=False, server_default="planned"),
         sa.Column("notes", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
@@ -79,9 +77,7 @@ def upgrade() -> None:
     op.create_index("ix_internship_person_id", "internship", ["person_id"])
     op.create_index("ix_internship_mentor_person_id", "internship", ["mentor_person_id"])
     op.create_index("ix_internship_person", "internship", ["tenant_id", "person_id"])
-    op.create_index(
-        "ix_internship_discipline", "internship", ["tenant_id", "discipline"]
-    )
+    op.create_index("ix_internship_discipline", "internship", ["tenant_id", "discipline"])
 
 
 def downgrade() -> None:

@@ -98,9 +98,7 @@ def _person_name(person: Person | None) -> str:
     if person is None:
         return ""
     return " ".join(
-        part
-        for part in (person.last_name, person.first_name, person.middle_name)
-        if part
+        part for part in (person.last_name, person.first_name, person.middle_name) if part
     )
 
 
@@ -130,9 +128,7 @@ def _read(record: Internship, trainee: Person | None, mentor: Person | None) -> 
         # пусто — наставник НЕ НАЗНАЧЕН, а не «неизвестен»
         mentor_name=_person_name(mentor) if mentor is not None else None,
         discipline=record.discipline,
-        discipline_label=(
-            _DISCIPLINE_CODES.get(record.discipline) if record.discipline else None
-        ),
+        discipline_label=(_DISCIPLINE_CODES.get(record.discipline) if record.discipline else None),
         subject=record.subject,
         planned_shifts=record.planned_shifts,
         completed_shifts=record.completed_shifts,
@@ -151,8 +147,7 @@ def _validate(
 ) -> None:
     if discipline is not None and discipline not in _DISCIPLINE_CODES:
         raise _unprocessable(
-            f"Неизвестная дисциплина {discipline!r}; допустимые: "
-            f"{', '.join(_DISCIPLINE_CODES)}"
+            f"Неизвестная дисциплина {discipline!r}; допустимые: " f"{', '.join(_DISCIPLINE_CODES)}"
         )
     if status_value is not None and status_value not in INTERNSHIP_STATUSES:
         raise _unprocessable(
@@ -301,9 +296,7 @@ async def list_internships(
     if status_filter:
         stmt = stmt.where(Internship.status == status_filter)
     stmt = stmt.order_by(Internship.started_on.desc().nullslast())
-    total = int(
-        await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
-    )
+    total = int(await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
     rows = (await session.execute(stmt.offset(offset).limit(limit))).all()
     return InternshipPage(
         items=[_read(record, trainee, mentor) for record, trainee, mentor in rows],
@@ -311,9 +304,7 @@ async def list_internships(
     )
 
 
-@router.post(
-    "/internships", response_model=InternshipRead, status_code=status.HTTP_201_CREATED
-)
+@router.post("/internships", response_model=InternshipRead, status_code=status.HTTP_201_CREATED)
 async def create_internship(
     request: Request,
     payload: InternshipCreate,

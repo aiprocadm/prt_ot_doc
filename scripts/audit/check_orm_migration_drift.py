@@ -503,7 +503,10 @@ def _diff(
             if missing_in_model:
                 entry["migration_only"] = missing_in_model
             entry["severity"] = _classify_severity(
-                table, entry, model_tables, migration_tables  # type: ignore[arg-type]
+                table,
+                entry,
+                model_tables,
+                migration_tables,  # type: ignore[arg-type]
             )
             drift[table] = entry
     return drift
@@ -520,14 +523,12 @@ def _format_text(drift: dict[str, dict[str, object]]) -> str:
         model_only = entry.get("model_only")
         if model_only:
             lines.append(
-                f"    model_only (in model, no migration creates it): "
-                f"{', '.join(model_only)}"  # type: ignore[arg-type]
+                f"    model_only (in model, no migration creates it): " f"{', '.join(model_only)}"  # type: ignore[arg-type]
             )
         migration_only = entry.get("migration_only")
         if migration_only:
             lines.append(
-                f"    migration_only (in migration, not on model): "
-                f"{', '.join(migration_only)}"  # type: ignore[arg-type]
+                f"    migration_only (in migration, not on model): " f"{', '.join(migration_only)}"  # type: ignore[arg-type]
             )
     lines.append("")
     lines.append(

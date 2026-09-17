@@ -1,5 +1,6 @@
 # tests/api/test_contractor_documents_api.py
 """Contractor document registry CRUD + isolation + feature-gate."""
+
 from __future__ import annotations
 
 from datetime import date, timedelta

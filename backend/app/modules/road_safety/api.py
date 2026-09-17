@@ -132,9 +132,7 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | No
 
 Access = Annotated[
     AccessContext,
-    Depends(
-        abac(_tenant_resource_id, required_roles=_ROLES, action="manage road safety")
-    ),
+    Depends(abac(_tenant_resource_id, required_roles=_ROLES, action="manage road safety")),
 ]
 
 _FEATURE_CODE = "road_safety"
@@ -237,19 +235,14 @@ def _vehicle_read(vehicle: Vehicle, today: date) -> VehicleRead:
 
 def _validate_dictionaries(*, kind: str | None, status_value: str | None) -> None:
     if kind is not None and kind not in VEHICLE_KINDS:
-        raise _unprocessable(
-            f"Неизвестный вид ТС {kind!r}; допустимые: {', '.join(VEHICLE_KINDS)}"
-        )
+        raise _unprocessable(f"Неизвестный вид ТС {kind!r}; допустимые: {', '.join(VEHICLE_KINDS)}")
     if status_value is not None and status_value not in VEHICLE_STATUSES:
         raise _unprocessable(
-            f"Неизвестное состояние {status_value!r}; допустимые: "
-            f"{', '.join(VEHICLE_STATUSES)}"
+            f"Неизвестное состояние {status_value!r}; допустимые: " f"{', '.join(VEHICLE_STATUSES)}"
         )
 
 
-async def _get_vehicle_or_404(
-    session: AsyncSession, tenant: Tenant, vehicle_id: str
-) -> Vehicle:
+async def _get_vehicle_or_404(session: AsyncSession, tenant: Tenant, vehicle_id: str) -> Vehicle:
     stmt = select(Vehicle).where(
         Vehicle.id == vehicle_id,
         Vehicle.tenant_id == tenant.id,
@@ -288,9 +281,7 @@ async def _ensure_plate_free(
         raise _unprocessable(f"ТС с номером {plate_number!r} уже заведено")
 
 
-async def _validate_site(
-    session: AsyncSession, tenant: Tenant, site_id: str | None
-) -> None:
+async def _validate_site(session: AsyncSession, tenant: Tenant, site_id: str | None) -> None:
     if not site_id:
         return
     stmt = select(Site.id).where(
@@ -326,9 +317,7 @@ async def list_vehicles(
     """
 
     TenantContextValidator.ensure_tenant_context(tenant)
-    stmt = select(Vehicle).where(
-        Vehicle.tenant_id == tenant.id, Vehicle.deleted_at.is_(None)
-    )
+    stmt = select(Vehicle).where(Vehicle.tenant_id == tenant.id, Vehicle.deleted_at.is_(None))
     needle = normalize_needle(q)
     if needle:
         condition = vehicle_search(needle)
@@ -338,15 +327,9 @@ async def list_vehicles(
         stmt = stmt.where(Vehicle.kind == kind)
     if status_filter:
         stmt = stmt.where(Vehicle.status == status_filter)
-    total = int(
-        await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
-    )
+    total = int(await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
     rows = (
-        (
-            await session.execute(
-                stmt.order_by(Vehicle.plate_number).offset(offset).limit(limit)
-            )
-        )
+        (await session.execute(stmt.order_by(Vehicle.plate_number).offset(offset).limit(limit)))
         .scalars()
         .all()
     )
@@ -500,9 +483,7 @@ async def road_safety_readiness(
     rows = (
         (
             await session.execute(
-                select(Vehicle).where(
-                    Vehicle.tenant_id == tenant.id, Vehicle.deleted_at.is_(None)
-                )
+                select(Vehicle).where(Vehicle.tenant_id == tenant.id, Vehicle.deleted_at.is_(None))
             )
         )
         .scalars()
@@ -522,9 +503,7 @@ async def road_safety_readiness(
     drivers = (
         (
             await session.execute(
-                select(Driver).where(
-                    Driver.tenant_id == tenant.id, Driver.deleted_at.is_(None)
-                )
+                select(Driver).where(Driver.tenant_id == tenant.id, Driver.deleted_at.is_(None))
             )
         )
         .scalars()
@@ -579,9 +558,7 @@ async def road_safety_readiness(
     live = (*window, Waybill.status != "cancelled")
     blocked = int(
         await session.scalar(
-            select(func.count())
-            .select_from(Waybill)
-            .where(*live, _release_condition("blocked"))
+            select(func.count()).select_from(Waybill).where(*live, _release_condition("blocked"))
         )
         or 0
     )
@@ -728,9 +705,7 @@ async def road_safety_readiness(
     )
     internships_in_progress = sum(1 for i in internships if i.status == "in_progress")
     internships_short = sum(
-        1
-        for i in internships
-        if i.status == "completed" and i.completed_shifts < i.planned_shifts
+        1 for i in internships if i.status == "completed" and i.completed_shifts < i.planned_shifts
     )
 
     # Срез-8: нарушения ПДД. Считаются В БАЗЕ за годовое окно: у большого
@@ -762,9 +737,7 @@ async def road_safety_readiness(
     )
     unpaid_rows = (
         await session.execute(
-            select(
-                func.count(), func.coalesce(func.sum(TrafficViolation.fine_amount), 0)
-            )
+            select(func.count(), func.coalesce(func.sum(TrafficViolation.fine_amount), 0))
             .select_from(TrafficViolation)
             .where(*violation_window, _fine_condition("unpaid"))
         )
@@ -779,9 +752,7 @@ async def road_safety_readiness(
         insurance_overdue=sum(
             1 for v in active if _doc_status(v.insurance_due, today) == "overdue"
         ),
-        tachograph_overdue=sum(
-            1 for v in active if _tachograph_status(v, today) == "overdue"
-        ),
+        tachograph_overdue=sum(1 for v in active if _tachograph_status(v, today) == "overdue"),
         documents_missing=sum(
             1
             for v in active
@@ -869,8 +840,7 @@ def _driver_read(driver: Driver, today: date) -> DriverRead:
         license_number=driver.license_number,
         categories=list(driver.categories or []),
         category_labels=[
-            DRIVER_LICENSE_CATEGORIES.get(code, code)
-            for code in (driver.categories or [])
+            DRIVER_LICENSE_CATEGORIES.get(code, code) for code in (driver.categories or [])
         ],
         license_issued_at=driver.license_issued_at,
         license_due=driver.license_due,
@@ -879,9 +849,7 @@ def _driver_read(driver: Driver, today: date) -> DriverRead:
         status=driver.status,
         status_label=DRIVER_STATUSES.get(driver.status, driver.status),
         license_status=license_status,
-        license_status_label=VEHICLE_DOC_STATUS_TITLES.get(
-            license_status, license_status
-        ),
+        license_status_label=VEHICLE_DOC_STATUS_TITLES.get(license_status, license_status),
         notes=driver.notes,
     )
 
@@ -898,8 +866,7 @@ def _validate_driver_dictionaries(
 
     if status_value is not None and status_value not in DRIVER_STATUSES:
         raise _unprocessable(
-            f"Неизвестный допуск {status_value!r}; допустимые: "
-            f"{', '.join(DRIVER_STATUSES)}"
+            f"Неизвестный допуск {status_value!r}; допустимые: " f"{', '.join(DRIVER_STATUSES)}"
         )
     if categories is None:
         return
@@ -929,9 +896,7 @@ def _validate_driver_dates(
         raise _unprocessable("Удостоверение не может быть выдано в будущем")
 
 
-async def _get_driver_or_404(
-    session: AsyncSession, tenant: Tenant, driver_id: str
-) -> Driver:
+async def _get_driver_or_404(session: AsyncSession, tenant: Tenant, driver_id: str) -> Driver:
     stmt = (
         select(Driver)
         .options(selectinload(Driver.person))
@@ -973,9 +938,7 @@ async def _ensure_person(session: AsyncSession, tenant: Tenant, person_id: str) 
         )
 
 
-async def _ensure_driver_card_free(
-    session: AsyncSession, tenant: Tenant, person_id: str
-) -> None:
+async def _ensure_driver_card_free(session: AsyncSession, tenant: Tenant, person_id: str) -> None:
     """Один человек — одна карточка водителя.
 
     Вторая запись о том же человеке не заводит второго водителя, она начинает
@@ -1009,9 +972,7 @@ async def _ensure_license_free(
     if exclude_id:
         stmt = stmt.where(Driver.id != exclude_id)
     if (await session.execute(stmt)).scalar_one_or_none() is not None:
-        raise _unprocessable(
-            f"Удостоверение {license_number!r} уже внесено другой карточкой"
-        )
+        raise _unprocessable(f"Удостоверение {license_number!r} уже внесено другой карточкой")
 
 
 @router.get("/drivers", response_model=DriverPage)
@@ -1060,12 +1021,8 @@ async def list_drivers(
         total = len(rows)
         page = rows[offset : offset + limit]
     else:
-        total = int(
-            await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
-        )
-        page = list(
-            (await session.execute(stmt.offset(offset).limit(limit))).scalars().all()
-        )
+        total = int(await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
+        page = list((await session.execute(stmt.offset(offset).limit(limit))).scalars().all())
     today = date.today()
     return DriverPage(items=[_driver_read(r, today) for r in page], total=total)
 
@@ -1080,9 +1037,7 @@ async def create_driver(
 ) -> DriverRead:
     TenantContextValidator.ensure_tenant_context(tenant)
     today = date.today()
-    _validate_driver_dictionaries(
-        categories=payload.categories, status_value=payload.status
-    )
+    _validate_driver_dictionaries(categories=payload.categories, status_value=payload.status)
     _validate_driver_dates(
         experience_since=payload.experience_since,
         license_issued_at=payload.license_issued_at,
@@ -1119,9 +1074,7 @@ async def create_driver(
         details={"entity": "Driver", "person_id": driver.person_id},
     )
     await session.commit()
-    return _driver_read(
-        await _get_driver_or_404(session, tenant, driver.id), date.today()
-    )
+    return _driver_read(await _get_driver_or_404(session, tenant, driver.id), date.today())
 
 
 @router.patch("/drivers/{driver_id}", response_model=DriverRead)
@@ -1161,9 +1114,7 @@ async def update_driver(
     }
     if data.get("license_number"):
         license_number = str(data["license_number"]).strip().upper()
-        await _ensure_license_free(
-            session, tenant, license_number, exclude_id=driver.id
-        )
+        await _ensure_license_free(session, tenant, license_number, exclude_id=driver.id)
         driver.license_number = license_number
     if data.get("categories"):
         driver.categories = list(data["categories"])
@@ -1195,9 +1146,7 @@ async def update_driver(
         details={"entity": "Driver"},
     )
     await session.commit()
-    return _driver_read(
-        await _get_driver_or_404(session, tenant, driver.id), date.today()
-    )
+    return _driver_read(await _get_driver_or_404(session, tenant, driver.id), date.today())
 
 
 # ---------------------------------------------------------------------------
@@ -1268,18 +1217,11 @@ def _release_condition(value: str):
     failed = or_(*[getattr(Waybill, mark) == "failed" for mark in _RELEASE_MARKS])
     if value == "blocked":
         return failed
-    not_failed = and_(
-        *[getattr(Waybill, mark) != "failed" for mark in _RELEASE_MARKS]
-    )
+    not_failed = and_(*[getattr(Waybill, mark) != "failed" for mark in _RELEASE_MARKS])
     if value == "unconfirmed":
         return and_(
             not_failed,
-            or_(
-                *[
-                    getattr(Waybill, mark) == "not_recorded"
-                    for mark in _RELEASE_MARKS
-                ]
-            ),
+            or_(*[getattr(Waybill, mark) == "not_recorded" for mark in _RELEASE_MARKS]),
         )
     return and_(*[getattr(Waybill, mark) == "passed" for mark in _RELEASE_MARKS])
 
@@ -1362,9 +1304,7 @@ def _validate_waybill_dictionaries(
             )
 
 
-def _validate_waybill_times(
-    departure: datetime | None, arrival: datetime | None
-) -> None:
+def _validate_waybill_times(departure: datetime | None, arrival: datetime | None) -> None:
     """Вернуться раньше, чем выехал, нельзя — это опечатка, а не короткий рейс.
 
     Пропусти её — и время в рейсе станет отрицательным, а журнал за период
@@ -1376,9 +1316,7 @@ def _validate_waybill_times(
         raise _unprocessable("Возвращение раньше выезда: проверьте даты рейса")
 
 
-async def _get_waybill_or_404(
-    session: AsyncSession, tenant: Tenant, waybill_id: str
-) -> Waybill:
+async def _get_waybill_or_404(session: AsyncSession, tenant: Tenant, waybill_id: str) -> Waybill:
     stmt = (
         select(Waybill)
         .options(
@@ -1443,9 +1381,7 @@ async def _resolve_vehicle_for_trip(
     return vehicle
 
 
-async def _resolve_driver_for_trip(
-    session: AsyncSession, tenant: Tenant, driver_id: str
-) -> Driver:
+async def _resolve_driver_for_trip(session: AsyncSession, tenant: Tenant, driver_id: str) -> Driver:
     """Водитель обязан быть СВОИМ и допущенным к управлению.
 
     Отстранённый водитель в рейс не выпускается — ради этого допуск и
@@ -1529,18 +1465,12 @@ async def list_waybills(
         # арендаторе с большим парком. Правило при этом одно — см.
         # _release_condition.
         stmt = stmt.where(_release_condition(release_status))
-    total = int(
-        await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
-    )
-    page = list(
-        (await session.execute(stmt.offset(offset).limit(limit))).scalars().all()
-    )
+    total = int(await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
+    page = list((await session.execute(stmt.offset(offset).limit(limit))).scalars().all())
     return WaybillPage(items=[_waybill_read(row) for row in page], total=total)
 
 
-@router.post(
-    "/waybills", response_model=WaybillRead, status_code=status.HTTP_201_CREATED
-)
+@router.post("/waybills", response_model=WaybillRead, status_code=status.HTTP_201_CREATED)
 async def create_waybill(
     request: Request,
     payload: WaybillCreate,
@@ -1773,9 +1703,7 @@ async def _capa_counts(
     return {str(sid): (int(total or 0), int(open_ or 0)) for sid, total, open_ in rows}
 
 
-def _accident_read(
-    accident: RoadAccident, counts: dict[str, tuple[int, int]]
-) -> RoadAccidentRead:
+def _accident_read(accident: RoadAccident, counts: dict[str, tuple[int, int]]) -> RoadAccidentRead:
     capa_total, capa_open = counts.get(accident.id, (0, 0))
     consequences = _consequences(accident)
     follow_up = _follow_up(
@@ -1811,17 +1739,14 @@ def _accident_read(
     )
 
 
-def _validate_accident_dictionaries(
-    *, kind: str | None, fault: str | None
-) -> None:
+def _validate_accident_dictionaries(*, kind: str | None, fault: str | None) -> None:
     if kind is not None and kind not in ACCIDENT_KINDS:
         raise _unprocessable(
             f"Неизвестный вид ДТП: {kind!r}. Допустимые: {', '.join(ACCIDENT_KINDS)}"
         )
     if fault is not None and fault not in ACCIDENT_FAULT:
         raise _unprocessable(
-            f"Неизвестное значение вины: {fault!r}. "
-            f"Допустимые: {', '.join(ACCIDENT_FAULT)}"
+            f"Неизвестное значение вины: {fault!r}. " f"Допустимые: {', '.join(ACCIDENT_FAULT)}"
         )
 
 
@@ -1868,9 +1793,7 @@ async def _get_accident_or_404(
     return accident
 
 
-async def _ensure_incident(
-    session: AsyncSession, tenant: Tenant, incident_id: str
-) -> None:
+async def _ensure_incident(session: AsyncSession, tenant: Tenant, incident_id: str) -> None:
     """Расследование обязано быть СВОИМ: контур БДД инцидентов не заводит."""
 
     stmt = select(Incident.id).where(
@@ -1913,9 +1836,7 @@ async def list_accidents(
             selectinload(RoadAccident.vehicle),
             selectinload(RoadAccident.driver).selectinload(Driver.person),
         )
-        .where(
-            RoadAccident.tenant_id == tenant.id, RoadAccident.deleted_at.is_(None)
-        )
+        .where(RoadAccident.tenant_id == tenant.id, RoadAccident.deleted_at.is_(None))
     )
     needle = normalize_needle(q)
     if needle:
@@ -1941,21 +1862,13 @@ async def list_accidents(
         stmt = stmt.where(RoadAccident.occurred_at <= occurred_to)
     stmt = stmt.order_by(RoadAccident.occurred_at.desc())
 
-    total = int(
-        await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
-    )
-    page = list(
-        (await session.execute(stmt.offset(offset).limit(limit))).scalars().all()
-    )
+    total = int(await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
+    page = list((await session.execute(stmt.offset(offset).limit(limit))).scalars().all())
     counts = await _capa_counts(session, tenant, [row.id for row in page])
-    return RoadAccidentPage(
-        items=[_accident_read(row, counts) for row in page], total=total
-    )
+    return RoadAccidentPage(items=[_accident_read(row, counts) for row in page], total=total)
 
 
-@router.post(
-    "/accidents", response_model=RoadAccidentRead, status_code=status.HTTP_201_CREATED
-)
+@router.post("/accidents", response_model=RoadAccidentRead, status_code=status.HTTP_201_CREATED)
 async def create_accident(
     request: Request,
     payload: RoadAccidentCreate,
@@ -2243,15 +2156,9 @@ async def list_violations(
         stmt = stmt.where(_fine_condition(fine_status))
     stmt = stmt.order_by(TrafficViolation.occurred_at.desc())
 
-    total = int(
-        await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
-    )
-    page = list(
-        (await session.execute(stmt.offset(offset).limit(limit))).scalars().all()
-    )
-    return TrafficViolationPage(
-        items=[_violation_read(row) for row in page], total=total
-    )
+    total = int(await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
+    page = list((await session.execute(stmt.offset(offset).limit(limit))).scalars().all())
+    return TrafficViolationPage(items=[_violation_read(row) for row in page], total=total)
 
 
 def _fine_condition(value: str):
@@ -2263,14 +2170,10 @@ def _fine_condition(value: str):
     разойдутся (урок среза-3).
     """
 
-    no_fine = or_(
-        TrafficViolation.fine_amount.is_(None), TrafficViolation.fine_amount == 0
-    )
+    no_fine = or_(TrafficViolation.fine_amount.is_(None), TrafficViolation.fine_amount == 0)
     if value == "none":
         return no_fine
-    has_fine = and_(
-        TrafficViolation.fine_amount.is_not(None), TrafficViolation.fine_amount != 0
-    )
+    has_fine = and_(TrafficViolation.fine_amount.is_not(None), TrafficViolation.fine_amount != 0)
     if value == "paid":
         return and_(has_fine, TrafficViolation.fine_paid_on.is_not(None))
     return and_(has_fine, TrafficViolation.fine_paid_on.is_(None))
@@ -2351,9 +2254,7 @@ async def update_violation(
     TenantContextValidator.ensure_tenant_context(tenant)
     violation = await _get_violation_or_404(session, tenant, violation_id)
     data = payload.model_dump(exclude_unset=True)
-    _validate_violation(
-        source=data.get("source"), occurred_at=data.get("occurred_at")
-    )
+    _validate_violation(source=data.get("source"), occurred_at=data.get("occurred_at"))
     if data.get("driver_id"):
         await _get_driver_or_404(session, tenant, str(data["driver_id"]))
 

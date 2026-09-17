@@ -19,9 +19,7 @@ PACK_ROOT = pathlib.Path(__file__).resolve().parents[1] / "seed" / "tenant_start
 
 class TestРазборНабора:
     def test_применимые_виды_попадают_в_план(self) -> None:
-        plan = plan_starter_pack(
-            {"reference_data": {"positions": ["Директор", "Эколог"]}}
-        )
+        plan = plan_starter_pack({"reference_data": {"positions": ["Директор", "Эколог"]}})
         assert plan.apply == {"positions": ["Директор", "Эколог"]}
 
     def test_перечисления_помечаются_причиной_а_не_молчанием(self) -> None:
@@ -53,9 +51,7 @@ class TestРазборНабора:
     def test_дубли_убираются_без_учёта_регистра_и_пробелов(self) -> None:
         """Две строки «Пожар» сделали бы справочник грязным с первого дня."""
 
-        plan = plan_starter_pack(
-            {"reference_data": {"hazards": ["Пожар", "пожар ", " ПОЖАР"]}}
-        )
+        plan = plan_starter_pack({"reference_data": {"hazards": ["Пожар", "пожар ", " ПОЖАР"]}})
         assert plan.apply["hazards"] == ["Пожар"]
 
     def test_порядок_файла_сохраняется(self) -> None:
@@ -66,9 +62,7 @@ class TestРазборНабора:
         assert plan.apply["positions"] == names
 
     def test_нестроковые_элементы_игнорируются(self) -> None:
-        plan = plan_starter_pack(
-            {"reference_data": {"hazards": ["Пожар", 42, None, {"x": 1}]}}
-        )
+        plan = plan_starter_pack({"reference_data": {"hazards": ["Пожар", 42, None, {"x": 1}]}})
         assert plan.apply["hazards"] == ["Пожар"]
 
     def test_вид_без_названий_в_план_не_попадает(self) -> None:

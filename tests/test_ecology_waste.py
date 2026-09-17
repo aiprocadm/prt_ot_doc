@@ -50,9 +50,7 @@ _FRONTEND_ECOLOGY_API = (
 
 async def _grant(sessionmaker, code: str = "ecology", on: bool = True) -> None:
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         feature = (
             await session.execute(select(Feature).where(Feature.code == code))
         ).scalar_one_or_none()
@@ -82,9 +80,7 @@ async def _passport(async_client, headers, **overrides) -> str:
         "hazard_class": "III",
     }
     payload.update(overrides)
-    response = await async_client.post(
-        f"{_API}/waste-passports", json=payload, headers=headers
-    )
+    response = await async_client.post(f"{_API}/waste-passports", json=payload, headers=headers)
     assert response.status_code == 201, response.text
     return response.json()["id"]
 
@@ -232,9 +228,7 @@ class TestУчётДвижения:
         assert listed.status_code == 200
         assert listed.json()["total"] == 2
         # свежая запись — первой
-        assert listed.json()["items"][0]["happened_on"] == str(
-            today - timedelta(days=5)
-        )
+        assert listed.json()["items"][0]["happened_on"] == str(today - timedelta(days=5))
 
     async def test_неизвестный_вид_движения_отвергается(
         self, async_client, make_auth_headers, sessionmaker
@@ -440,12 +434,8 @@ class TestСловарьКлассовНаФронте:
             re.S,
         )
         assert block is not None, "не нашёлся map WASTE_HAZARD_CLASS_TITLES"
-        front = dict(
-            re.findall(r'^\s*([A-Za-z]+):\s*"([^"]+)"', block.group(1), re.M)
-        )
-        assert front == WASTE_HAZARD_CLASSES, sorted(
-            front.items() ^ WASTE_HAZARD_CLASSES.items()
-        )
+        front = dict(re.findall(r'^\s*([A-Za-z]+):\s*"([^"]+)"', block.group(1), re.M))
+        assert front == WASTE_HAZARD_CLASSES, sorted(front.items() ^ WASTE_HAZARD_CLASSES.items())
 
     def test_виды_движения_на_фронте_совпадают_с_бэкендом(self) -> None:
         """Срез-100: вид движения выбирают в форме журнала из копии словаря.
@@ -461,12 +451,8 @@ class TestСловарьКлассовНаФронте:
             re.S,
         )
         assert block is not None, "не нашёлся map WASTE_MOVEMENT_KIND_TITLES"
-        front = dict(
-            re.findall(r'^\s*([A-Za-z_]+):\s*"([^"]+)"', block.group(1), re.M)
-        )
-        assert front == WASTE_MOVEMENT_KINDS, sorted(
-            front.items() ^ WASTE_MOVEMENT_KINDS.items()
-        )
+        front = dict(re.findall(r'^\s*([A-Za-z_]+):\s*"([^"]+)"', block.group(1), re.M))
+        assert front == WASTE_MOVEMENT_KINDS, sorted(front.items() ^ WASTE_MOVEMENT_KINDS.items())
 
 
 class TestДоговорыОператоров:
@@ -478,9 +464,7 @@ class TestДоговорыОператоров:
     выбрать договор, а не читать финансовые условия.
     """
 
-    async def test_без_выдачи_модуля_ручки_нет(
-        self, async_client, make_auth_headers
-    ) -> None:
+    async def test_без_выдачи_модуля_ручки_нет(self, async_client, make_auth_headers) -> None:
         headers = await make_auth_headers()
         response = await async_client.get(f"{_API}/waste-contracts", headers=headers)
         assert response.status_code == 404
@@ -548,4 +532,3 @@ class TestДоговорыОператоров:
 
         assert response.status_code == 200, response.text
         assert response.json()["total"] == 0
-

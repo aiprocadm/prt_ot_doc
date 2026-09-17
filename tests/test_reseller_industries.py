@@ -114,6 +114,6 @@ def test_отраслевые_наборы_отличаются_от_общег�
         if item.code == DEFAULT_INDUSTRY:
             continue
         payload = json.loads(_pack_path(item.pack).read_text(encoding="utf-8"))
-        assert payload["reference_data"]["hazards"] != general["reference_data"]["hazards"], (
-            item.code
-        )
+        assert (
+            payload["reference_data"]["hazards"] != general["reference_data"]["hazards"]
+        ), item.code

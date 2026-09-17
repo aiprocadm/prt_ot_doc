@@ -76,9 +76,7 @@ def _front_map(name: str) -> dict[str, str]:
 
 async def _grant(sessionmaker, code: str = "civil_defense", on: bool = True) -> None:
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         feature = (
             await session.execute(select(Feature).where(Feature.code == code))
         ).scalar_one_or_none()
@@ -95,9 +93,7 @@ async def _grant(sessionmaker, code: str = "civil_defense", on: bool = True) -> 
             )
         ).scalar_one_or_none()
         if grant is None:
-            session.add(
-                FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=on)
-            )
+            session.add(FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=on))
         else:
             grant.on = on
         await session.commit()
@@ -135,9 +131,7 @@ async def _drill(
 
 
 class TestПланГрафикУчений:
-    async def test_без_выдачи_модуль_невидим(
-        self, async_client, make_auth_headers
-    ) -> None:
+    async def test_без_выдачи_модуль_невидим(self, async_client, make_auth_headers) -> None:
         headers = await make_auth_headers()
         response = await async_client.get(f"{_API}/drills", headers=headers)
         assert response.status_code == 404
@@ -195,9 +189,7 @@ class TestПротоколУчения:
     ) -> None:
         headers = await make_auth_headers()
         await _grant(sessionmaker)
-        drill = await _drill(
-            async_client, headers, planned_on=date.today() - timedelta(days=5)
-        )
+        drill = await _drill(async_client, headers, planned_on=date.today() - timedelta(days=5))
         held = await async_client.patch(
             f"{_API}/drills/{drill['id']}",
             json={
@@ -298,9 +290,7 @@ class TestСвязьСФормированием:
 
         headers = await make_auth_headers()
         await _grant(sessionmaker)
-        body = await _drill(
-            async_client, headers, kind="facility_training", title="Тренировка"
-        )
+        body = await _drill(async_client, headers, kind="facility_training", title="Тренировка")
         assert body["formation_id"] is None
         assert body["formation_name"] is None
 
@@ -423,7 +413,4 @@ class TestСловариУченийНаФронте:
 
     def test_результаты_учений_на_фронте_совпадают_с_бэкендом(self) -> None:
         front = _front_map("CD_DRILL_OUTCOME_TITLES")
-        assert front == CD_DRILL_OUTCOMES, sorted(
-            front.items() ^ CD_DRILL_OUTCOMES.items()
-        )
-
+        assert front == CD_DRILL_OUTCOMES, sorted(front.items() ^ CD_DRILL_OUTCOMES.items())

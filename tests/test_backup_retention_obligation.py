@@ -36,9 +36,7 @@ def _record(*, purged_at: datetime, block: dict | None, status: str = "purged"):
     act = {"executed_at": purged_at.isoformat()}
     if block is not None:
         act["backup_purge"] = block
-    return SimpleNamespace(
-        tenant_id="t-1", tenant_slug="romashka", status=status, purge_act=act
-    )
+    return SimpleNamespace(tenant_id="t-1", tenant_slug="romashka", status=status, purge_act=act)
 
 
 def test_дата_считается_от_дня_удаления_и_срока_хранения() -> None:

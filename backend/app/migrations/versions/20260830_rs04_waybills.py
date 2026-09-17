@@ -87,9 +87,7 @@ def upgrade() -> None:
             nullable=False,
             server_default="not_recorded",
         ),
-        sa.Column(
-            "status", sa.String(length=16), nullable=False, server_default="issued"
-        ),
+        sa.Column("status", sa.String(length=16), nullable=False, server_default="issued"),
         sa.Column("notes", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
@@ -98,9 +96,7 @@ def upgrade() -> None:
     )
     op.create_index("ix_road_waybill_vehicle_id", "road_waybill", ["vehicle_id"])
     op.create_index("ix_road_waybill_driver_id", "road_waybill", ["driver_id"])
-    op.create_index(
-        "ix_waybill_tenant_issued", "road_waybill", ["tenant_id", "issued_on"]
-    )
+    op.create_index("ix_waybill_tenant_issued", "road_waybill", ["tenant_id", "issued_on"])
 
 
 def downgrade() -> None:

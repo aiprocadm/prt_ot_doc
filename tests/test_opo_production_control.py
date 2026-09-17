@@ -46,11 +46,7 @@ pytestmark = pytest.mark.anyio
 
 _API = "/api/v1/industrial-safety"
 _FRONTEND_OPO_API = (
-    Path(__file__).resolve().parents[1]
-    / "frontend"
-    / "src"
-    / "api"
-    / "industrialSafety.ts"
+    Path(__file__).resolve().parents[1] / "frontend" / "src" / "api" / "industrialSafety.ts"
 )
 
 
@@ -65,9 +61,7 @@ def _front_map(name: str) -> dict[str, str]:
 
 async def _grant(sessionmaker, code: str = "industrial_safety", on: bool = True) -> None:
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         feature = (
             await session.execute(select(Feature).where(Feature.code == code))
         ).scalar_one_or_none()
@@ -395,9 +389,7 @@ class TestСловариПкНаФронте:
 
     def test_разделы_плана_на_фронте_совпадают_с_бэкендом(self) -> None:
         front = _front_map("PC_MEASURE_SECTION_TITLES")
-        assert front == PC_MEASURE_SECTIONS, sorted(
-            front.items() ^ PC_MEASURE_SECTIONS.items()
-        )
+        assert front == PC_MEASURE_SECTIONS, sorted(front.items() ^ PC_MEASURE_SECTIONS.items())
 
     def test_в_форме_только_записываемые_состояния_мероприятия(self) -> None:
         front = _front_map("PC_MEASURE_WRITABLE_STATUS_TITLES")
@@ -407,4 +399,3 @@ class TestСловариПкНаФронте:
         assert "overdue" not in front
         for code, title in front.items():
             assert title == PC_MEASURE_STATUS_TITLES[code], code
-

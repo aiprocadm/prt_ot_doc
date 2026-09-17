@@ -48,22 +48,16 @@ def upgrade() -> None:
         sa.Column("registered_on", sa.Date(), nullable=True),
         sa.Column("actualized_on", sa.Date(), nullable=True),
         sa.Column("excluded_on", sa.Date(), nullable=True),
-        sa.Column(
-            "status", sa.String(length=16), nullable=False, server_default="registered"
-        ),
+        sa.Column("status", sa.String(length=16), nullable=False, server_default="registered"),
         sa.Column("responsible", sa.String(length=255), nullable=True),
         sa.Column("notes", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
-        sa.UniqueConstraint(
-            "tenant_id", "register_number", name="uq_nvos_facility_register"
-        ),
+        sa.UniqueConstraint("tenant_id", "register_number", name="uq_nvos_facility_register"),
     )
     op.create_index("ix_nvos_facility_site_id", "nvos_facility", ["site_id"])
-    op.create_index(
-        "ix_nvos_facility_tenant_category", "nvos_facility", ["tenant_id", "category"]
-    )
+    op.create_index("ix_nvos_facility_tenant_category", "nvos_facility", ["tenant_id", "category"])
 
 
 def downgrade() -> None:

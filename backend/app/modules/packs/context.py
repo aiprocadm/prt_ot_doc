@@ -583,12 +583,8 @@ def _apply_bdd_reports(context: dict[str, Any], data: dict[str, Any]) -> dict[st
         "bdd_measures_failed_reason",
         _coerce_text(data.get("bdd_measures_failed_reason")),
     )
-    payload.setdefault(
-        "bdd_assignment_date", _coerce_text(data.get("bdd_assignment_date"))
-    )
-    payload.setdefault(
-        "bdd_assignment_list", _format_list(data.get("bdd_assignment_list"))
-    )
+    payload.setdefault("bdd_assignment_date", _coerce_text(data.get("bdd_assignment_date")))
+    payload.setdefault("bdd_assignment_list", _format_list(data.get("bdd_assignment_list")))
     return context
 
 

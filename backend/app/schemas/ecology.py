@@ -621,4 +621,3 @@ class WasteContractRead(BaseSchema):
 class WasteContractPage(BaseSchema):
     items: list[WasteContractRead]
     total: int
-

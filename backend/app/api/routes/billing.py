@@ -455,9 +455,7 @@ async def set_reseller_price(
             f"Период должен быть одним из: {', '.join(sorted(revenue.PERIOD_MONTHS))}",
         )
     if payload.valid_to is not None and payload.valid_to < payload.valid_from:
-        raise _billing_bad_request(
-            "RESELLER_PRICE_BAD_RANGE", "Дата окончания раньше даты начала"
-        )
+        raise _billing_bad_request("RESELLER_PRICE_BAD_RANGE", "Дата окончания раньше даты начала")
 
     row = ResellerPrice(
         reseller_tenant_id=str(tenant.id),

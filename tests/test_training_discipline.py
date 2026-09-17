@@ -58,9 +58,7 @@ _CD_API = "/api/v1/civil-defense"
 
 async def _grant(sessionmaker, code: str, on: bool = True) -> None:
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         feature = (
             await session.execute(select(Feature).where(Feature.code == code))
         ).scalar_one_or_none()
@@ -77,9 +75,7 @@ async def _grant(sessionmaker, code: str, on: bool = True) -> None:
             )
         ).scalar_one_or_none()
         if grant is None:
-            session.add(
-                FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=on)
-            )
+            session.add(FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=on))
         else:
             grant.on = on
         await session.commit()
@@ -95,9 +91,7 @@ async def _course(
     payload: dict[str, object] = {"title": title, "duration_hours": 16}
     if discipline is not None:
         payload["discipline"] = discipline
-    response = await async_client.post(
-        f"{_TRAINING_API}/courses", json=payload, headers=headers
-    )
+    response = await async_client.post(f"{_TRAINING_API}/courses", json=payload, headers=headers)
     assert response.status_code == 201, response.text
     return response.json()
 
@@ -111,9 +105,7 @@ class TestРазметкаПрограммы:
         assert body["discipline"] == "civil_defense"
         assert body["discipline_label"] == "ГО и ЧС"
 
-    async def test_программа_без_дисциплины_законна(
-        self, async_client, make_auth_headers
-    ) -> None:
+    async def test_программа_без_дисциплины_законна(self, async_client, make_auth_headers) -> None:
         """Пусто — «не размечено», а НЕ «общая охрана труда»."""
 
         headers = await make_auth_headers()
@@ -136,9 +128,7 @@ class TestРазметкаПрограммы:
         # а не 422 контуров дисциплин: единообразие ВНУТРИ модуля важнее.
         assert response.status_code == 400, response.text
 
-    async def test_разметку_можно_поменять(
-        self, async_client, make_auth_headers
-    ) -> None:
+    async def test_разметку_можно_поменять(self, async_client, make_auth_headers) -> None:
         """Программу переразмечают: это исправление, а не новый курс."""
 
         headers = await make_auth_headers()
@@ -153,9 +143,7 @@ class TestРазметкаПрограммы:
         assert patched.status_code == 200, patched.text
         assert patched.json()["discipline_label"] == "Пожарная безопасность"
 
-    async def test_разметку_можно_снять(
-        self, async_client, make_auth_headers
-    ) -> None:
+    async def test_разметку_можно_снять(self, async_client, make_auth_headers) -> None:
         """Ошиблись дисциплиной — снять её честнее, чем оставить ложную."""
 
         headers = await make_auth_headers()
@@ -173,12 +161,8 @@ class TestРазметкаПрограммы:
     ) -> None:
         headers = await make_auth_headers()
         await _course(async_client, headers, title="Курсовое обучение по ГО")
-        await _course(
-            async_client, headers, title="Обучение по отходам", discipline="ecology"
-        )
-        await _course(
-            async_client, headers, title="Курс без разметки", discipline=None
-        )
+        await _course(async_client, headers, title="Обучение по отходам", discipline="ecology")
+        await _course(async_client, headers, title="Курс без разметки", discipline=None)
 
         listed = await async_client.get(
             f"{_TRAINING_API}/courses",
@@ -210,9 +194,7 @@ class TestКонтурГОВидитСвоиПрограммы:
         await _course(
             async_client, headers, title="Вводный инструктаж по ГО", discipline="civil_defense"
         )
-        await _course(
-            async_client, headers, title="Обучение по отходам", discipline="ecology"
-        )
+        await _course(async_client, headers, title="Обучение по отходам", discipline="ecology")
 
         readiness = await async_client.get(f"{_CD_API}/readiness", headers=headers)
         assert readiness.status_code == 200, readiness.text
@@ -223,9 +205,7 @@ class TestКонтурГОВидитСвоиПрограммы:
     ) -> None:
         headers = await make_auth_headers()
         await _grant(sessionmaker, "civil_defense")
-        await _course(
-            async_client, headers, title="ПТМ", discipline="fire_safety"
-        )
+        await _course(async_client, headers, title="ПТМ", discipline="fire_safety")
         await _course(async_client, headers, title="Неразмеченный", discipline=None)
         readiness = await async_client.get(f"{_CD_API}/readiness", headers=headers)
         assert readiness.json()["training_programs"] == 0
@@ -239,13 +219,9 @@ class TestКонтурГОВидитСвоиПрограммы:
         await _grant(sessionmaker, "civil_defense")
         await _course(async_client, headers, title="Курсовое обучение по ГО")
 
-        listed = await async_client.get(
-            f"{_CD_API}/training-programs", headers=headers
-        )
+        listed = await async_client.get(f"{_CD_API}/training-programs", headers=headers)
         assert listed.status_code == 200, listed.text
-        assert [row["title"] for row in listed.json()["items"]] == [
-            "Курсовое обучение по ГО"
-        ]
+        assert [row["title"] for row in listed.json()["items"]] == ["Курсовое обучение по ГО"]
         # Заводить программу через контур ГО НЕЛЬЗЯ — это ядро.
         created = await async_client.post(
             f"{_CD_API}/training-programs",
@@ -275,13 +251,7 @@ class TestСловарьИГраница:
         обнови фронт — дисциплину нельзя будет ни выбрать, ни прочитать.
         """
 
-        page = (
-            Path(__file__).resolve().parents[1]
-            / "frontend"
-            / "src"
-            / "api"
-            / "training.ts"
-        )
+        page = Path(__file__).resolve().parents[1] / "frontend" / "src" / "api" / "training.ts"
         text = page.read_text(encoding="utf-8")
         block = re.search(
             r"TRAINING_DISCIPLINE_TITLES:\s*Record<string,\s*string>\s*=\s*\{(.*?)\}",
@@ -290,9 +260,7 @@ class TestСловарьИГраница:
         )
         assert block is not None, "не нашёлся словарь дисциплин на фронте"
         front = set(re.findall(r"^\s*([a-z_]+):", block.group(1), re.M))
-        assert front == {d.value for d in Discipline}, sorted(
-            front ^ {d.value for d in Discipline}
-        )
+        assert front == {d.value for d in Discipline}, sorted(front ^ {d.value for d in Discipline})
 
     async def test_платформа_не_назначает_дисциплину_и_не_требует_программ(
         self, async_client, make_auth_headers, sessionmaker

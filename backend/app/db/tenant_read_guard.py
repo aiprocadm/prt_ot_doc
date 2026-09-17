@@ -125,9 +125,7 @@ def _criteria_for(model: Any, tenant_id: str) -> Any:
 
     from sqlalchemy.orm import with_loader_criteria  # noqa: PLC0415
 
-    return with_loader_criteria(
-        model, lambda cls: cls.tenant_id == tenant_id, include_aliases=True
-    )
+    return with_loader_criteria(model, lambda cls: cls.tenant_id == tenant_id, include_aliases=True)
 
 
 def _session_tenant(session: Any) -> str:

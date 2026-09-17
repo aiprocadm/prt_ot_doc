@@ -110,9 +110,7 @@ def _course_to_schema(course: TrainingCourse) -> TrainingCourseRead:
         description=course.description,
         discipline=course.discipline,
         discipline_label=(
-            TRAINING_DISCIPLINE_TITLES.get(course.discipline)
-            if course.discipline
-            else None
+            TRAINING_DISCIPLINE_TITLES.get(course.discipline) if course.discipline else None
         ),
         duration_hours=course.duration_hours,
         valid_period_days=course.valid_period_days,

@@ -62,9 +62,7 @@ def upgrade() -> None:
         _TABLE,
         ["tenant_id", "user_id", "kind", "doc_version"],
     )
-    op.create_index(
-        "ix_tenant_legal_acceptance_lookup", _TABLE, ["tenant_id", "user_id", "kind"]
-    )
+    op.create_index("ix_tenant_legal_acceptance_lookup", _TABLE, ["tenant_id", "user_id", "kind"])
 
     bind = op.get_bind()
     if bind.dialect.name != "postgresql":
@@ -83,7 +81,5 @@ def downgrade() -> None:
     if bind.dialect.name == "postgresql":
         op.execute(f'DROP POLICY IF EXISTS "{_POLICY}" ON "{_TABLE}"')
     op.drop_index("ix_tenant_legal_acceptance_lookup", table_name=_TABLE)
-    op.drop_constraint(
-        "uq_tenant_legal_acceptance_user_kind_version", _TABLE, type_="unique"
-    )
+    op.drop_constraint("uq_tenant_legal_acceptance_user_kind_version", _TABLE, type_="unique")
     op.drop_table(_TABLE)

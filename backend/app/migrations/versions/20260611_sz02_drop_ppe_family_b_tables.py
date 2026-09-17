@@ -36,9 +36,7 @@ from alembic import op
 # страж `tests/test_migrations_expand_contract.py` не отличит осознанный
 # contract от удаления, которое сломает старый код во время раската.
 EXPAND_CONTRACT_STEP = "contract"
-EXPAND_CONTRACT_REASON = (
-    "семейство B таблиц СИЗ удалено из моделей отдельным PR #647; живой контур (семейство A) не затрагивается"
-)
+EXPAND_CONTRACT_REASON = "семейство B таблиц СИЗ удалено из моделей отдельным PR #647; живой контур (семейство A) не затрагивается"
 
 revision = "20260611_sz02_drop_ppe_family_b_tables"
 down_revision = "20260610_sz01_ppe_norms_card_766n"

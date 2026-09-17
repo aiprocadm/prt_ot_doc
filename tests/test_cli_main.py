@@ -93,9 +93,7 @@ async def test_resolve_template_returns_active_version() -> None:
                 return version
             raise AssertionError("Unexpected model request")
 
-        async def execute(
-            self, stmt: Any, params: dict[str, Any]
-        ) -> DummyResult:  # noqa: ARG002 - statement unused
+        async def execute(self, stmt: Any, params: dict[str, Any]) -> DummyResult:  # noqa: ARG002 - statement unused
             assert params["status"] == TemplateVersionStatus.ACTIVE.name
             return DummyResult()
 

@@ -60,9 +60,7 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
-        sa.UniqueConstraint(
-            "tenant_id", "register_number", name="uq_hazardous_facility_register"
-        ),
+        sa.UniqueConstraint("tenant_id", "register_number", name="uq_hazardous_facility_register"),
     )
     op.create_index("ix_hazardous_facility_site_id", "hazardous_facility", ["site_id"])
     op.create_index(

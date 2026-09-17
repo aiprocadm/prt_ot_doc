@@ -91,9 +91,9 @@ def _frontend_calls() -> dict[str, set[str]]:
             if not raw.startswith("/"):
                 continue
             url = raw.split("?")[0].rstrip("/") or "/"
-            calls.setdefault(
-                f"{match.group(1).upper()} {url}", set()
-            ).add(str(path.relative_to(REPO_ROOT)))
+            calls.setdefault(f"{match.group(1).upper()} {url}", set()).add(
+                str(path.relative_to(REPO_ROOT))
+            )
     return calls
 
 
@@ -113,8 +113,7 @@ def _matches(call_segments: tuple[str, ...], server_segments: tuple[str, ...]) -
     if len(call_segments) != len(server_segments):
         return False
     return all(
-        _segment_matches(mine, theirs)
-        for mine, theirs in zip(call_segments, server_segments)
+        _segment_matches(mine, theirs) for mine, theirs in zip(call_segments, server_segments)
     )
 
 

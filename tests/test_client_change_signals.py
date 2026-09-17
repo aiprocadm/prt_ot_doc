@@ -229,9 +229,9 @@ def test_словарь_действий_совпадает_с_тем_что_п�
     # Неуспешные строки сигналов не дают: у них нет записи, о которой сообщать.
     successful = written - {"failed", "skipped"}
 
-    assert successful == set(ROW_ACTIONS), (
-        f"импорт пишет {sorted(successful)}, а разбор ждёт {sorted(ROW_ACTIONS)}"
-    )
+    assert successful == set(
+        ROW_ACTIONS
+    ), f"импорт пишет {sorted(successful)}, а разбор ждёт {sorted(ROW_ACTIONS)}"
 
 
 def test_длинное_имя_обрезается_под_колонку_ленты():

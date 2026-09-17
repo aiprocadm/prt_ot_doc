@@ -55,20 +55,14 @@ def _front_map(name: str) -> dict[str, str]:
     """Читает map подписей из ``frontend/src/api/ecology.ts``."""
 
     text = _FRONTEND_ECOLOGY_API.read_text(encoding="utf-8")
-    block = re.search(
-        rf"{name}:\s*Record<string,\s*string>\s*=\s*\{{(.*?)\}}", text, re.S
-    )
+    block = re.search(rf"{name}:\s*Record<string,\s*string>\s*=\s*\{{(.*?)\}}", text, re.S)
     assert block is not None, f"не нашёлся map {name}"
-    return dict(
-        re.findall(r'^\s*"?([A-Za-z_0-9]+)"?:\s*"([^"]+)"', block.group(1), re.M)
-    )
+    return dict(re.findall(r'^\s*"?([A-Za-z_0-9]+)"?:\s*"([^"]+)"', block.group(1), re.M))
 
 
 async def _grant(sessionmaker, code: str = "ecology", on: bool = True) -> None:
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         feature = (
             await session.execute(select(Feature).where(Feature.code == code))
         ).scalar_one_or_none()
@@ -85,9 +79,7 @@ async def _grant(sessionmaker, code: str = "ecology", on: bool = True) -> None:
             )
         ).scalar_one_or_none()
         if grant is None:
-            session.add(
-                FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=on)
-            )
+            session.add(FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=on))
         else:
             grant.on = on
         await session.commit()
@@ -127,9 +119,7 @@ async def _point(
         payload["annual_limit_cubic_meters"] = limit
     if valid_until is not None:
         payload["permit_valid_until"] = str(valid_until)
-    response = await async_client.post(
-        f"{_API}/water-points", json=payload, headers=headers
-    )
+    response = await async_client.post(f"{_API}/water-points", json=payload, headers=headers)
     assert response.status_code == 201, response.text
     return response.json()["id"]
 
@@ -140,9 +130,7 @@ async def _setup(async_client, headers, sessionmaker, suffix: str = "0001") -> s
 
 
 class TestТочкиВодопользования:
-    async def test_без_выдачи_модуль_невидим(
-        self, async_client, make_auth_headers
-    ) -> None:
+    async def test_без_выдачи_модуль_невидим(self, async_client, make_auth_headers) -> None:
         headers = await make_auth_headers()
         response = await async_client.get(f"{_API}/water-points", headers=headers)
         assert response.status_code == 404
@@ -326,13 +314,9 @@ class TestУчётОбъёмов:
             "volume_cubic_meters": "100.000",
             "basis": "meter",
         }
-        first = await async_client.post(
-            f"{_API}/water-records", json=payload, headers=headers
-        )
+        first = await async_client.post(f"{_API}/water-records", json=payload, headers=headers)
         assert first.status_code == 201, first.text
-        second = await async_client.post(
-            f"{_API}/water-records", json=payload, headers=headers
-        )
+        second = await async_client.post(f"{_API}/water-records", json=payload, headers=headers)
         assert second.status_code == 422, second.text
 
     async def test_тот_же_месяц_на_другой_точке_принимается(
@@ -341,9 +325,7 @@ class TestУчётОбъёмов:
         headers = await make_auth_headers()
         facility_id = await _setup(async_client, headers, sessionmaker, "0012")
         first = await _point(async_client, headers, facility_id, number="В-1")
-        second = await _point(
-            async_client, headers, facility_id, number="В-2", kind="discharge"
-        )
+        second = await _point(async_client, headers, facility_id, number="В-2", kind="discharge")
         for point_id in (first, second):
             response = await async_client.post(
                 f"{_API}/water-records",
@@ -386,9 +368,7 @@ class TestСводкаИГраница:
         headers = await make_auth_headers()
         facility_id = await _setup(async_client, headers, sessionmaker, "0014")
         intake = await _point(async_client, headers, facility_id, number="В-1")
-        discharge = await _point(
-            async_client, headers, facility_id, number="С-1", kind="discharge"
-        )
+        discharge = await _point(async_client, headers, facility_id, number="С-1", kind="discharge")
         year = date.today().year
         await async_client.post(
             f"{_API}/water-records",
@@ -423,9 +403,7 @@ class TestСводкаИГраница:
     ) -> None:
         headers = await make_auth_headers()
         facility_id = await _setup(async_client, headers, sessionmaker, "0015")
-        point_id = await _point(
-            async_client, headers, facility_id, limit="500.000"
-        )
+        point_id = await _point(async_client, headers, facility_id, limit="500.000")
         await async_client.post(
             f"{_API}/water-records",
             json={
@@ -497,11 +475,8 @@ class TestСловариНаФронте:
 
     def test_основания_учёта_на_фронте_совпадают_с_бэкендом(self) -> None:
         front = _front_map("WATER_RECORD_BASIS_TITLES")
-        assert front == WATER_RECORD_BASES, sorted(
-            front.items() ^ WATER_RECORD_BASES.items()
-        )
+        assert front == WATER_RECORD_BASES, sorted(front.items() ^ WATER_RECORD_BASES.items())
 
     def test_месяцы_на_фронте_совпадают_с_бэкендом(self) -> None:
         front = {int(k): v for k, v in _front_map("MONTH_TITLES").items()}
         assert front == MONTH_TITLES, sorted(front.items() ^ MONTH_TITLES.items())
-

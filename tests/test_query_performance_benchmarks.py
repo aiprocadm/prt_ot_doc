@@ -76,9 +76,7 @@ class QueryCounter:
         self.count = 0
         self.statements: list[str] = []
 
-    def _on_execute(
-        self, conn, cursor, statement, parameters, context, executemany
-    ):  # noqa: D401, ANN001
+    def _on_execute(self, conn, cursor, statement, parameters, context, executemany):  # noqa: D401, ANN001
         head = statement.lstrip().split(" ", 1)[0].upper()
         if head in self._COUNTED_PREFIXES:
             self.count += 1

@@ -80,9 +80,7 @@ def person_title(entity: Person) -> str:
     return " ".join(part for part in parts if part).strip()
 
 
-async def enqueue_change_recorded(
-    session: AsyncSession, rows: Sequence[ClientChange]
-) -> None:
+async def enqueue_change_recorded(session: AsyncSession, rows: Sequence[ClientChange]) -> None:
     """BIZ-51 срез-9: каждая новая запись ленты — событие в outbox.
 
     Через событие запись видят rules engine (правила «если у клиента X, то

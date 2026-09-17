@@ -95,14 +95,17 @@ def test_без_предела_остаток_неизвестен():
 
 
 def test_строки_идут_в_понятном_порядке():
-    codes = [line.code for line in build_limit_lines(
-        max_doc_generations_per_month=1,
-        max_storage_mb=1,
-        monthly_edo_outgoing=1,
-        max_parallel_jobs=1,
-        doc_generations_used=0,
-        storage_bytes_used=0,
-    )]
+    codes = [
+        line.code
+        for line in build_limit_lines(
+            max_doc_generations_per_month=1,
+            max_storage_mb=1,
+            monthly_edo_outgoing=1,
+            max_parallel_jobs=1,
+            doc_generations_used=0,
+            storage_bytes_used=0,
+        )
+    ]
 
     # Сначала то, что считается, потом то, что нет: иначе человек первым делом
     # видит прочерки и решает, что не работает ничего.

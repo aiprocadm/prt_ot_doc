@@ -119,9 +119,7 @@ async def test_чужие_обращения_клиенту_не_видны(
     await _log_entry(ids["beta"], mine, email="spec@beta.ru")
     await _log_entry(ids["beta"], other, email="other@beta.ru")
 
-    body = (
-        await async_client.get(MY_LOG, headers=await _client_headers(make_auth_headers))
-    ).json()
+    body = (await async_client.get(MY_LOG, headers=await _client_headers(make_auth_headers))).json()
 
     assert body["total"] == 1
     assert body["items"][0]["actor_email"] == "spec@beta.ru"
@@ -165,9 +163,7 @@ async def test_рядовому_сотруднику_журнал_закрыт(
 
 
 @pytest.mark.anyio
-async def test_модуль_аутсорсера_не_требуется(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_модуль_аутсорсера_не_требуется(async_client: AsyncClient, make_auth_headers) -> None:
     """У клиента модуля `managed_clients` нет и быть не должно.
 
     Право знать, кто трогал твои данные, не может зависеть от чужой подписки.
@@ -215,9 +211,7 @@ async def test_записи_не_дублируются_в_арендатора_
 
 
 @pytest.mark.anyio
-async def test_период_сужает_выборку(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_период_сужает_выборку(async_client: AsyncClient, make_auth_headers) -> None:
     ids = await _tenants()
     mcid = await _serve(ids["beta"], client_slug="acme")
     await _log_entry(ids["beta"], mcid)

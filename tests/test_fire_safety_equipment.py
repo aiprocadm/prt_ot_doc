@@ -34,9 +34,7 @@ _API = "/api/v1/fire-safety"
 
 async def _grant(sessionmaker, code: str = "fire_safety", on: bool = True) -> None:
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         feature = (
             await session.execute(select(Feature).where(Feature.code == code))
         ).scalar_one_or_none()
@@ -189,14 +187,10 @@ class TestСловарьВидовСредствНаФронте:
 
     def test_виды_средств_на_фронте_совпадают_с_бэкендом(self) -> None:
         text = _FRONTEND_FIRE_API.read_text(encoding="utf-8")
-        block = re.search(
-            r"FIRE_EQUIPMENT_TITLES:\s*Record<[^>]+>\s*=\s*\{(.*?)\n\}", text, re.S
-        )
+        block = re.search(r"FIRE_EQUIPMENT_TITLES:\s*Record<[^>]+>\s*=\s*\{(.*?)\n\}", text, re.S)
         assert block is not None, "не нашёлся map FIRE_EQUIPMENT_TITLES"
-        front = set(re.findall(r'^\s*([a-z_]+):', block.group(1), re.M))
-        assert front == set(FIRE_EQUIPMENT_KINDS), sorted(
-            front ^ set(FIRE_EQUIPMENT_KINDS)
-        )
+        front = set(re.findall(r"^\s*([a-z_]+):", block.group(1), re.M))
+        assert front == set(FIRE_EQUIPMENT_KINDS), sorted(front ^ set(FIRE_EQUIPMENT_KINDS))
 
 
 class TestСостояниеСредства:
@@ -294,4 +288,3 @@ class TestСостояниеСредства:
         assert front == FIRE_EQUIPMENT_STATUSES, sorted(
             front.items() ^ FIRE_EQUIPMENT_STATUSES.items()
         )
-

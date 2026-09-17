@@ -67,9 +67,7 @@ async def _publish_offer(async_client, headers, body: str = "Условия ок
 
 
 @pytest.mark.anyio
-async def test_оферта_читается_без_токена(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_оферта_читается_без_токена(async_client: AsyncClient, make_auth_headers) -> None:
     """Ссылка на оферту с экрана входа бессмысленна, если для неё нужен вход."""
 
     await _shape_tree()
@@ -154,9 +152,7 @@ async def test_публикация_добавляет_редакцию_а_не_
         rows = (
             (
                 await session.execute(
-                    select(TenantLegalDocument).where(
-                        TenantLegalDocument.tenant_id == ids["beta"]
-                    )
+                    select(TenantLegalDocument).where(TenantLegalDocument.tenant_id == ids["beta"])
                 )
             )
             .scalars()
@@ -168,9 +164,7 @@ async def test_публикация_добавляет_редакцию_а_не_
 
 
 @pytest.mark.anyio
-async def test_действует_последняя_редакция(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_действует_последняя_редакция(async_client: AsyncClient, make_auth_headers) -> None:
     await _shape_tree()
     headers = await _partner_headers(make_auth_headers)
     await _publish_offer(async_client, headers, body="Старая")
@@ -193,9 +187,7 @@ async def test_свой_текст_побеждает_текст_партнёр�
     )
     # Клиенту публиковать нельзя, поэтому «свою» редакцию заводим владельцем
     # платформы для САМОГО партнёра — проверяем ступень `self`.
-    response = await async_client.get(
-        f"{PUBLIC}/offer", headers={"x-tenant": "beta"}
-    )
+    response = await async_client.get(f"{PUBLIC}/offer", headers={"x-tenant": "beta"})
 
     assert response.json()["source"] == "self"
 
@@ -233,9 +225,7 @@ async def test_публикация_без_токена_отклоняется(
 
 
 @pytest.mark.anyio
-async def test_пустой_текст_не_публикуется(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_пустой_текст_не_публикуется(async_client: AsyncClient, make_auth_headers) -> None:
     await _shape_tree()
 
     response = await async_client.put(
@@ -255,8 +245,6 @@ async def test_неизвестный_вид_текста_отвергается
 
     await _shape_tree()
 
-    response = await async_client.get(
-        f"{PUBLIC}/contract", headers={"x-tenant": "acme"}
-    )
+    response = await async_client.get(f"{PUBLIC}/contract", headers={"x-tenant": "acme"})
 
     assert response.status_code == 422

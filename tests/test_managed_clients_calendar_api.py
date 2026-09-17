@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from fastapi import HTTPException, Response
+from fastapi import Response
 
 from app.api.routes import managed_clients as routes
 from app.domains.managed_clients.attention import SignalKind

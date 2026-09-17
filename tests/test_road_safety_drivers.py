@@ -78,9 +78,7 @@ def _front_map(name: str) -> dict[str, str]:
 
 async def _grant(sessionmaker, code: str = "road_safety", on: bool = True) -> None:
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         feature = (
             await session.execute(select(Feature).where(Feature.code == code))
         ).scalar_one_or_none()
@@ -97,9 +95,7 @@ async def _grant(sessionmaker, code: str = "road_safety", on: bool = True) -> No
             )
         ).scalar_one_or_none()
         if grant is None:
-            session.add(
-                FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=on)
-            )
+            session.add(FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=on))
         else:
             grant.on = on
         await session.commit()
@@ -109,15 +105,9 @@ async def _person(sessionmaker, last_name: str = "Шофёров", **extra) -> s
     """Человек из ЯДРА: карточка водителя своих людей не заводит."""
 
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         company = (
-            (
-                await session.execute(
-                    select(Company).where(Company.tenant_id == tenant.id)
-                )
-            )
+            (await session.execute(select(Company).where(Company.tenant_id == tenant.id)))
             .scalars()
             .first()
         )
@@ -167,9 +157,7 @@ async def _driver(
 
 
 class TestВодительскийСостав:
-    async def test_без_выдачи_модуль_невидим(
-        self, async_client, make_auth_headers
-    ) -> None:
+    async def test_без_выдачи_модуль_невидим(self, async_client, make_auth_headers) -> None:
         headers = await make_auth_headers()
         response = await async_client.get(f"{_API}/drivers", headers=headers)
         assert response.status_code == 404
@@ -314,9 +302,7 @@ class TestВодительскийСостав:
         headers = await make_auth_headers()
         await _grant(sessionmaker)
         person_id = await _person(sessionmaker)
-        driver = await _driver(
-            async_client, headers, person_id, license_number="9900 555555"
-        )
+        driver = await _driver(async_client, headers, person_id, license_number="9900 555555")
         patched = await async_client.patch(
             f"{_API}/drivers/{driver['id']}",
             json={"status": "suspended"},
@@ -340,16 +326,12 @@ class TestВодительскийСостав:
         )
         assert response.status_code == 404, response.text
 
-    async def test_отбор_по_категории(
-        self, async_client, make_auth_headers, sessionmaker
-    ) -> None:
+    async def test_отбор_по_категории(self, async_client, make_auth_headers, sessionmaker) -> None:
         headers = await make_auth_headers()
         await _grant(sessionmaker)
         bus = await _person(sessionmaker, last_name="Автобусов")
         truck = await _person(sessionmaker, last_name="Грузовиков")
-        await _driver(
-            async_client, headers, bus, license_number="9900 666666", categories=["D"]
-        )
+        await _driver(async_client, headers, bus, license_number="9900 666666", categories=["D"])
         await _driver(
             async_client,
             headers,
@@ -364,18 +346,14 @@ class TestВодительскийСостав:
         assert body["total"] == 1
         assert body["items"][0]["person_name"].startswith("Автобусов")
 
-    async def test_отбор_по_человеку(
-        self, async_client, make_auth_headers, sessionmaker
-    ) -> None:
+    async def test_отбор_по_человеку(self, async_client, make_auth_headers, sessionmaker) -> None:
         """Срез-67: строка «БДД» карточки сотрудника открывает состав НА НЁМ."""
 
         headers = await make_auth_headers()
         await _grant(sessionmaker)
         bus = await _person(sessionmaker, last_name="Автобусов")
         truck = await _person(sessionmaker, last_name="Грузовиков")
-        await _driver(
-            async_client, headers, bus, license_number="9900 666666", categories=["D"]
-        )
+        await _driver(async_client, headers, bus, license_number="9900 666666", categories=["D"])
         await _driver(
             async_client,
             headers,
@@ -446,9 +424,7 @@ class TestСтаж:
         headers = await make_auth_headers()
         await _grant(sessionmaker)
         person_id = await _person(sessionmaker)
-        body = await _driver(
-            async_client, headers, person_id, license_number="9901 000001"
-        )
+        body = await _driver(async_client, headers, person_id, license_number="9901 000001")
         assert body["experience_years"] is None, "«не знаем» — это не «ноль лет»"
 
     async def test_стаж_из_будущего_отвергается(
@@ -480,9 +456,7 @@ class TestСрокУдостоверения:
         headers = await make_auth_headers()
         await _grant(sessionmaker)
         person_id = await _person(sessionmaker)
-        body = await _driver(
-            async_client, headers, person_id, license_number="9901 000003"
-        )
+        body = await _driver(async_client, headers, person_id, license_number="9901 000003")
         assert body["license_status"] == "missing"
         assert body["license_status_label"] == "Сведения не внесены"
 
@@ -605,9 +579,7 @@ class TestСводкаПоВодителям:
         headers = await make_auth_headers()
         await _grant(sessionmaker)
         person_id = await _person(sessionmaker)
-        body = await _driver(
-            async_client, headers, person_id, license_number="9902 000005"
-        )
+        body = await _driver(async_client, headers, person_id, license_number="9902 000005")
         forbidden = {
             "can_drive",
             "allowed_vehicle_kinds",
@@ -669,4 +641,3 @@ class TestСловариВодителейНаФронте:
     def test_состояния_допуска_на_фронте_совпадают_с_бэкендом(self) -> None:
         front = _front_map("DRIVER_STATUS_TITLES")
         assert front == DRIVER_STATUSES, sorted(front.items() ^ DRIVER_STATUSES.items())
-

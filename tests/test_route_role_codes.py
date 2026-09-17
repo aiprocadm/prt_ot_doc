@@ -84,10 +84,11 @@ def test_в_списках_прав_нет_несуществующих_роле
     found = _role_literals()
     assert found, "не нашлось ни одного списка ролей — проверка потеряла область"
     unknown = {code: places for code, places in found.items() if code not in KNOWN_ROLE_CODES}
-    assert (
-        not unknown
-    ), "коды ролей вне RoleEnum (совпасть не могут, доступ уже обещанного):\n" + "\n".join(
-        f"  {code!r}: " + ", ".join(sorted(places)) for code, places in sorted(unknown.items())
+    assert not unknown, (
+        "коды ролей вне RoleEnum (совпасть не могут, доступ уже обещанного):\n"
+        + "\n".join(
+            f"  {code!r}: " + ", ".join(sorted(places)) for code, places in sorted(unknown.items())
+        )
     )
 
 

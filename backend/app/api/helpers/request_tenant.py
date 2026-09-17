@@ -33,6 +33,7 @@ def path_is_under(path: str, prefixes: tuple[str, ...]) -> bool:
 
     return any(path == prefix or path.startswith(f"{prefix}/") for prefix in prefixes)
 
+
 _STATE_ATTR = "_resolved_request_tenant"
 #: Отдельная метка «уже искали и не нашли». Без неё ненайденный арендатор
 #: означал бы «в кэше пусто» и приводил бы к повторному запросу в базу на каждой

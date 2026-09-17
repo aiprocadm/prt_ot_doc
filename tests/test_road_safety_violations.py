@@ -74,9 +74,7 @@ def _front_map(name: str) -> dict[str, str]:
 
 async def _grant(sessionmaker, code: str = "road_safety", on: bool = True) -> None:
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         feature = (
             await session.execute(select(Feature).where(Feature.code == code))
         ).scalar_one_or_none()
@@ -93,9 +91,7 @@ async def _grant(sessionmaker, code: str = "road_safety", on: bool = True) -> No
             )
         ).scalar_one_or_none()
         if grant is None:
-            session.add(
-                FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=on)
-            )
+            session.add(FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=on))
         else:
             grant.on = on
         await session.commit()
@@ -103,15 +99,9 @@ async def _grant(sessionmaker, code: str = "road_safety", on: bool = True) -> No
 
 async def _person(sessionmaker, last_name: str = "Шофёров") -> str:
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         company = (
-            (
-                await session.execute(
-                    select(Company).where(Company.tenant_id == tenant.id)
-                )
-            )
+            (await session.execute(select(Company).where(Company.tenant_id == tenant.id)))
             .scalars()
             .first()
         )
@@ -186,9 +176,7 @@ async def _violation(
 ) -> dict:
     payload: dict[str, object] = {
         "vehicle_id": vehicle["id"],
-        "occurred_at": (
-            occurred_at or datetime.now(timezone.utc) - timedelta(days=3)
-        ).isoformat(),
+        "occurred_at": (occurred_at or datetime.now(timezone.utc) - timedelta(days=3)).isoformat(),
         "source": source,
     }
     if driver is not None:
@@ -199,17 +187,13 @@ async def _violation(
         payload["fine_amount"] = fine
     if paid_on is not None:
         payload["fine_paid_on"] = paid_on
-    response = await async_client.post(
-        f"{_API}/violations", json=payload, headers=headers
-    )
+    response = await async_client.post(f"{_API}/violations", json=payload, headers=headers)
     assert response.status_code == expect, response.text
     return response.json()
 
 
 class TestРегистрация:
-    async def test_без_выдачи_модуль_невидим(
-        self, async_client, make_auth_headers
-    ) -> None:
+    async def test_без_выдачи_модуль_невидим(self, async_client, make_auth_headers) -> None:
         headers = await make_auth_headers()
         response = await async_client.get(f"{_API}/violations", headers=headers)
         assert response.status_code == 404
@@ -247,9 +231,7 @@ class TestРегистрация:
             expect=422,
         )
 
-    async def test_чужой_машины_нет(
-        self, async_client, make_auth_headers, sessionmaker
-    ) -> None:
+    async def test_чужой_машины_нет(self, async_client, make_auth_headers, sessionmaker) -> None:
         headers = await make_auth_headers()
         await _grant(sessionmaker)
         response = await async_client.post(
@@ -269,9 +251,7 @@ class TestРегистрация:
 
         headers = await make_auth_headers()
         await _grant(sessionmaker)
-        vehicle = await _vehicle(
-            async_client, headers, plate="В001ВВ99", status="decommissioned"
-        )
+        vehicle = await _vehicle(async_client, headers, plate="В001ВВ99", status="decommissioned")
         body = await _violation(async_client, headers, vehicle)
         assert body["vehicle_plate"] == "В001ВВ99"
 
@@ -356,9 +336,7 @@ class TestШтраф:
         headers = await make_auth_headers()
         await _grant(sessionmaker)
         vehicle = await _vehicle(async_client, headers)
-        body = await _violation(
-            async_client, headers, vehicle, source="internal", fine=None
-        )
+        body = await _violation(async_client, headers, vehicle, source="internal", fine=None)
         assert body["fine_status"] == "none"
         assert body["fine_status_label"] == "Штраф не наложен"
 
@@ -434,9 +412,7 @@ class TestОтборИСогласиеПравил:
         await _violation(async_client, headers, vehicle, fine=None)
         await _violation(async_client, headers, vehicle, fine="0")
         await _violation(async_client, headers, vehicle, fine="500.00")
-        await _violation(
-            async_client, headers, vehicle, fine="700.00", paid_on="2026-08-20"
-        )
+        await _violation(async_client, headers, vehicle, fine="700.00", paid_on="2026-08-20")
 
         everything = await async_client.get(
             f"{_API}/violations", params={"limit": 200}, headers=headers
@@ -503,9 +479,7 @@ class TestСводка:
         vehicle = await _vehicle(async_client, headers)
         driver = await _driver(async_client, headers, await _person(sessionmaker))
         await _violation(async_client, headers, vehicle, fine="1500.00")
-        await _violation(
-            async_client, headers, vehicle, driver=driver, fine="500.00"
-        )
+        await _violation(async_client, headers, vehicle, driver=driver, fine="500.00")
         await _violation(
             async_client,
             headers,
@@ -523,19 +497,13 @@ class TestСводка:
         assert body["fines_unpaid_count"] == 2
         assert body["fines_unpaid_amount"] == 2000.0
 
-    async def test_окно_сводки_годовое(
-        self, async_client, make_auth_headers, sessionmaker
-    ) -> None:
+    async def test_окно_сводки_годовое(self, async_client, make_auth_headers, sessionmaker) -> None:
         headers = await make_auth_headers()
         await _grant(sessionmaker)
         vehicle = await _vehicle(async_client, headers)
         now = datetime.now(timezone.utc)
-        await _violation(
-            async_client, headers, vehicle, occurred_at=now - timedelta(days=400)
-        )
-        await _violation(
-            async_client, headers, vehicle, occurred_at=now - timedelta(days=100)
-        )
+        await _violation(async_client, headers, vehicle, occurred_at=now - timedelta(days=400))
+        await _violation(async_client, headers, vehicle, occurred_at=now - timedelta(days=100))
         body = (await async_client.get(f"{_API}/readiness", headers=headers)).json()
         assert body["violations_total"] == 1
 
@@ -577,7 +545,4 @@ class TestСловарьСпособовНаФронте:
 
     def test_способы_на_фронте_совпадают_с_бэкендом(self) -> None:
         front = _front_map("VIOLATION_SOURCE_TITLES")
-        assert front == VIOLATION_SOURCES, sorted(
-            front.items() ^ VIOLATION_SOURCES.items()
-        )
-
+        assert front == VIOLATION_SOURCES, sorted(front.items() ^ VIOLATION_SOURCES.items())

@@ -96,9 +96,7 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | No
 
 Access = Annotated[
     AccessContext,
-    Depends(
-        abac(_tenant_resource_id, required_roles=_ROLES, action="manage industrial safety")
-    ),
+    Depends(abac(_tenant_resource_id, required_roles=_ROLES, action="manage industrial safety")),
 ]
 
 _FEATURE_CODE = "industrial_safety"
@@ -145,9 +143,7 @@ def _facility_read(facility: HazardousFacility) -> HazardousFacilityRead:
         name=facility.name,
         register_number=facility.register_number,
         hazard_class=facility.hazard_class,
-        hazard_class_label=OPO_HAZARD_CLASSES.get(
-            facility.hazard_class, facility.hazard_class
-        ),
+        hazard_class_label=OPO_HAZARD_CLASSES.get(facility.hazard_class, facility.hazard_class),
         site_id=facility.site_id,
         registered_on=facility.registered_on,
         excluded_on=facility.excluded_on,
@@ -178,8 +174,7 @@ def _validate_dictionaries(*, hazard_class: str | None, status_value: str | None
         )
     if status_value is not None and status_value not in OPO_STATUSES:
         raise _unprocessable(
-            f"Неизвестное состояние {status_value!r}; допустимые: "
-            f"{', '.join(OPO_STATUSES)}"
+            f"Неизвестное состояние {status_value!r}; допустимые: " f"{', '.join(OPO_STATUSES)}"
         )
 
 
@@ -200,9 +195,7 @@ async def _ensure_register_number_free(
     if exclude_id:
         stmt = stmt.where(HazardousFacility.id != exclude_id)
     if (await session.execute(stmt)).scalar_one_or_none() is not None:
-        raise _unprocessable(
-            f"Объект с регистрационным номером {register_number!r} уже заведён"
-        )
+        raise _unprocessable(f"Объект с регистрационным номером {register_number!r} уже заведён")
 
 
 async def _get_facility_or_404(
@@ -262,9 +255,7 @@ async def list_facilities(
         .scalars()
         .all()
     )
-    return HazardousFacilityPage(
-        items=[_facility_read(r) for r in rows], total=total
-    )
+    return HazardousFacilityPage(items=[_facility_read(r) for r in rows], total=total)
 
 
 @router.post(
@@ -281,9 +272,7 @@ async def create_facility(
 ) -> HazardousFacilityRead:
     TenantContextValidator.ensure_tenant_context(tenant)
     await _validate_site(session, tenant, payload.site_id)
-    _validate_dictionaries(
-        hazard_class=payload.hazard_class, status_value=payload.status
-    )
+    _validate_dictionaries(hazard_class=payload.hazard_class, status_value=payload.status)
     register_number = payload.register_number.strip()
     await _ensure_register_number_free(session, tenant, register_number)
 
@@ -341,9 +330,7 @@ async def update_facility(
     facility = await _get_facility_or_404(session, tenant, facility_id)
     data = payload.model_dump(exclude_unset=True)
     await _validate_site(session, tenant, data.get("site_id"))
-    _validate_dictionaries(
-        hazard_class=data.get("hazard_class"), status_value=data.get("status")
-    )
+    _validate_dictionaries(hazard_class=data.get("hazard_class"), status_value=data.get("status"))
     if "register_number" in data:
         value = data["register_number"]
         if value is None or not str(value).strip():
@@ -431,9 +418,7 @@ def _device_read(
         notes=device.notes,
         epb_status=epb,
         epb_status_label=OPO_EPB_STATUS_TITLES.get(epb, epb),
-        past_lifetime=(
-            device.lifetime_until is not None and device.lifetime_until < today
-        ),
+        past_lifetime=(device.lifetime_until is not None and device.lifetime_until < today),
         last_work_on=last_work[0] if last_work else None,
         last_work_result=last_work[1] if last_work else None,
     )
@@ -453,13 +438,10 @@ async def _validate_facility(
         raise _unprocessable("Объект не найден")
 
 
-def _validate_device_dictionaries(
-    *, kind: str | None, status_value: str | None
-) -> None:
+def _validate_device_dictionaries(*, kind: str | None, status_value: str | None) -> None:
     if kind is not None and kind not in OPO_DEVICE_KINDS:
         raise _unprocessable(
-            f"Неизвестный тип устройства {kind!r}; допустимые: "
-            f"{', '.join(OPO_DEVICE_KINDS)}"
+            f"Неизвестный тип устройства {kind!r}; допустимые: " f"{', '.join(OPO_DEVICE_KINDS)}"
         )
     if status_value is not None and status_value not in OPO_DEVICE_STATUSES:
         raise _unprocessable(
@@ -516,11 +498,7 @@ async def list_devices(
         stmt = stmt.where(TechnicalDevice.status == status_filter)
     total = int(await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
     rows = (
-        (
-            await session.execute(
-                stmt.order_by(TechnicalDevice.name).offset(offset).limit(limit)
-            )
-        )
+        (await session.execute(stmt.order_by(TechnicalDevice.name).offset(offset).limit(limit)))
         .scalars()
         .all()
     )
@@ -531,9 +509,7 @@ async def list_devices(
     )
 
 
-@router.post(
-    "/devices", response_model=TechnicalDeviceRead, status_code=status.HTTP_201_CREATED
-)
+@router.post("/devices", response_model=TechnicalDeviceRead, status_code=status.HTTP_201_CREATED)
 async def create_device(
     request: Request,
     payload: TechnicalDeviceCreate,
@@ -597,9 +573,7 @@ async def update_device(
     device = await _get_device_or_404(session, tenant, device_id)
     data = payload.model_dump(exclude_unset=True)
     await _validate_facility(session, tenant, data.get("facility_id"))
-    _validate_device_dictionaries(
-        kind=data.get("kind"), status_value=data.get("status")
-    )
+    _validate_device_dictionaries(kind=data.get("kind"), status_value=data.get("status"))
     today = date.today()
     before = _device_read(device, today).model_dump()
     for field in (
@@ -617,9 +591,7 @@ async def update_device(
     ):
         if field in data:
             value = data[field]
-            if field in {"name", "facility_id"} and (
-                value is None or not str(value).strip()
-            ):
+            if field in {"name", "facility_id"} and (value is None or not str(value).strip()):
                 raise _unprocessable(f"{field} cannot be empty")
             setattr(device, field, value.strip() if isinstance(value, str) else value)
     after = _device_read(device, today).model_dump()
@@ -674,9 +646,7 @@ async def _last_work_map(
         .subquery()
     )
     rows = await session.execute(
-        select(ranked.c.device_id, ranked.c.performed_on, ranked.c.result).where(
-            ranked.c.rn == 1
-        )
+        select(ranked.c.device_id, ranked.c.performed_on, ranked.c.result).where(ranked.c.rn == 1)
     )
     return {row.device_id: (row.performed_on, row.result) for row in rows}
 
@@ -753,19 +723,12 @@ async def list_device_works(
         .all()
     )
     return DeviceWorkPage(
-        items=[
-            _work_read(
-                r, shifted=_work_shifts_due(r.kind, r.result, r.next_due)
-            )
-            for r in rows
-        ],
+        items=[_work_read(r, shifted=_work_shifts_due(r.kind, r.result, r.next_due)) for r in rows],
         total=total,
     )
 
 
-@router.post(
-    "/device-works", response_model=DeviceWorkRead, status_code=status.HTTP_201_CREATED
-)
+@router.post("/device-works", response_model=DeviceWorkRead, status_code=status.HTTP_201_CREATED)
 async def record_device_work(
     request: Request,
     payload: DeviceWorkCreate,
@@ -785,8 +748,7 @@ async def record_device_work(
     device = await _get_device_or_404(session, tenant, payload.device_id)
     if payload.kind not in OPO_WORK_KINDS:
         raise _unprocessable(
-            f"Неизвестный вид работы {payload.kind!r}; допустимые: "
-            f"{', '.join(OPO_WORK_KINDS)}"
+            f"Неизвестный вид работы {payload.kind!r}; допустимые: " f"{', '.join(OPO_WORK_KINDS)}"
         )
     if payload.result not in OPO_WORK_RESULTS:
         raise _unprocessable(
@@ -795,8 +757,7 @@ async def record_device_work(
         )
     if payload.performed_on > date.today():
         raise _unprocessable(
-            "Дата работы не может быть в будущем — запись о работе это "
-            "свидетельство, а не план"
+            "Дата работы не может быть в будущем — запись о работе это " "свидетельство, а не план"
         )
     if payload.kind == OPO_WORK_KIND_EXTENDING_EPB and not (
         payload.conclusion_number and payload.conclusion_number.strip()
@@ -904,9 +865,7 @@ async def list_attestations(
         .where(
             Attestation.tenant_id == tenant.id,
             Attestation.deleted_at.is_(None),
-            Attestation.area_code.in_(
-                areas_of_discipline(Discipline.INDUSTRIAL_SAFETY)
-            ),
+            Attestation.area_code.in_(areas_of_discipline(Discipline.INDUSTRIAL_SAFETY)),
         )
     )
     if area_code:
@@ -923,14 +882,10 @@ async def list_attestations(
             person_id=record.person_id,
             # ФИО собирается здесь: у Person нет готового поля с полным именем,
             # а показывать человека идентификатором на экране нельзя.
-            person_name=" ".join(
-                part for part in (last_name, first_name, middle_name) if part
-            ),
+            person_name=" ".join(part for part in (last_name, first_name, middle_name) if part),
             name=record.name,
             area_code=record.area_code or "",
-            area_label=ATTESTATION_AREA_TITLES.get(
-                record.area_code or "", record.area_code or ""
-            ),
+            area_label=ATTESTATION_AREA_TITLES.get(record.area_code or "", record.area_code or ""),
             issued_at=record.issued_at,
             expires_at=record.expires_at,
             validity_status=_validity_status(record.expires_at, today),
@@ -1058,9 +1013,7 @@ async def _plan_read(
         status_label=PC_PLAN_STATUSES.get(plan.status, plan.status),
         notes=plan.notes,
         measures_total=len(measures),
-        measures_overdue=sum(
-            1 for m in measures if _measure_status(m, today) == "overdue"
-        ),
+        measures_overdue=sum(1 for m in measures if _measure_status(m, today) == "overdue"),
     )
 
 
@@ -1202,9 +1155,7 @@ def _validate_measure(
             f"{', '.join(PC_MEASURE_WRITABLE_STATUSES)}"
         )
     if completed_on is not None and completed_on > date.today():
-        raise _unprocessable(
-            "Дата выполнения не может быть в будущем — это план, а не отчёт"
-        )
+        raise _unprocessable("Дата выполнения не может быть в будущем — это план, а не отчёт")
     if is_done and completed_on is None:
         raise _unprocessable(
             "У выполненного мероприятия обязательна дата выполнения: именно она "
@@ -1247,9 +1198,7 @@ async def list_pc_measures(
     return PcMeasurePage(items=[_measure_read(r, today) for r in rows], total=total)
 
 
-@router.post(
-    "/pc-measures", response_model=PcMeasureRead, status_code=status.HTTP_201_CREATED
-)
+@router.post("/pc-measures", response_model=PcMeasureRead, status_code=status.HTTP_201_CREATED)
 async def create_pc_measure(
     request: Request,
     payload: PcMeasureCreate,
@@ -1336,9 +1285,7 @@ async def update_pc_measure(
     # «выполнено» одним запросом и дата другим прошли бы оба, оставив запись
     # без свидетельства (прецедент тренировок контура ПБ).
     next_status = data["status"] if "status" in data else measure.status
-    next_completed = (
-        data["completed_on"] if "completed_on" in data else measure.completed_on
-    )
+    next_completed = data["completed_on"] if "completed_on" in data else measure.completed_on
     _validate_measure(
         section=data.get("section"),
         status_value=data.get("status"),
@@ -1476,9 +1423,7 @@ async def industrial_readiness(
                 select(Attestation).where(
                     Attestation.tenant_id == tenant.id,
                     Attestation.deleted_at.is_(None),
-                    Attestation.area_code.in_(
-                        areas_of_discipline(Discipline.INDUSTRIAL_SAFETY)
-                    ),
+                    Attestation.area_code.in_(areas_of_discipline(Discipline.INDUSTRIAL_SAFETY)),
                 )
             )
         )

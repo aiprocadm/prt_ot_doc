@@ -66,9 +66,7 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
     )
-    op.create_index(
-        "ix_opo_technical_device_facility_id", "opo_technical_device", ["facility_id"]
-    )
+    op.create_index("ix_opo_technical_device_facility_id", "opo_technical_device", ["facility_id"])
     op.create_index(
         "ix_opo_device_tenant_epb",
         "opo_technical_device",

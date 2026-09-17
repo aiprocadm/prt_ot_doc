@@ -135,7 +135,9 @@ def test_отказ_оператора_не_выдаётся_за_успех(tmp
 
 def test_команда_не_задана_это_отказ() -> None:
     with pytest.raises(edo.EdoDispatchError, match="EDO_COMMAND"):
-        edo.dispatch_via_command(b"zip", package=PACKAGE, settings=_settings(edo_provider="command"))
+        edo.dispatch_via_command(
+            b"zip", package=PACKAGE, settings=_settings(edo_provider="command")
+        )
 
 
 def test_код_провайдера_выгрузки_говорящий() -> None:

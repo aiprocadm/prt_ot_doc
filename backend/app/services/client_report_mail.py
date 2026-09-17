@@ -74,8 +74,7 @@ def build_letter(client: ManagedClient, report: ClientAuditReport) -> tuple[str,
     """Тема и текст письма. Отдельно от отправки — чтобы проверять без SMTP."""
 
     period = (
-        f"{report.period_start.strftime('%d.%m.%Y')}"
-        f" — {report.period_end.strftime('%d.%m.%Y')}"
+        f"{report.period_start.strftime('%d.%m.%Y')}" f" — {report.period_end.strftime('%d.%m.%Y')}"
     )
     subject = f"Отчёт о состоянии охраны труда: {client.name} ({period})"
     actions = list((report.payload or {}).get("actions") or [])
@@ -94,13 +93,9 @@ async def send_report_to_client(
 
     recipient = (client.report_email or "").strip()
     if not recipient:
-        return ReportSendOutcome(
-            ReportSendStatus.NO_EMAIL, REASONS[ReportSendStatus.NO_EMAIL]
-        )
+        return ReportSendOutcome(ReportSendStatus.NO_EMAIL, REASONS[ReportSendStatus.NO_EMAIL])
     if not client.report_opt_in:
-        return ReportSendOutcome(
-            ReportSendStatus.NO_CONSENT, REASONS[ReportSendStatus.NO_CONSENT]
-        )
+        return ReportSendOutcome(ReportSendStatus.NO_CONSENT, REASONS[ReportSendStatus.NO_CONSENT])
 
     subject, body = build_letter(client, report)
     provider = EmailProvider(get_settings())
@@ -113,9 +108,7 @@ async def send_report_to_client(
     )
 
     if result.delivered:
-        return ReportSendOutcome(
-            ReportSendStatus.SENT, REASONS[ReportSendStatus.SENT], recipient
-        )
+        return ReportSendOutcome(ReportSendStatus.SENT, REASONS[ReportSendStatus.SENT], recipient)
     detail = (result.detail or "").strip()
     if result.skipped:
         # Провайдер пропускает отправку, когда почта не настроена вовсе —

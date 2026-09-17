@@ -78,11 +78,11 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | N
     return getattr(tenant, "id", None)
 
 
-# Роли берутся из единой карты прав экрана (core/screen_access): пункт меню
-# виден ровно тем, кого пускает ручка — иначе человек видит раздел и получает
-# 403 (docs/audit/ACCESS_MENU_VS_API.md, сторож tests/test_menu_matches_api.py).
-_PACK_READ_ROLES = list(screen_roles("pack.view"))
 _PACK_WRITE_ROLES = ["admin", "employee", "client_admin"]
+# Кто может писать — обязан мочь читать (backend/tests/test_*_access_parity.py):
+# читатели = карта прав экрана ∪ писатели. Срез-217 дал чтению круг из карты, а
+# запись оставил на прежнем списке — и сотрудник мог создать, но не увидеть.
+_PACK_READ_ROLES = sorted(set(screen_roles("pack.view")) | set(_PACK_WRITE_ROLES))
 
 PackReadAccess = Annotated[
     AccessContext,

@@ -116,9 +116,7 @@ async def _effective(
     async with _legal_session() as session:
         own_row = await _current_row(session, tenant.id, kind)
         parent_row = (
-            await _current_row(session, str(tenant.parent_id), kind)
-            if tenant.parent_id
-            else None
+            await _current_row(session, str(tenant.parent_id), kind) if tenant.parent_id else None
         )
         document = resolve_legal_document(
             kind,
@@ -182,9 +180,7 @@ async def read_public_legal(
     )
 
 
-def _require_legal_editor(
-    credentials: HTTPAuthorizationCredentials | None, tenant: Tenant
-) -> None:
+def _require_legal_editor(credentials: HTTPAuthorizationCredentials | None, tenant: Tenant) -> None:
     """Публиковать тексты может владелец платформы или партнёр.
 
     Переиспользует область флота (срез-2): кто продаёт платформу, тот и

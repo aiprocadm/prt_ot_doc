@@ -102,9 +102,7 @@ def embed_passport_docx(
         custom_xml = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Properties xmlns="{CP_NS}" xmlns:vt="{VT_NS}">
   <property fmtid="{FMTID}" pid="2" name="passport_json"><vt:lpwstr>{passport_json}</vt:lpwstr></property>
-</Properties>""".encode(
-            "utf-8"
-        )
+</Properties>""".encode("utf-8")
         zout.writestr("docProps/custom.xml", custom_xml)
 
         marker_payload = f"PTD-PASSPORT:{passport_json} w:vanish".encode("utf-8")

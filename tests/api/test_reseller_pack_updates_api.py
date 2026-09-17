@@ -62,9 +62,7 @@ async def _set_applied_pack(tenant_id: str, payload: dict | None) -> None:
     async with AsyncSessionLocal(
         tenant="public", include_public=False, create_schema=False, rls_bypass=True
     ) as session:
-        row = (
-            await session.execute(select(Tenant).where(Tenant.id == tenant_id))
-        ).scalar_one()
+        row = (await session.execute(select(Tenant).where(Tenant.id == tenant_id))).scalar_one()
         settings = dict(row.settings or {})
         if payload is None:
             settings.pop("starter_pack", None)
@@ -101,9 +99,7 @@ def _stale_pack() -> dict:
 
 
 @pytest.mark.anyio
-async def test_показывает_чего_не_хватает(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_показывает_чего_не_хватает(async_client: AsyncClient, make_auth_headers) -> None:
     ids = await _shape_tree()
     await _set_applied_pack(ids["acme"], _stale_pack())
 
@@ -203,9 +199,7 @@ async def test_повторный_приём_ничего_не_удваивае�
 
 
 @pytest.mark.anyio
-async def test_чужой_клиент_недоступен(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_чужой_клиент_недоступен(async_client: AsyncClient, make_auth_headers) -> None:
     ids = await _shape_tree()
 
     preview = await async_client.get(

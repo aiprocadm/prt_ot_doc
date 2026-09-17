@@ -110,7 +110,8 @@ class OperationalDashboardService:
         # там — история, а не тревога.
         try:
             await _add_count(
-                select(func.count()).select_from(TrainingEnrollment)
+                select(func.count())
+                .select_from(TrainingEnrollment)
                 # Формула одна с календарём и Центром внимания (срез-77).
                 .where(
                     *overdue_training_enrollment_where(tenant_id, now),

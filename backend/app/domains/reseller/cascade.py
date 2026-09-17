@@ -73,7 +73,5 @@ def plan_suspension_cascade(
     if (target.kind or "").strip().lower() != RESELLER_KIND:
         return CascadeImpact(is_reseller=False)
 
-    affected = tuple(
-        sorted(child.slug for child in children if child.parent_id == target.id)
-    )
+    affected = tuple(sorted(child.slug for child in children if child.parent_id == target.id))
     return CascadeImpact(affected=affected, is_reseller=True)

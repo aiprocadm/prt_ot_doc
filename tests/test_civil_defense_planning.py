@@ -72,9 +72,7 @@ def _front_map(name: str) -> dict[str, str]:
 
 async def _grant(sessionmaker, code: str = "civil_defense", on: bool = True) -> None:
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         feature = (
             await session.execute(select(Feature).where(Feature.code == code))
         ).scalar_one_or_none()
@@ -91,9 +89,7 @@ async def _grant(sessionmaker, code: str = "civil_defense", on: bool = True) -> 
             )
         ).scalar_one_or_none()
         if grant is None:
-            session.add(
-                FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=on)
-            )
+            session.add(FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=on))
         else:
             grant.on = on
         await session.commit()
@@ -103,14 +99,12 @@ async def _site(sessionmaker, name: str = "Производственная пл
     """Площадка из ЯДРА: дисциплина своих объектов не заводит."""
 
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         company = (
-            await session.execute(
-                select(Company).where(Company.tenant_id == tenant.id)
-            )
-        ).scalars().first()
+            (await session.execute(select(Company).where(Company.tenant_id == tenant.id)))
+            .scalars()
+            .first()
+        )
         if company is None:
             company = Company(tenant_id=tenant.id, name="Головная компания")
             session.add(company)
@@ -132,9 +126,7 @@ async def _profile(
     payload: dict[str, object] = {"site_id": site_id, "category": category}
     if decision_number is not None:
         payload["decision_number"] = decision_number
-    response = await async_client.post(
-        f"{_API}/profiles", json=payload, headers=headers
-    )
+    response = await async_client.post(f"{_API}/profiles", json=payload, headers=headers)
     assert response.status_code == 201, response.text
     return response.json()
 
@@ -153,17 +145,13 @@ async def _document(
         payload["review_due"] = str(review_due)
     if site_id is not None:
         payload["site_id"] = site_id
-    response = await async_client.post(
-        f"{_API}/documents", json=payload, headers=headers
-    )
+    response = await async_client.post(f"{_API}/documents", json=payload, headers=headers)
     assert response.status_code == 201, response.text
     return response.json()
 
 
 class TestСведенияПоГО:
-    async def test_без_выдачи_модуль_невидим(
-        self, async_client, make_auth_headers
-    ) -> None:
+    async def test_без_выдачи_модуль_невидим(self, async_client, make_auth_headers) -> None:
         headers = await make_auth_headers()
         response = await async_client.get(f"{_API}/profiles", headers=headers)
         assert response.status_code == 404
@@ -430,13 +418,8 @@ class TestСловариПланированияНаФронте:
 
     def test_категории_на_фронте_совпадают_с_бэкендом(self) -> None:
         front = _front_map("CD_GO_CATEGORY_TITLES")
-        assert front == CD_GO_CATEGORIES, sorted(
-            front.items() ^ CD_GO_CATEGORIES.items()
-        )
+        assert front == CD_GO_CATEGORIES, sorted(front.items() ^ CD_GO_CATEGORIES.items())
 
     def test_виды_документов_на_фронте_совпадают_с_бэкендом(self) -> None:
         front = _front_map("CD_DOCUMENT_KIND_TITLES")
-        assert front == CD_DOCUMENT_KINDS, sorted(
-            front.items() ^ CD_DOCUMENT_KINDS.items()
-        )
-
+        assert front == CD_DOCUMENT_KINDS, sorted(front.items() ^ CD_DOCUMENT_KINDS.items())

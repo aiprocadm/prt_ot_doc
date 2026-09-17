@@ -105,9 +105,7 @@ class TestРеселлер:
         assert plan.parent_id == RESELLER.id
 
     def test_приостановленный_реселлер_не_заводит_клиентов(self) -> None:
-        suspended = TenantNode(
-            id="t-reseller", slug="partner", kind=RESELLER_KIND, is_active=False
-        )
+        suspended = TenantNode(id="t-reseller", slug="partner", kind=RESELLER_KIND, is_active=False)
         with pytest.raises(HierarchyViolation) as exc:
             plan_tenant_creation(
                 actor=suspended,
@@ -237,16 +235,12 @@ class TestАрендаторРождённыйКонтуром:
         assert inherited_parent_for_spawned_tenant(PLATFORM, managing_slug=MANAGING) is None
 
     def test_у_реселлера_рождается_под_реселлером(self) -> None:
-        assert (
-            inherited_parent_for_spawned_tenant(RESELLER, managing_slug=MANAGING) == RESELLER.id
-        )
+        assert inherited_parent_for_spawned_tenant(RESELLER, managing_slug=MANAGING) == RESELLER.id
 
     def test_у_клиента_реселлера_дед_не_меняется(self) -> None:
         """Четвёртого уровня не появляется: подопечный остаётся у того же партнёра."""
 
-        assert (
-            inherited_parent_for_spawned_tenant(CLIENT, managing_slug=MANAGING) == RESELLER.id
-        )
+        assert inherited_parent_for_spawned_tenant(CLIENT, managing_slug=MANAGING) == RESELLER.id
 
     def test_у_клиента_платформы_рождается_корневой(self) -> None:
         own = TenantNode(id="c", slug="acme", kind="customer", parent_id=None)

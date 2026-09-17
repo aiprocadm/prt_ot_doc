@@ -347,9 +347,7 @@ async def revoke_module_trial(target: Tenant, code: str) -> bool:
     return True
 
 
-async def provision_plan(
-    session: AsyncSession, *, tenant_id: str, plan: SubscriptionPlan
-) -> None:
+async def provision_plan(session: AsyncSession, *, tenant_id: str, plan: SubscriptionPlan) -> None:
     """Первичная выдача тарифа НОВОМУ арендатору (BIZ-53 разд. 53.1).
 
     Отдельная функция рядом с :func:`apply_plan` нужна из-за транзакции, а не
@@ -386,24 +384,16 @@ async def provision_plan(
             # Строка пишется и для ВЫКЛЮЧЕННОГО модуля: «продано и выключено»
             # и «никогда не выдавалось» — разные состояния, и консоль обязана
             # показывать первое, а не пустоту.
-            session.add(
-                FeatureEnablement(
-                    tenant_id=tenant_id, feature_id=feature.id, on=desired
-                )
-            )
+            session.add(FeatureEnablement(tenant_id=tenant_id, feature_id=feature.id, on=desired))
         else:
             existing.on = desired
             existing.expires_at = None
 
     quota = (
-        await session.execute(
-            select(TenantQuota).where(TenantQuota.tenant_id == tenant_id)
-        )
+        await session.execute(select(TenantQuota).where(TenantQuota.tenant_id == tenant_id))
     ).scalar_one_or_none()
     if quota is None:
-        session.add(
-            TenantQuota(tenant_id=tenant_id, enforce_billing_gate=False, **plan.quotas)
-        )
+        session.add(TenantQuota(tenant_id=tenant_id, enforce_billing_gate=False, **plan.quotas))
     else:
         for key, value in plan.quotas.items():
             setattr(quota, key, value)

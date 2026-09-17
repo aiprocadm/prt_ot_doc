@@ -46,9 +46,7 @@ class FeatureEnablement(TenantBaseModel):
     #: Срок действия выдачи (BIZ-61 срез-3, разд. 61.2 «временный доступ»).
     #: ``None`` — бессрочно. Истёкшая строка НЕ удаляется: «модуль был выдан до
     #: такого-то числа» — это ответ на вопрос биллинга, а не мусор.
-    expires_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     config_json: Mapped[dict] = mapped_column(
         MutableDict.as_mutable(JSONBType), nullable=False, default=dict
     )

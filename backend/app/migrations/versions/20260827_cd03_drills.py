@@ -50,9 +50,7 @@ def upgrade() -> None:
             sa.ForeignKey("cd_formation.id"),
             nullable=True,
         ),
-        sa.Column(
-            "site_id", sa.String(length=36), sa.ForeignKey("site.id"), nullable=True
-        ),
+        sa.Column("site_id", sa.String(length=36), sa.ForeignKey("site.id"), nullable=True),
         sa.Column("scenario", sa.Text(), nullable=True),
         sa.Column("participants", sa.Integer(), nullable=True),
         sa.Column("outcome", sa.String(length=32), nullable=True),

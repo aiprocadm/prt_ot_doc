@@ -142,9 +142,7 @@ async def test_перенос_создаёт_справочники_у_друг�
 
 
 @pytest.mark.anyio
-async def test_перенос_добавляет_а_не_стирает(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_перенос_добавляет_а_не_стирает(async_client: AsyncClient, make_auth_headers) -> None:
     """Клиент мог завести своё; «применить конфигурацию» ≠ «стереть чужое»."""
 
     ids = await _shape_tree()
@@ -163,9 +161,7 @@ async def test_перенос_добавляет_а_не_стирает(
 
 
 @pytest.mark.anyio
-async def test_повторный_перенос_не_удваивает(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_повторный_перенос_не_удваивает(async_client: AsyncClient, make_auth_headers) -> None:
     ids = await _shape_tree()
     headers = await _partner_headers(make_auth_headers)
     body = {"reference_data": {"hazards": ["Пожар"]}}
@@ -196,9 +192,7 @@ async def test_проба_показывает_и_ничего_не_меняет
 
 
 @pytest.mark.anyio
-async def test_неприменимые_виды_названы(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_неприменимые_виды_названы(async_client: AsyncClient, make_auth_headers) -> None:
     # Молчание о пропущенном читается как потеря данных.
     ids = await _shape_tree()
 
@@ -217,9 +211,7 @@ async def test_неприменимые_виды_названы(
 
 
 @pytest.mark.anyio
-async def test_чужой_клиент_не_выгружается(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_чужой_клиент_не_выгружается(async_client: AsyncClient, make_auth_headers) -> None:
     """Та же граница, что у остального кабинета: чужой — 404, а не 403."""
 
     ids = await _shape_tree()

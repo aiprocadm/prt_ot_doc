@@ -53,9 +53,7 @@ def upgrade() -> None:
         sa.UniqueConstraint("tenant_id", "code", name="uq_import_profiles_tenant_code"),
     )
     op.create_index("ix_import_profiles_tenant_id", "import_profiles", ["tenant_id"])
-    op.create_index(
-        "ix_import_profiles_tenant_target", "import_profiles", ["tenant_id", "target"]
-    )
+    op.create_index("ix_import_profiles_tenant_target", "import_profiles", ["tenant_id", "target"])
 
 
 def downgrade() -> None:

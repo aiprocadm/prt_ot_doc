@@ -31,9 +31,7 @@ depends_on = None
 
 def upgrade() -> None:
     op.add_column("company", sa.Column("parent_company_id", sa.String(length=36), nullable=True))
-    op.create_index(
-        "ix_company_parent_company_id", "company", ["parent_company_id"], unique=False
-    )
+    op.create_index("ix_company_parent_company_id", "company", ["parent_company_id"], unique=False)
 
 
 def downgrade() -> None:

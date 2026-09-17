@@ -88,9 +88,7 @@ async def _write_usage(tenant_id: str, period: str, value: int) -> None:
     async with AsyncSessionLocal(
         tenant="public", include_public=False, create_schema=False, rls_bypass=True
     ) as session:
-        session.add(
-            TenantCounter(tenant_id=tenant_id, yyyymm=period, doc_generations=value)
-        )
+        session.add(TenantCounter(tenant_id=tenant_id, yyyymm=period, doc_generations=value))
         await session.commit()
 
 
@@ -292,9 +290,7 @@ async def test_расход_обычному_арендатору_закрыт(
 
 
 @pytest.mark.anyio
-async def test_кривой_период_отвергается(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_кривой_период_отвергается(async_client: AsyncClient, make_auth_headers) -> None:
     await _shape_tree()
 
     response = await async_client.get(

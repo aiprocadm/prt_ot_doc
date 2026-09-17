@@ -59,9 +59,7 @@ async def _partner_headers(make_auth_headers) -> dict[str, str]:
 
 
 @pytest.mark.anyio
-async def test_бренд_отдаётся_без_токена(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_бренд_отдаётся_без_токена(async_client: AsyncClient, make_auth_headers) -> None:
     """Экран входа обязан быть уже в бренде — токена там ещё нет."""
 
     await _shape_tree()
@@ -184,9 +182,7 @@ async def test_обычный_арендатор_бренд_не_правит(
 
 
 @pytest.mark.anyio
-async def test_правка_без_токена_отклоняется(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_правка_без_токена_отклоняется(async_client: AsyncClient, make_auth_headers) -> None:
     """Публично только ЧТЕНИЕ бренда."""
 
     await _shape_tree()
@@ -199,9 +195,7 @@ async def test_правка_без_токена_отклоняется(
 
 
 @pytest.mark.anyio
-async def test_цвет_проверяется_по_формату(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_цвет_проверяется_по_формату(async_client: AsyncClient, make_auth_headers) -> None:
     """Формат тот же, что у CSS-переменной: иначе тема молча не применится."""
 
     await _shape_tree()

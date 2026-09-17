@@ -252,9 +252,7 @@ async def test_plan_including_the_module_absorbs_the_trial(sessionmaker) -> None
 
 
 @pytest.mark.anyio
-async def test_plan_change_does_not_silently_cancel_an_active_trial(
-    sessionmaker
-) -> None:
+async def test_plan_change_does_not_silently_cancel_an_active_trial(sessionmaker) -> None:
     """Срок обещан клиенту осознанно; смена тарифа — рутина, а не отзыв."""
 
     tenant = await _make_tenant(sessionmaker, "trial-survives-plan")

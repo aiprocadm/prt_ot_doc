@@ -60,9 +60,7 @@ class FireSafetyEquipment(TenantBaseModel, SoftDeleteMixin):
 
     __tablename__ = "fire_safety_equipment"
 
-    site_id: Mapped[str | None] = mapped_column(
-        ForeignKey("site.id"), nullable=True, index=True
-    )
+    site_id: Mapped[str | None] = mapped_column(ForeignKey("site.id"), nullable=True, index=True)
     kind: Mapped[str] = mapped_column(String(32), nullable=False)
     #: инвентарный/заводской номер или имя системы
     label: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -78,9 +76,7 @@ class FireSafetyEquipment(TenantBaseModel, SoftDeleteMixin):
 
     site: Mapped[Site | None] = relationship(backref="fire_safety_equipment")
 
-    __table_args__ = (
-        Index("ix_fire_equipment_tenant_kind", "tenant_id", "kind"),
-    )
+    __table_args__ = (Index("ix_fire_equipment_tenant_kind", "tenant_id", "kind"),)
 
 
 #: Виды тренировок и учений (Доп. №1 разд. 54.1 «Тренировки и учения»).
@@ -113,9 +109,7 @@ class FireDrill(TenantBaseModel, SoftDeleteMixin):
 
     __tablename__ = "fire_drill"
 
-    site_id: Mapped[str | None] = mapped_column(
-        ForeignKey("site.id"), nullable=True, index=True
-    )
+    site_id: Mapped[str | None] = mapped_column(ForeignKey("site.id"), nullable=True, index=True)
     kind: Mapped[str] = mapped_column(String(32), nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     #: план-график: дата, на которую тренировка назначена (обязательна —
@@ -134,9 +128,7 @@ class FireDrill(TenantBaseModel, SoftDeleteMixin):
 
     site: Mapped[Site | None] = relationship(backref="fire_drills")
 
-    __table_args__ = (
-        Index("ix_fire_drill_tenant_planned", "tenant_id", "planned_on"),
-    )
+    __table_args__ = (Index("ix_fire_drill_tenant_planned", "tenant_id", "planned_on"),)
 
 
 #: Виды регламентных работ (разд. 54.1 «ТО систем ПБ, испытания… устранение»).
@@ -196,9 +188,7 @@ class FireMaintenanceRecord(TenantBaseModel, SoftDeleteMixin):
 
     equipment: Mapped[FireSafetyEquipment] = relationship(backref="maintenance_records")
 
-    __table_args__ = (
-        Index("ix_fire_maintenance_tenant_performed", "tenant_id", "performed_on"),
-    )
+    __table_args__ = (Index("ix_fire_maintenance_tenant_performed", "tenant_id", "performed_on"),)
 
 
 #: Виды документов ПБ — ровно перечень ТЗ (разд. 54.1 «Документы ПБ»):
@@ -241,9 +231,7 @@ class FireSafetyDocument(TenantBaseModel, SoftDeleteMixin):
 
     __tablename__ = "fire_document"
 
-    site_id: Mapped[str | None] = mapped_column(
-        ForeignKey("site.id"), nullable=True, index=True
-    )
+    site_id: Mapped[str | None] = mapped_column(ForeignKey("site.id"), nullable=True, index=True)
     kind: Mapped[str] = mapped_column(String(32), nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     #: номер приказа/декларации — как в оригинале
@@ -258,9 +246,7 @@ class FireSafetyDocument(TenantBaseModel, SoftDeleteMixin):
     responsible: Mapped[str | None] = mapped_column(String(255))
     #: если документ выпущен документной фабрикой — ссылка на него; иначе NULL
     #: (бумага из МЧС или от подрядчика существует вне платформы)
-    document_id: Mapped[str | None] = mapped_column(
-        ForeignKey("document.id"), nullable=True
-    )
+    document_id: Mapped[str | None] = mapped_column(ForeignKey("document.id"), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text)
 
     site: Mapped[Site | None] = relationship(backref="fire_documents")

@@ -59,9 +59,7 @@ def upgrade() -> None:
         sa.Column("license_issued_at", sa.Date(), nullable=True),
         sa.Column("license_due", sa.Date(), nullable=True),
         sa.Column("experience_since", sa.Date(), nullable=True),
-        sa.Column(
-            "status", sa.String(length=16), nullable=False, server_default="admitted"
-        ),
+        sa.Column("status", sa.String(length=16), nullable=False, server_default="admitted"),
         sa.Column("notes", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),

@@ -290,9 +290,7 @@ async def list_facilities(
         .scalars()
         .all()
     )
-    return EnvironmentalFacilityPage(
-        items=[_facility_read(r) for r in rows], total=total
-    )
+    return EnvironmentalFacilityPage(items=[_facility_read(r) for r in rows], total=total)
 
 
 @router.post(
@@ -368,9 +366,7 @@ async def update_facility(
     facility = await _get_facility_or_404(session, tenant, facility_id)
     data = payload.model_dump(exclude_unset=True)
     await _validate_site(session, tenant, data.get("site_id"))
-    _validate_dictionaries(
-        category=data.get("category"), status_value=data.get("status")
-    )
+    _validate_dictionaries(category=data.get("category"), status_value=data.get("status"))
     if "register_number" in data:
         value = data["register_number"]
         if value is None or not str(value).strip():
@@ -444,18 +440,14 @@ async def _generated_this_year(
     return {row[0]: Decimal(row[1] or 0) for row in rows}
 
 
-def _passport_read(
-    passport: WastePassport, generated: Decimal
-) -> WastePassportRead:
+def _passport_read(passport: WastePassport, generated: Decimal) -> WastePassportRead:
     limit = passport.annual_limit_tons
     return WastePassportRead(
         id=passport.id,
         name=passport.name,
         fkko_code=passport.fkko_code,
         hazard_class=passport.hazard_class,
-        hazard_class_label=WASTE_HAZARD_CLASSES.get(
-            passport.hazard_class, passport.hazard_class
-        ),
+        hazard_class_label=WASTE_HAZARD_CLASSES.get(passport.hazard_class, passport.hazard_class),
         facility_id=passport.facility_id,
         approved_on=passport.approved_on,
         annual_limit_tons=limit,
@@ -583,13 +575,9 @@ async def list_waste_passports(
         .scalars()
         .all()
     )
-    generated = await _generated_this_year(
-        session, tenant, [r.id for r in rows], date.today().year
-    )
+    generated = await _generated_this_year(session, tenant, [r.id for r in rows], date.today().year)
     return WastePassportPage(
-        items=[
-            _passport_read(r, generated.get(r.id, Decimal("0.000"))) for r in rows
-        ],
+        items=[_passport_read(r, generated.get(r.id, Decimal("0.000"))) for r in rows],
         total=total,
     )
 
@@ -735,9 +723,7 @@ async def list_waste_movements(
     rows = (
         (
             await session.execute(
-                stmt.order_by(
-                    WasteMovement.happened_on.desc(), WasteMovement.created_at.desc()
-                )
+                stmt.order_by(WasteMovement.happened_on.desc(), WasteMovement.created_at.desc())
                 .offset(offset)
                 .limit(limit)
             )
@@ -779,9 +765,7 @@ async def list_waste_contracts(
         Contract.tenant_id == tenant.id,
         Contract.deleted_at.is_(None),
     )
-    total = int(
-        await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
-    )
+    total = int(await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
     rows = (
         (
             await session.execute(
@@ -982,9 +966,7 @@ def _norm_read(norm: EmissionNorm, today: date) -> EmissionNormRead:
         valid_until=norm.valid_until,
         notes=norm.notes,
         validity_status=status_value,
-        validity_status_label=EMISSION_NORM_STATUS_TITLES.get(
-            status_value, status_value
-        ),
+        validity_status_label=EMISSION_NORM_STATUS_TITLES.get(status_value, status_value),
     )
 
 
@@ -1028,9 +1010,7 @@ async def _get_source_or_404(
     return source
 
 
-async def _get_norm_or_404(
-    session: AsyncSession, tenant: Tenant, norm_id: str
-) -> EmissionNorm:
+async def _get_norm_or_404(session: AsyncSession, tenant: Tenant, norm_id: str) -> EmissionNorm:
     stmt = select(EmissionNorm).where(
         EmissionNorm.id == norm_id,
         EmissionNorm.tenant_id == tenant.id,
@@ -1068,9 +1048,7 @@ async def _ensure_source_number_free(
     if exclude_id:
         stmt = stmt.where(EmissionSource.id != exclude_id)
     if (await session.execute(stmt)).scalar_one_or_none() is not None:
-        raise _unprocessable(
-            f"Источник с номером {source_number!r} на этом объекте уже заведён"
-        )
+        raise _unprocessable(f"Источник с номером {source_number!r} на этом объекте уже заведён")
 
 
 @router.get("/emission-sources", response_model=EmissionSourcePage)
@@ -1130,9 +1108,7 @@ async def create_emission_source(
             f"{', '.join(EMISSION_SOURCE_KINDS)}"
         )
     source_number = payload.source_number.strip()
-    await _ensure_source_number_free(
-        session, tenant, payload.facility_id, source_number
-    )
+    await _ensure_source_number_free(session, tenant, payload.facility_id, source_number)
 
     source = EmissionSource(
         tenant_id=str(tenant.id),
@@ -1201,9 +1177,7 @@ async def update_emission_source(
     ):
         if field in data:
             value = data[field]
-            if field in {"name", "source_number"} and (
-                value is None or not str(value).strip()
-            ):
+            if field in {"name", "source_number"} and (value is None or not str(value).strip()):
                 raise _unprocessable(f"{field} cannot be empty")
             setattr(source, field, value.strip() if isinstance(value, str) else value)
     after = _source_read(source, counts.get(source.id, 0)).model_dump()
@@ -1245,11 +1219,7 @@ async def list_emission_norms(
         stmt = stmt.where(EmissionNorm.source_id == source_id)
     total = int(await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
     rows = (
-        (
-            await session.execute(
-                stmt.order_by(EmissionNorm.substance).offset(offset).limit(limit)
-            )
-        )
+        (await session.execute(stmt.order_by(EmissionNorm.substance).offset(offset).limit(limit)))
         .scalars()
         .all()
     )
@@ -1268,10 +1238,7 @@ async def create_emission_norm(
 ) -> EmissionNormRead:
     TenantContextValidator.ensure_tenant_context(tenant)
     await _get_source_or_404(session, tenant, payload.source_id)
-    if (
-        payload.limit_grams_per_second is None
-        and payload.limit_tons_per_year is None
-    ):
+    if payload.limit_grams_per_second is None and payload.limit_tons_per_year is None:
         raise _unprocessable(
             "Нужно хотя бы одно значение норматива: разовый (г/с) или валовый "
             "(т/год) — норматив без значений ничего не нормирует"
@@ -1288,9 +1255,7 @@ async def create_emission_norm(
         )
     ).scalar_one_or_none()
     if duplicate is not None:
-        raise _unprocessable(
-            f"Норматив по веществу {substance!r} для этого источника уже задан"
-        )
+        raise _unprocessable(f"Норматив по веществу {substance!r} для этого источника уже задан")
 
     norm = EmissionNorm(
         tenant_id=str(tenant.id),
@@ -1355,8 +1320,7 @@ async def update_emission_norm(
     # Проверяем ИТОГОВОЕ состояние: норматив не должен остаться без значений.
     if norm.limit_grams_per_second is None and norm.limit_tons_per_year is None:
         raise _unprocessable(
-            "Нужно хотя бы одно значение норматива: разовый (г/с) или валовый "
-            "(т/год)"
+            "Нужно хотя бы одно значение норматива: разовый (г/с) или валовый " "(т/год)"
         )
     after = _norm_read(norm, today).model_dump()
     await AuditService(session).log_event(
@@ -1634,15 +1598,11 @@ async def list_monitoring_plan(
     )
     if source_id:
         stmt = stmt.where(EmissionMonitoringPlanItem.source_id == source_id)
-    total = int(
-        await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
-    )
+    total = int(await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
     rows = (
         (
             await session.execute(
-                stmt.order_by(EmissionMonitoringPlanItem.next_due_on)
-                .offset(offset)
-                .limit(limit)
+                stmt.order_by(EmissionMonitoringPlanItem.next_due_on).offset(offset).limit(limit)
             )
         )
         .scalars()
@@ -1723,9 +1683,7 @@ async def update_monitoring_plan_item(
     data = payload.model_dump(exclude_unset=True)
     if data.get("substance"):
         substance = str(data["substance"]).strip()
-        await _ensure_plan_pair_free(
-            session, tenant, item.source_id, substance, exclude_id=item.id
-        )
+        await _ensure_plan_pair_free(session, tenant, item.source_id, substance, exclude_id=item.id)
         item.substance = substance
     if data.get("periodicity_months") is not None:
         item.periodicity_months = int(data["periodicity_months"])
@@ -1782,15 +1740,11 @@ async def list_emission_measurements(
         stmt = stmt.where(EmissionMeasurement.source_id == source_id)
     if plan_id:
         stmt = stmt.where(EmissionMeasurement.plan_id == plan_id)
-    total = int(
-        await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
-    )
+    total = int(await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
     rows = (
         (
             await session.execute(
-                stmt.order_by(EmissionMeasurement.measured_on.desc())
-                .offset(offset)
-                .limit(limit)
+                stmt.order_by(EmissionMeasurement.measured_on.desc()).offset(offset).limit(limit)
             )
         )
         .scalars()
@@ -1798,9 +1752,7 @@ async def list_emission_measurements(
     )
     norms = await _norms_by_pair(session, tenant)
     return EmissionMeasurementPage(
-        items=[
-            _measurement_read(r, norms.get((r.source_id, r.substance))) for r in rows
-        ],
+        items=[_measurement_read(r, norms.get((r.source_id, r.substance))) for r in rows],
         total=total,
     )
 
@@ -1862,9 +1814,7 @@ async def create_emission_measurement(
     return _measurement_read(measurement, norm)
 
 
-@router.patch(
-    "/emission-measurements/{measurement_id}", response_model=EmissionMeasurementRead
-)
+@router.patch("/emission-measurements/{measurement_id}", response_model=EmissionMeasurementRead)
 async def update_emission_measurement(
     request: Request,
     measurement_id: str,
@@ -1912,9 +1862,7 @@ async def update_emission_measurement(
     )
     await session.commit()
     await session.refresh(measurement)
-    norm = await _norm_for_pair(
-        session, tenant, measurement.source_id, measurement.substance
-    )
+    norm = await _norm_for_pair(session, tenant, measurement.source_id, measurement.substance)
     return _measurement_read(measurement, norm)
 
 
@@ -1935,9 +1883,7 @@ def _period_label(year: int, month: int) -> str:
     return f"{MONTH_TITLES.get(month, month)} {year}"
 
 
-def _water_point_read(
-    point: WaterUsagePoint, volume: Decimal, today: date
-) -> WaterUsagePointRead:
+def _water_point_read(point: WaterUsagePoint, volume: Decimal, today: date) -> WaterUsagePointRead:
     status_value = _permit_status(point.permit_valid_until, today)
     limit = point.annual_limit_cubic_meters
     return WaterUsagePointRead(
@@ -2057,9 +2003,7 @@ async def _ensure_point_number_free(
     if exclude_id:
         stmt = stmt.where(WaterUsagePoint.id != exclude_id)
     if (await session.execute(stmt)).scalar_one_or_none() is not None:
-        raise _unprocessable(
-            f"Точка с номером {point_number!r} на этом объекте уже заведена"
-        )
+        raise _unprocessable(f"Точка с номером {point_number!r} на этом объекте уже заведена")
 
 
 async def _ensure_period_free(
@@ -2075,9 +2019,7 @@ async def _ensure_period_free(
         WaterUsageRecord.deleted_at.is_(None),
     )
     if (await session.execute(stmt)).scalar_one_or_none() is not None:
-        raise _unprocessable(
-            f"Учёт за {_period_label(year, month)} по этой точке уже внесён"
-        )
+        raise _unprocessable(f"Учёт за {_period_label(year, month)} по этой точке уже внесён")
 
 
 @router.get("/water-points", response_model=WaterUsagePointPage)
@@ -2101,9 +2043,7 @@ async def list_water_points(
         stmt = stmt.where(WaterUsagePoint.facility_id == facility_id)
     if kind:
         stmt = stmt.where(WaterUsagePoint.kind == kind)
-    total = int(
-        await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
-    )
+    total = int(await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
     rows = (
         (
             await session.execute(
@@ -2116,10 +2056,7 @@ async def list_water_points(
     today = date.today()
     volumes = await _water_volumes(session, tenant, [r.id for r in rows], today.year)
     return WaterUsagePointPage(
-        items=[
-            _water_point_read(r, volumes.get(r.id, Decimal("0.000")), today)
-            for r in rows
-        ],
+        items=[_water_point_read(r, volumes.get(r.id, Decimal("0.000")), today) for r in rows],
         total=total,
     )
 
@@ -2144,9 +2081,7 @@ async def create_water_point(
             f"{', '.join(WATER_POINT_KINDS)}"
         )
     point_number = payload.point_number.strip()
-    await _ensure_point_number_free(
-        session, tenant, payload.facility_id, point_number
-    )
+    await _ensure_point_number_free(session, tenant, payload.facility_id, point_number)
 
     point = WaterUsagePoint(
         tenant_id=str(tenant.id),
@@ -2274,9 +2209,7 @@ async def list_water_records(
         stmt = stmt.where(WaterUsageRecord.point_id == point_id)
     if period_year:
         stmt = stmt.where(WaterUsageRecord.period_year == period_year)
-    total = int(
-        await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
-    )
+    total = int(await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
     rows = (
         (
             await session.execute(
@@ -2291,9 +2224,7 @@ async def list_water_records(
         .scalars()
         .all()
     )
-    return WaterUsageRecordPage(
-        items=[_water_record_read(r) for r in rows], total=total
-    )
+    return WaterUsageRecordPage(items=[_water_record_read(r) for r in rows], total=total)
 
 
 @router.post(
@@ -2479,9 +2410,7 @@ async def _rates_by_key(
     return {(r.year, r.impact_kind, r.subject): r for r in rows}
 
 
-async def _get_rate_or_404(
-    session: AsyncSession, tenant: Tenant, rate_id: str
-) -> NvosFeeRate:
+async def _get_rate_or_404(session: AsyncSession, tenant: Tenant, rate_id: str) -> NvosFeeRate:
     stmt = select(NvosFeeRate).where(
         NvosFeeRate.id == rate_id,
         NvosFeeRate.tenant_id == tenant.id,
@@ -2500,9 +2429,7 @@ async def _get_rate_or_404(
     return rate
 
 
-async def _get_fee_line_or_404(
-    session: AsyncSession, tenant: Tenant, line_id: str
-) -> NvosFeeLine:
+async def _get_fee_line_or_404(session: AsyncSession, tenant: Tenant, line_id: str) -> NvosFeeLine:
     stmt = select(NvosFeeLine).where(
         NvosFeeLine.id == line_id,
         NvosFeeLine.tenant_id == tenant.id,
@@ -2524,8 +2451,7 @@ async def _get_fee_line_or_404(
 def _validate_impact_kind(value: str) -> None:
     if value not in FEE_IMPACT_KINDS:
         raise _unprocessable(
-            f"Неизвестный вид воздействия {value!r}; допустимые: "
-            f"{', '.join(FEE_IMPACT_KINDS)}"
+            f"Неизвестный вид воздействия {value!r}; допустимые: " f"{', '.join(FEE_IMPACT_KINDS)}"
         )
 
 
@@ -2550,9 +2476,7 @@ async def list_fee_rates(
         stmt = stmt.where(NvosFeeRate.year == year)
     if impact_kind:
         stmt = stmt.where(NvosFeeRate.impact_kind == impact_kind)
-    total = int(
-        await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
-    )
+    total = int(await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
     rows = (
         (
             await session.execute(
@@ -2567,9 +2491,7 @@ async def list_fee_rates(
     return NvosFeeRatePage(items=[_rate_read(r) for r in rows], total=total)
 
 
-@router.post(
-    "/fee-rates", response_model=NvosFeeRateRead, status_code=status.HTTP_201_CREATED
-)
+@router.post("/fee-rates", response_model=NvosFeeRateRead, status_code=status.HTTP_201_CREATED)
 async def create_fee_rate(
     request: Request,
     payload: NvosFeeRateCreate,
@@ -2590,9 +2512,7 @@ async def create_fee_rate(
         )
     )
     if existing.scalar_one_or_none() is not None:
-        raise _unprocessable(
-            f"Ставка на {payload.year} год по {subject!r} уже внесена"
-        )
+        raise _unprocessable(f"Ставка на {payload.year} год по {subject!r} уже внесена")
 
     rate = NvosFeeRate(
         tenant_id=str(tenant.id),
@@ -2688,15 +2608,11 @@ async def list_fee_lines(
         stmt = stmt.where(NvosFeeLine.year == year)
     if quarter:
         stmt = stmt.where(NvosFeeLine.quarter == quarter)
-    total = int(
-        await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
-    )
+    total = int(await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
     rows = (
         (
             await session.execute(
-                stmt.order_by(
-                    NvosFeeLine.year.desc(), NvosFeeLine.quarter, NvosFeeLine.subject
-                )
+                stmt.order_by(NvosFeeLine.year.desc(), NvosFeeLine.quarter, NvosFeeLine.subject)
                 .offset(offset)
                 .limit(limit)
             )
@@ -2706,17 +2622,12 @@ async def list_fee_lines(
     )
     rates = await _rates_by_key(session, tenant)
     return NvosFeeLinePage(
-        items=[
-            _fee_line_read(r, rates.get((r.year, r.impact_kind, r.subject)))
-            for r in rows
-        ],
+        items=[_fee_line_read(r, rates.get((r.year, r.impact_kind, r.subject))) for r in rows],
         total=total,
     )
 
 
-@router.post(
-    "/fee-lines", response_model=NvosFeeLineRead, status_code=status.HTTP_201_CREATED
-)
+@router.post("/fee-lines", response_model=NvosFeeLineRead, status_code=status.HTTP_201_CREATED)
 async def create_fee_line(
     request: Request,
     payload: NvosFeeLineCreate,
@@ -2947,15 +2858,11 @@ async def list_reporting_deadlines(
             EcologyReportingDeadline.done_on.is_(None),
             EcologyReportingDeadline.due_on >= today,
         )
-    total = int(
-        await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
-    )
+    total = int(await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
     rows = (
         (
             await session.execute(
-                stmt.order_by(
-                    EcologyReportingDeadline.due_on.asc(), EcologyReportingDeadline.title
-                )
+                stmt.order_by(EcologyReportingDeadline.due_on.asc(), EcologyReportingDeadline.title)
                 .offset(offset)
                 .limit(limit)
             )
@@ -2963,9 +2870,7 @@ async def list_reporting_deadlines(
         .scalars()
         .all()
     )
-    return EcologyReportingDeadlinePage(
-        items=[_reporting_read(r) for r in rows], total=total
-    )
+    return EcologyReportingDeadlinePage(items=[_reporting_read(r) for r in rows], total=total)
 
 
 @router.post(
@@ -2985,9 +2890,7 @@ async def create_reporting_deadline(
     title = payload.title.strip()
     if not title:
         raise _unprocessable("Название срока не может быть пустым")
-    await _ensure_reporting_deadline_free(
-        session, tenant, title=title, due_on=payload.due_on
-    )
+    await _ensure_reporting_deadline_free(session, tenant, title=title, due_on=payload.due_on)
 
     row = EcologyReportingDeadline(
         tenant_id=str(tenant.id),
@@ -3018,9 +2921,7 @@ async def create_reporting_deadline(
     return _reporting_read(row)
 
 
-@router.patch(
-    "/reporting-deadlines/{deadline_id}", response_model=EcologyReportingDeadlineRead
-)
+@router.patch("/reporting-deadlines/{deadline_id}", response_model=EcologyReportingDeadlineRead)
 async def update_reporting_deadline(
     request: Request,
     deadline_id: str,
@@ -3118,9 +3019,7 @@ async def ecology_readiness(
         .scalars()
         .all()
     )
-    generated = await _generated_this_year(
-        session, tenant, [p.id for p in passports], year
-    )
+    generated = await _generated_this_year(session, tenant, [p.id for p in passports], year)
     movements_total = int(
         await session.scalar(
             select(func.count())
@@ -3166,9 +3065,7 @@ async def ecology_readiness(
     )
     sources_with_norms = {n.source_id for n in norms}
     today = date.today()
-    permits_overdue = sum(
-        1 for n in norms if _norm_status(n.valid_until, today) == "overdue"
-    )
+    permits_overdue = sum(1 for n in norms if _norm_status(n.valid_until, today) == "overdue")
 
     # Разд. 55.2 «ПЭК»: график, просрочки и превышения по ЗАМЕРАМ. Превышение
     # здесь — сравнение двух внесённых чисел, а не вывод платформы о нормативе.
@@ -3201,9 +3098,7 @@ async def ecology_readiness(
     exceeded = sum(
         1
         for m in measurements
-        if _comparison(
-            m.value_grams_per_second, norm_by_pair.get((m.source_id, m.substance))
-        )[0]
+        if _comparison(m.value_grams_per_second, norm_by_pair.get((m.source_id, m.substance)))[0]
         == "exceeded"
     )
 
@@ -3221,23 +3116,13 @@ async def ecology_readiness(
         .scalars()
         .all()
     )
-    water_volumes = await _water_volumes(
-        session, tenant, [p.id for p in water_points], year
-    )
+    water_volumes = await _water_volumes(session, tenant, [p.id for p in water_points], year)
     intake = sum(
-        (
-            water_volumes.get(p.id, Decimal("0.000"))
-            for p in water_points
-            if p.kind == "intake"
-        ),
+        (water_volumes.get(p.id, Decimal("0.000")) for p in water_points if p.kind == "intake"),
         Decimal("0.000"),
     )
     discharge = sum(
-        (
-            water_volumes.get(p.id, Decimal("0.000"))
-            for p in water_points
-            if p.kind == "discharge"
-        ),
+        (water_volumes.get(p.id, Decimal("0.000")) for p in water_points if p.kind == "discharge"),
         Decimal("0.000"),
     )
 
@@ -3265,9 +3150,7 @@ async def ecology_readiness(
         if rate is None:
             fee_without_rate += 1
             continue
-        fee_total += (line.mass_tons * rate.rate_per_ton * line.coefficient).quantize(
-            _KOPECKS
-        )
+        fee_total += (line.mass_tons * rate.rate_per_ton * line.coefficient).quantize(_KOPECKS)
 
     # Разд. 55.3 «сроки сдачи отчётности, платежей» (срез-71): просрочено —
     # не исполнено и дата прошла; исполненное с опозданием просрочкой не
@@ -3293,9 +3176,7 @@ async def ecology_readiness(
         fee_total_rubles=fee_total,
         water_points=len(water_points),
         water_permits_overdue=sum(
-            1
-            for p in water_points
-            if _permit_status(p.permit_valid_until, today) == "overdue"
+            1 for p in water_points if _permit_status(p.permit_valid_until, today) == "overdue"
         ),
         water_intake_cubic_meters=intake,
         water_discharge_cubic_meters=discharge,
@@ -3308,16 +3189,12 @@ async def ecology_readiness(
         ),
         monitoring_plan_items=len(plan_items),
         monitoring_overdue=sum(
-            1
-            for i in plan_items
-            if _monitoring_status(i.next_due_on, today) == "overdue"
+            1 for i in plan_items if _monitoring_status(i.next_due_on, today) == "overdue"
         ),
         measurements_this_year=len(measurements),
         measurements_exceeded=exceeded,
         emission_sources=len(sources),
-        emission_sources_without_norms=sum(
-            1 for s in sources if s.id not in sources_with_norms
-        ),
+        emission_sources_without_norms=sum(1 for s in sources if s.id not in sources_with_norms),
         emission_norms=len(norms),
         emission_permits_overdue=permits_overdue,
         waste_passports=len(passports),

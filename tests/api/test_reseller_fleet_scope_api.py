@@ -234,9 +234,7 @@ async def test_тариф_партнёру_ограничен_его_набор�
 
 
 @pytest.mark.anyio
-async def test_квоты_партнёру_тоже_закрыты(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_квоты_партнёру_тоже_закрыты(async_client: AsyncClient, make_auth_headers) -> None:
     ids = await _shape_tree()
 
     response = await async_client.patch(
@@ -250,9 +248,7 @@ async def test_квоты_партнёру_тоже_закрыты(
 
 
 @pytest.mark.anyio
-async def test_пробный_доступ_партнёру_закрыт(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_пробный_доступ_партнёру_закрыт(async_client: AsyncClient, make_auth_headers) -> None:
     ids = await _shape_tree()
 
     response = await async_client.post(
@@ -330,9 +326,7 @@ async def test_партнёр_заводит_клиента_под_себя(
 
 
 @pytest.mark.anyio
-async def test_партнёр_не_заводит_партнёра(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_партнёр_не_заводит_партнёра(async_client: AsyncClient, make_auth_headers) -> None:
     await _shape_tree()
 
     response = await async_client.post(

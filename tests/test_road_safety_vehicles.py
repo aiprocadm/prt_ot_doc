@@ -73,9 +73,7 @@ def _front_map(name: str) -> dict[str, str]:
 
 async def _grant(sessionmaker, code: str = "road_safety", on: bool = True) -> None:
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         feature = (
             await session.execute(select(Feature).where(Feature.code == code))
         ).scalar_one_or_none()
@@ -92,9 +90,7 @@ async def _grant(sessionmaker, code: str = "road_safety", on: bool = True) -> No
             )
         ).scalar_one_or_none()
         if grant is None:
-            session.add(
-                FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=on)
-            )
+            session.add(FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=on))
         else:
             grant.on = on
         await session.commit()
@@ -125,17 +121,13 @@ async def _vehicle(
         payload["insurance_due"] = str(insurance_due)
     if tachograph_due is not None:
         payload["tachograph_due"] = str(tachograph_due)
-    response = await async_client.post(
-        f"{_API}/vehicles", json=payload, headers=headers
-    )
+    response = await async_client.post(f"{_API}/vehicles", json=payload, headers=headers)
     assert response.status_code == 201, response.text
     return response.json()
 
 
 class TestРеестрТС:
-    async def test_без_выдачи_модуль_невидим(
-        self, async_client, make_auth_headers
-    ) -> None:
+    async def test_без_выдачи_модуль_невидим(self, async_client, make_auth_headers) -> None:
         headers = await make_auth_headers()
         response = await async_client.get(f"{_API}/vehicles", headers=headers)
         assert response.status_code == 404
@@ -423,7 +415,4 @@ class TestСловариТсНаФронте:
 
     def test_состояния_тс_на_фронте_совпадают_с_бэкендом(self) -> None:
         front = _front_map("VEHICLE_STATUS_TITLES")
-        assert front == VEHICLE_STATUSES, sorted(
-            front.items() ^ VEHICLE_STATUSES.items()
-        )
-
+        assert front == VEHICLE_STATUSES, sorted(front.items() ^ VEHICLE_STATUSES.items())

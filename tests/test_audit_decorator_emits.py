@@ -96,9 +96,7 @@ async def _enable_warehouse(sessionmaker, data_factory: TestDataFactory) -> None
             )
         ).scalar_one_or_none()
         if grant is None:
-            session.add(
-                FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=True)
-            )
+            session.add(FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=True))
         else:
             grant.on = True
         await session.commit()
