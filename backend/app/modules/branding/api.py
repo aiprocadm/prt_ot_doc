@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.screen_access import screen_roles
 from app.core.security import AccessContext, abac
 from app.db.session import rearm_session_tenant_context
 from app.models.models import Tenant
@@ -35,7 +36,7 @@ _READ_ROLES = [
     "accountant",
     "auditor_ro",
 ]
-_WRITE_ROLES = ["admin", "owner", "ot_specialist"]
+_WRITE_ROLES = list(screen_roles("branding.manage"))
 
 
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | None:

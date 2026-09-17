@@ -46,9 +46,14 @@
   ``ot_head``, ``client_admin``, ``client_user``), получают права по смыслу —
   раньше они получали ПУСТОЕ меню.
 
-ГРАНИЦЫ НАЗВАНЫ. Здесь только ЧТЕНИЕ и видимость. Права на запись ручек не
-расширялись, кроме тех, у кого на экране уже есть отдельное право
-(``*.manage``, ``*.create``, ``*.issue``). Контуры дисциплин остаются на
+СРЕЗ-223: ЗАПИСЬ ТОЖЕ ЗДЕСЬ. После среза-217 замер по живым ручкам показал
+ровно 60 ручек ВНЕ меню с одним и тем же списком «admin, owner,
+ot_specialist» — копией из одного старого коммита, размноженной по
+одиннадцати файлам и забывшей руководителей службы. Права ``*.manage`` /
+``doc.edit`` для этих ручек заведены здесь, список — ОДИН: специалист и его
+руководители. Правило «начальник не меньше специалиста» держит сторож
+``tests/test_menu_matches_api.py`` по ВСЕМ живым ручкам, а не только по
+меню. Контуры дисциплин остаются на
 ``discipline_write_roles`` — у них свой сторож. Серверный словарь
 ``rbac_abac.ROLE_PERMISSIONS`` не тронут: им живёт синхронизация PWA со своим
 словарём кодов; его правка — отдельная работа.
@@ -108,6 +113,8 @@ SCREEN_ACCESS: dict[str, tuple[str, ...]] = {
     "dashboard.view": (*_INTERNAL, *_PORTAL, "contractor_inspector"),
     "command_center.view": (*_OT_PROS, "hr", "line_manager", "manager"),
     "analytics.view": (*_OT_LEADS, "ot_specialist", "hr", "line_manager", "manager"),
+    # Срез-223: конструктор отчётов — тем же, кто их собирает, и их руководителям.
+    "reports.manage": (*_OT_LEADS, "ot_specialist"),
     "reports.view": (
         *_OT_PROS,
         "hr",
@@ -135,6 +142,11 @@ SCREEN_ACCESS: dict[str, tuple[str, ...]] = {
     "doc.create": (*_OT_PROS, "hr", "line_manager", "manager", "clerk", "worker", "client_admin"),
     "doc.sign": (*_OT_LEADS, "lawyer"),
     "doc.export": (*_OT_PROS, "hr", "line_manager", "accountant", "lawyer"),
+    # Срез-223: правка готового документа — замены текста, колонтитулы и
+    # макеты страниц (модули replace и headers). Раньше — список без руководителей.
+    "doc.edit": (*_OT_LEADS, "ot_specialist"),
+    # Срез-223: бренд документов (/documents/branding) — тем же, кто их готовит.
+    "branding.manage": (*_OT_LEADS, "ot_specialist"),
     "template.view": (*_OT_LEADS, "ot_specialist", "clerk"),
     "template.create": (*_OT_LEADS,),
     "template.edit": (*_OT_LEADS,),
@@ -149,7 +161,11 @@ SCREEN_ACCESS: dict[str, tuple[str, ...]] = {
         "client_admin",
         "client_user",
     ),
+    # Срез-223: наборы, профили, пресеты, прогоны и ссылки портала — запись.
+    "pack.manage": (*_OT_LEADS, "ot_specialist"),
     "generation.view": (*_OT_PROS, "hr", "line_manager", "manager", "clerk"),
+    # Срез-223: профили пайплайнов и запуск/отмена/повтор прогонов.
+    "generation.manage": (*_OT_LEADS, "ot_specialist"),
     "file.view": (
         *_OT_PROS,
         "hr",
@@ -170,7 +186,12 @@ SCREEN_ACCESS: dict[str, tuple[str, ...]] = {
         "worker",
     ),
     "task.update": (*_OT_LEADS, "ot_specialist", "hr", "line_manager"),
-    "workflow.manage": (),
+    # Срез-223: маршруты согласований вёл специалист (ручки и тесты — с самого
+    # начала), а карта держала «только admin» по аналогии с правилами автоматизации.
+    # Это документооборот: специалист и его руководители.
+    "workflow.manage": (*_OT_LEADS, "ot_specialist"),
+    # Срез-223: шаблоны уведомлений арендатора (витрина их только читает).
+    "notification.manage": (*_OT_LEADS, "ot_specialist"),
     # --- охрана труда ---
     "risk.view": (*_OT_PROS, "line_manager"),
     "risk.assess": (*_OT_LEADS, "ot_specialist"),
@@ -192,6 +213,9 @@ SCREEN_ACCESS: dict[str, tuple[str, ...]] = {
     ),
     "training.assign": (*_OT_LEADS, "ot_specialist", "hr", "teacher"),
     "training.complete": (*_OT_LEADS, "hr", "teacher"),
+    # Срез-223: стажировки заводят кадры, руководители подразделений и ОТ;
+    # список в ручке помнил одного руководителя ОТ из двух.
+    "internship.manage": (*_OT_LEADS, "ot_specialist", "hr", "line_manager"),
     "medical.view": (*_OT_LEADS, "ot_specialist", "hr", "line_manager"),
     "permit.view": (*_OT_LEADS, "ot_specialist", "hr", "line_manager"),
     "permit.manage": (*_OT_LEADS, "ot_specialist"),
@@ -212,6 +236,8 @@ SCREEN_ACCESS: dict[str, tuple[str, ...]] = {
     "committee.view": (*_OT_LEADS, "ot_specialist", "hr", "line_manager"),
     "sout.view": (*_OT_LEADS, "ot_specialist"),
     "npa.view": (*_OT_PROS,),
+    # Срез-223: акты, редакции, привязки, задачи по НПА и реестр требований.
+    "npa.manage": (*_OT_LEADS, "ot_specialist"),
     # --- контуры дисциплин: ровно как у discipline_write_roles (срез-119) ---
     "fire_safety.view": (*_OT_LEADS, "ot_specialist", "pb_engineer"),
     "fire_safety.manage": (*_OT_LEADS, "ot_specialist", "pb_engineer"),

@@ -22,6 +22,7 @@ from app.core.external_perimeter import (
     enforce_portal_traffic,
     record_auth_failure,
 )
+from app.core.screen_access import screen_roles
 from app.core.security import AccessContext, abac, issue_portal_session_token, verify_token
 from app.core.tenant import tenant_prefix_path
 from app.db.session import rearm_session_tenant_context
@@ -67,7 +68,7 @@ _STAFF_READ_ROLES = [
     "accountant",
     "auditor_ro",
 ]
-_STAFF_WRITE_ROLES = ["admin", "owner", "ot_specialist"]
+_STAFF_WRITE_ROLES = list(screen_roles("pack.manage"))
 
 
 def _staff_tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | None:

@@ -34,6 +34,7 @@ from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.disciplines import PROCESS_CODES, process_label, process_options
 from app.core.role_labels import ROLE_CODES, role_label, role_options
+from app.core.screen_access import screen_roles
 from app.core.security import AccessContext, abac, rbac
 from app.core.tenant_validation import TenantContextValidator
 from app.domains.npa.requirements import RequirementsService, days_left, is_overdue, today
@@ -60,7 +61,7 @@ router = APIRouter(prefix="/compliance/requirements", tags=["compliance-requirem
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 #: Заводить и закрывать требования — тем же, кто ставит задачи по НПА.
-_WRITE_ROLES = ["admin", "owner", "ot_specialist"]
+_WRITE_ROLES = list(screen_roles("npa.manage"))
 
 #: Роли с обзором по арендатору: видят реестр целиком. Остальные — только
 #: свои (``owner_user_id``). Набор — управленческий read-set компл. сроков

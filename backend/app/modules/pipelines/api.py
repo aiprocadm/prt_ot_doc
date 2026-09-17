@@ -38,7 +38,7 @@ router = APIRouter(prefix="/pipelines", tags=["pipelines"])
 # виден ровно тем, кого пускает ручка — иначе человек видит раздел и получает
 # 403 (docs/audit/ACCESS_MENU_VS_API.md, сторож tests/test_menu_matches_api.py).
 _READ_ROLES = list(screen_roles("generation.view"))
-_WRITE_ROLES = ["admin", "owner", "ot_specialist"]
+_WRITE_ROLES = list(screen_roles("generation.manage"))
 
 
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | None:

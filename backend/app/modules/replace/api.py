@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session, get_tenant_record
 from app.api.helpers.upload import reject_oversize_upload
 from app.core.idempotency import compute_request_hash
+from app.core.screen_access import screen_roles
 from app.core.security import AccessContext, abac
 from app.db.session import rearm_session_tenant_context
 from app.models.document import DocumentVersion
@@ -62,7 +63,7 @@ _READ_ROLES = [
     "accountant",
     "auditor_ro",
 ]
-_WRITE_ROLES = ["admin", "owner", "ot_specialist"]
+_WRITE_ROLES = list(screen_roles("doc.edit"))
 
 
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | None:

@@ -72,3 +72,49 @@ async def test_рабочему_выдача_СИЗ_не_открылась(asyn
     response = await async_client.get("/api/v1/ppe/issues", headers=headers)
 
     assert response.status_code == status.HTTP_403_FORBIDDEN, response.text
+
+
+#: Срез-223: ручки ВНЕ меню, где до среза специалист был пущен, а руководитель — нет.
+#: Пустое тело: интересует только «не 403» (422 — ручка пустила и не поняла тело).
+_WRITE_HANDLES: tuple[tuple[str, str], ...] = (
+    ("POST", "/api/v1/notifications/templates"),
+    ("POST", "/api/v1/layout-presets"),
+    ("POST", "/api/v1/replace-maps"),
+    ("POST", "/api/v1/workflow/definitions"),
+    ("POST", "/api/v1/pipelines/profiles"),
+    ("POST", "/api/v1/package-presets"),
+    # report-builder в тестах выключен как модуль (404 всем до ролевого рубежа) —
+    # его ролевой рубеж держит сторож по всем ручкам в test_menu_matches_api.py.
+    ("POST", "/api/v1/npa"),
+    ("POST", "/api/v1/compliance/requirements"),
+    ("PATCH", "/api/v1/branding/profile/00000000-0000-0000-0000-000000000001"),
+)
+
+
+@pytest.mark.parametrize("role", [RoleEnum.OT_PB_LEAD, RoleEnum.OT_HEAD])
+async def test_руководитель_пишет_там_где_пишет_специалист(
+    async_client: AsyncClient, make_auth_headers, role: RoleEnum
+):
+    """Срез-223: 60 ручек вне меню отказывали руководителю службы ролевым 403."""
+
+    headers = await make_auth_headers(role)
+    refused: list[str] = []
+    for method, path in _WRITE_HANDLES:
+        response = await async_client.request(method, path, headers=headers, json={})
+        if response.status_code == status.HTTP_403_FORBIDDEN:
+            refused.append(f"{method} {path}: {response.text[:120]}")
+    assert not refused, "\n".join(refused)
+
+
+async def test_рабочему_запись_вне_меню_по_прежнему_закрыта(
+    async_client: AsyncClient, make_auth_headers
+):
+    """Обратная сторона: карта дала руководителям, а не «всем всё»."""
+
+    headers = await make_auth_headers(RoleEnum.WORKER)
+    allowed: list[str] = []
+    for method, path in _WRITE_HANDLES:
+        response = await async_client.request(method, path, headers=headers, json={})
+        if response.status_code != status.HTTP_403_FORBIDDEN:
+            allowed.append(f"{method} {path}: {response.status_code}")
+    assert not allowed, "\n".join(allowed)
