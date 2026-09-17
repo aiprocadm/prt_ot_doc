@@ -11,6 +11,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.screen_access import screen_roles
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.models.document_core import PipelineRun, PipelineRunStatus, Template
@@ -35,7 +36,10 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 SessionDep = Depends(get_session)
 TenantDep = Depends(get_tenant_record)
 
-_SUMMARY_ROLES = ["admin", "owner", "line_manager", "hr", "ot_pb_lead"]
+# Роли берутся из единой карты прав экрана (core/screen_access): пункт меню
+# виден ровно тем, кого пускает ручка — иначе человек видит раздел и получает
+# 403 (docs/audit/ACCESS_MENU_VS_API.md, сторож tests/test_menu_matches_api.py).
+_SUMMARY_ROLES = list(screen_roles("dashboard.view"))
 
 
 def _as_utc_datetime(value: datetime | None) -> datetime | None:

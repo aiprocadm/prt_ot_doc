@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.screen_access import screen_roles
 from app.core.security import abac
 from app.models.models import Tenant
 from app.modules.export_center.service import ExportCenterService
@@ -18,23 +19,10 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | No
 
 # Read: все «офисные» роли (зеркало REPORTS_VIEW/DOCUMENT_EXPORT-матрицы фронта);
 # исключены worker / employee / contractor_inspector.
-_EXPORT_READ_ROLES = [
-    "admin",
-    "owner",
-    "ot_pb_lead",
-    "ot_head",
-    "hr",
-    "manager",
-    "line_manager",
-    "ot_specialist",
-    "pb_engineer",
-    "ecologist",
-    "accountant",
-    "lawyer",
-    "client_admin",
-    "client_user",
-    "auditor_ro",
-]
+# Роли берутся из единой карты прав экрана (core/screen_access): пункт меню
+# виден ровно тем, кого пускает ручка — иначе человек видит раздел и получает
+# 403 (docs/audit/ACCESS_MENU_VS_API.md, сторож tests/test_menu_matches_api.py).
+_EXPORT_READ_ROLES = list(screen_roles("reports.view"))
 _EXPORT_WRITE_ROLES = [
     "admin",
     "owner",

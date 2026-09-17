@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.feature_flags import is_module_enabled, raise_for_disabled_module
+from app.core.screen_access import screen_roles
 from app.core.security import AccessContext, abac, rbac
 from app.domains.medical import lifecycle as lc
 from app.models.models import (
@@ -41,7 +42,10 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | N
 
 
 _MEDICAL_WRITE_ROLES = ["admin", "owner", "hr"]
-_MEDICAL_READ_ROLES = ["admin", "owner", "hr", "line_manager"]
+# Роли берутся из единой карты прав экрана (core/screen_access): пункт меню
+# виден ровно тем, кого пускает ручка — иначе человек видит раздел и получает
+# 403 (docs/audit/ACCESS_MENU_VS_API.md, сторож tests/test_menu_matches_api.py).
+_MEDICAL_READ_ROLES = list(screen_roles("medical.view"))
 
 
 MedicalAccess = Annotated[

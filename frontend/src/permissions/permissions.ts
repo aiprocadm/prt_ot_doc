@@ -1,5 +1,7 @@
 export const PERMISSIONS = {
   DASHBOARD_VIEW: "dashboard.view",
+  // Срез-217: командный центр — управленческий экран, а не «главная для всех».
+  COMMAND_CENTER_VIEW: "command_center.view",
   ANALYTICS_VIEW: "analytics.view",
   COMPANY_VIEW: "company.view",
   PERSON_VIEW: "person.view",
@@ -104,6 +106,7 @@ export type Role =
   | "trainer"
   | "student"
   | "ot_pb_head"
+  | "ot_head"
   | "ot_specialist"
   | "pb_engineer"
   | "ecologist"
@@ -125,6 +128,13 @@ const baseOpsPermissions: Permission[] = [
   PERMISSIONS.FILE_VIEW,
 ];
 
+// Срез-217: руководитель ОТ — не администратор платформы. Он видит всё, что
+// видят его специалисты, но настройки безопасности, ключи, интеграции,
+// правила автоматизации и очередь исходящих — только владелец и администратор.
+// До этого роль получала права СКОПОМ, видела эти пункты и получала на каждом
+// отказ. Единая карта — на сервере (core/screen_access.py); эта — запасная,
+// для офлайна, и сторож tests/test_menu_matches_api.py не даёт ей стать шире.
+// Форма записи «filter … !== PERMISSIONS.X» — та, которую читают сторожа.
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   owner: ALL_PERMISSIONS,
   admin: ALL_PERMISSIONS,
@@ -144,6 +154,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   // единого окна ведения клиентов.
   project_manager: [
     ...baseOpsPermissions,
+    PERMISSIONS.COMMAND_CENTER_VIEW,
     PERMISSIONS.COMPANY_VIEW,
     PERMISSIONS.PERSON_VIEW,
     PERMISSIONS.REPORTS_VIEW,
@@ -175,13 +186,37 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   ot_pb_head: ALL_PERMISSIONS.filter(
     (permission) =>
       permission !== PERMISSIONS.ADMIN_MANAGE_TENANTS &&
-      // Срез-208: контур ПДн открыт ручками только admin/owner/hr. Роль
-      // получает права скопом, поэтому исключаем явно — иначе пункт меню
-      // появится у того, кому ручка ответит отказом.
+      permission !== PERMISSIONS.ADMIN_MANAGE_ROLES &&
+      permission !== PERMISSIONS.ADMIN_OUTBOX_MANAGE &&
+      permission !== PERMISSIONS.INTEGRATIONS_VIEW &&
+      permission !== PERMISSIONS.RULES_VIEW &&
+      permission !== PERMISSIONS.RULES_MANAGE &&
+      permission !== PERMISSIONS.WORKFLOW_MANAGE &&
+      permission !== PERMISSIONS.TEMPLATE_ACTIVATE &&
+      permission !== PERMISSIONS.TEMPLATE_DELETE &&
+      permission !== PERMISSIONS.CRM_FINANCE_VIEW &&
+      // Срез-208: контур ПДн открыт ручками только admin/owner/hr.
+      permission !== PERMISSIONS.PRIVACY_VIEW,
+  ),
+  // Срез-217: начальник отдела ОТ — вторая роль руководителя; права те же.
+  ot_head: ALL_PERMISSIONS.filter(
+    (permission) =>
+      permission !== PERMISSIONS.ADMIN_MANAGE_TENANTS &&
+      permission !== PERMISSIONS.ADMIN_MANAGE_ROLES &&
+      permission !== PERMISSIONS.ADMIN_OUTBOX_MANAGE &&
+      permission !== PERMISSIONS.INTEGRATIONS_VIEW &&
+      permission !== PERMISSIONS.RULES_VIEW &&
+      permission !== PERMISSIONS.RULES_MANAGE &&
+      permission !== PERMISSIONS.WORKFLOW_MANAGE &&
+      permission !== PERMISSIONS.TEMPLATE_ACTIVATE &&
+      permission !== PERMISSIONS.TEMPLATE_DELETE &&
+      permission !== PERMISSIONS.CRM_FINANCE_VIEW &&
+      // Срез-208: контур ПДн открыт ручками только admin/owner/hr.
       permission !== PERMISSIONS.PRIVACY_VIEW,
   ),
   ot_specialist: [
     ...baseOpsPermissions,
+    PERMISSIONS.COMMAND_CENTER_VIEW,
     PERMISSIONS.COMPANY_VIEW,
     PERMISSIONS.PERSON_VIEW,
     PERMISSIONS.TEMPLATE_VIEW,
@@ -222,6 +257,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   ],
   pb_engineer: [
     PERMISSIONS.DASHBOARD_VIEW,
+    PERMISSIONS.COMMAND_CENTER_VIEW,
     PERMISSIONS.DOCUMENT_VIEW,
     PERMISSIONS.DOCUMENT_EXPORT,
     PERMISSIONS.FIRE_SAFETY_VIEW,
@@ -240,6 +276,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   ],
   ecologist: [
     PERMISSIONS.DASHBOARD_VIEW,
+    PERMISSIONS.COMMAND_CENTER_VIEW,
     PERMISSIONS.DOCUMENT_VIEW,
     PERMISSIONS.DOCUMENT_EXPORT,
     // Срез-119: роль заведена ради экологии, а экран экологии ей не
@@ -248,11 +285,11 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     PERMISSIONS.ECOLOGY_MANAGE,
     PERMISSIONS.RISK_VIEW,
     PERMISSIONS.RISK_EXPORT,
-    PERMISSIONS.AUDIT_VIEW,
     PERMISSIONS.CALENDAR_VIEW,
   ],
   hr: [
     PERMISSIONS.DASHBOARD_VIEW,
+    PERMISSIONS.COMMAND_CENTER_VIEW,
     // Срез-208: права субъекта ПДн и реестр утечек ведёт кадровик — он же
     // и в круге ручек (`_PDN_ROLES`).
     PERMISSIONS.PRIVACY_VIEW,
@@ -279,6 +316,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   ],
   line_manager: [
     PERMISSIONS.DASHBOARD_VIEW,
+    PERMISSIONS.COMMAND_CENTER_VIEW,
     PERMISSIONS.DOCUMENT_VIEW,
     PERMISSIONS.DOCUMENT_EXPORT,
     PERMISSIONS.TRAINING_VIEW,

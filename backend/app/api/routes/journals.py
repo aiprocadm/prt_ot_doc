@@ -16,6 +16,7 @@ from app.api.helpers.etag import (
     compute_list_etag,
 )
 from app.core.audit_decorator import audit_operation
+from app.core.screen_access import screen_roles
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.models.models import Journal, JournalEntry, Person, Tenant
@@ -39,8 +40,16 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | No
     return getattr(tenant, "id", None)
 
 
+# Чтение — из единой карты прав экрана (core/screen_access): пункт меню виден
+# ровно тем, кого пускает ручка (сторож tests/test_menu_matches_api.py).
+# Запись НЕ расширялась: она остаётся на прежнем списке.
+_READ_ROLES = list(screen_roles("training.view"))
+ReadAccess = Annotated[
+    AccessContext, Depends(abac(_tenant_resource_id, required_roles=_READ_ROLES))
+]
 ManagerAccess = Annotated[
-    AccessContext, Depends(abac(_tenant_resource_id, required_roles=["admin"]))
+    AccessContext,
+    Depends(abac(_tenant_resource_id, required_roles=["admin"])),
 ]
 
 
@@ -98,7 +107,7 @@ async def list_journals(
     response: Response,
     tenant: TenantDep,
     session: SessionDep,
-    access: ManagerAccess,
+    access: ReadAccess,
     company_id: str | None = None,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
@@ -165,7 +174,7 @@ async def get_journal(
     journal_id: str,
     tenant: TenantDep,
     session: SessionDep,
-    access: ManagerAccess,
+    access: ReadAccess,
     correlation_id: str = Depends(get_correlation_id),
 ) -> JournalRead:
     TenantContextValidator.ensure_tenant_context(tenant)
@@ -212,7 +221,7 @@ async def list_entries(
     journal_id: str,
     tenant: TenantDep,
     session: SessionDep,
-    access: ManagerAccess,
+    access: ReadAccess,
     person_id: str | None = None,
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
@@ -277,7 +286,7 @@ async def get_entry(
     entry_id: str,
     tenant: TenantDep,
     session: SessionDep,
-    access: ManagerAccess,
+    access: ReadAccess,
     correlation_id: str = Depends(get_correlation_id),
 ) -> JournalEntryRead:
     TenantContextValidator.ensure_tenant_context(tenant)
@@ -333,7 +342,7 @@ async def export_journal(
     journal_id: str,
     tenant: TenantDep,
     session: SessionDep,
-    access: ManagerAccess,
+    access: ReadAccess,
 ) -> dict[str, object]:
     TenantContextValidator.ensure_tenant_context(tenant)
 

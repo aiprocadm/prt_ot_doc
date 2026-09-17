@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.api.helpers.upload import reject_oversize_upload
+from app.core.screen_access import screen_roles
 from app.core.security import AccessContext, abac
 from app.db.session import rearm_session_tenant_context
 from app.models.models import Tenant
@@ -37,7 +38,12 @@ PortalAccess = Annotated[
     Depends(
         abac(
             _tenant_resource_id,
-            required_roles=["admin", "employee", "client_admin", "client_user"],
+            # Роли — из единой карты прав экрана (core/screen_access): пункт меню
+            # виден ровно тем, кого пускает ручка (сторож tests/test_menu_matches_api.py).
+            # Плюс сотрудник: он подаёт запросы через кабинет со своих экранов,
+            # пункта меню «Кабинет клиента» у него нет — ручка ШИРЕ меню, и это
+            # сторож допускает (уже — нет).
+            required_roles=[*screen_roles("client_portal.view"), "worker", "employee"],
             action="access client portal",
         )
     ),

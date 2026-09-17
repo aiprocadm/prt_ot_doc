@@ -28,6 +28,7 @@ from sqlalchemy.orm import aliased
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.disciplines import DISCIPLINE_TITLES, Discipline
 from app.core.errors import api_problem_detail
+from app.core.screen_access import screen_roles
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.models.master_data import Person
@@ -47,7 +48,10 @@ router = APIRouter(tags=["internships"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 
-_READ_ROLES = ["admin", "owner", "hr", "line_manager", "ot_pb_lead", "ot_specialist"]
+# Роли берутся из единой карты прав экрана (core/screen_access): пункт меню
+# виден ровно тем, кого пускает ручка — иначе человек видит раздел и получает
+# 403 (docs/audit/ACCESS_MENU_VS_API.md, сторож tests/test_menu_matches_api.py).
+_READ_ROLES = list(screen_roles("training.view"))
 _WRITE_ROLES = ["admin", "owner", "hr", "line_manager", "ot_pb_lead", "ot_specialist"]
 
 #: коды дисциплин словами — берутся из ОБЩЕГО словаря продукта, своей копии

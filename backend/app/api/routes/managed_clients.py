@@ -26,6 +26,7 @@ from app.core.audit_decorator import audit_operation
 from app.core.config import get_settings
 from app.core.errors import api_problem_detail
 from app.core.feature_flags import is_module_enabled, raise_for_disabled_module
+from app.core.screen_access import screen_roles
 from app.core.security import AccessContext, AuthContext, abac, get_auth_ctx, rbac
 from app.core.tenant_validation import TenantContextValidator
 from app.db.session import AsyncSessionLocal
@@ -176,7 +177,10 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | No
 
 # Портфель ведёт руководитель проектов аутсорсера; линейным ролям он не нужен
 # и показывал бы им коммерческие данные чужих клиентов.
-_ROLES = ["admin", "owner", "manager", "ot_pb_lead"]
+# Роли берутся из единой карты прав экрана (core/screen_access): пункт меню
+# виден ровно тем, кого пускает ручка — иначе человек видит раздел и получает
+# 403 (docs/audit/ACCESS_MENU_VS_API.md, сторож tests/test_menu_matches_api.py).
+_ROLES = list(screen_roles("managed_clients.view"))
 Access = Annotated[AccessContext, Depends(abac(_tenant_resource_id, required_roles=_ROLES))]
 # «Мои клиенты» доступны ЛЮБОМУ аутентифицированному специалисту арендатора:
 # это личная выборка, а не обзор портфеля. Пустой список ролей = только

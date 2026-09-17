@@ -9,13 +9,17 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session
+from app.core.screen_access import screen_roles
 from app.core.security import AccessContext, rbac
 from app.modules.data_quality import DataQualityService
 
 logger = logging.getLogger("app.api.data_quality")
 router = APIRouter(prefix="/data-quality", tags=["data-quality"])
 
-_DQ_READ_ROLES = ["admin", "owner", "hr", "ot_pb_lead", "line_manager"]
+# Роли берутся из единой карты прав экрана (core/screen_access): пункт меню
+# виден ровно тем, кого пускает ручка — иначе человек видит раздел и получает
+# 403 (docs/audit/ACCESS_MENU_VS_API.md, сторож tests/test_menu_matches_api.py).
+_DQ_READ_ROLES = list(screen_roles("data_quality.view"))
 
 
 def _authenticated_tenant_scope(request: Request, access: AccessContext) -> str | None:

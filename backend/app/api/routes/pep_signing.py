@@ -13,6 +13,7 @@ from app.api.dependencies import get_session, get_tenant_record
 from app.api.deps.tracing import get_trace_id
 from app.core.audit_decorator import audit_operation
 from app.core.errors import api_problem_detail
+from app.core.screen_access import screen_roles
 from app.core.security import AccessContext, abac
 from app.models.models import SignatureRequest, Tenant
 from app.services.pep_signing import (
@@ -34,7 +35,10 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | No
     return str(value) if value is not None else None
 
 
-_PEP_READ_ROLES = ["admin", "employee"]
+# Роли берутся из единой карты прав экрана (core/screen_access): пункт меню
+# виден ровно тем, кого пускает ручка — иначе человек видит раздел и получает
+# 403 (docs/audit/ACCESS_MENU_VS_API.md, сторож tests/test_menu_matches_api.py).
+_PEP_READ_ROLES = list(screen_roles("doc.view"))
 _PEP_WRITE_ROLES = ["admin", "employee"]
 
 ReaderAccess = Annotated[

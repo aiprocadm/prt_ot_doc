@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.errors import api_problem_detail
+from app.core.screen_access import screen_roles
 from app.core.security import abac
 from app.db.session import rearm_session_tenant_context
 from app.models.models import Tenant
@@ -35,15 +36,10 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | No
 
 # Управленческие KPI: union прецедентов dashboard/operational/reports
 # (_SUMMARY_ROLES + manager + ot_specialist). Worker/employee/client-роли не входят.
-_ANALYTICS_READ_ROLES = [
-    "admin",
-    "owner",
-    "hr",
-    "ot_pb_lead",
-    "line_manager",
-    "ot_specialist",
-    "manager",
-]
+# Роли берутся из единой карты прав экрана (core/screen_access): пункт меню
+# виден ровно тем, кого пускает ручка — иначе человек видит раздел и получает
+# 403 (docs/audit/ACCESS_MENU_VS_API.md, сторож tests/test_menu_matches_api.py).
+_ANALYTICS_READ_ROLES = list(screen_roles("analytics.view"))
 _ANALYTICS_ADMIN_ROLES = ["admin", "owner"]
 
 _ReadGuard = Depends(

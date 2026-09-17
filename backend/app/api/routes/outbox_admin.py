@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session, get_tenant_record
 from app.api.tenant_row_http import enforce_row_belongs_to_tenant
 from app.core.audit_decorator import audit_operation
+from app.core.screen_access import screen_roles
 from app.core.security import AccessContext, rbac
 from app.models.job_engine import OutboxEvent, OutboxEventStatus
 from app.models.models import Outbox, OutboxStatus, Tenant
@@ -19,7 +20,7 @@ router = APIRouter()
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
-AdminAccess = Annotated[AccessContext, Depends(rbac(["admin"]))]
+AdminAccess = Annotated[AccessContext, Depends(rbac(list(screen_roles("admin.outbox_manage"))))]
 
 
 class OutboxEntry(BaseModel):

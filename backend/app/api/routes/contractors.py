@@ -15,6 +15,7 @@ from app.api.helpers.etag import (
     compute_list_etag,
 )
 from app.core.feature_flags import is_module_enabled, raise_for_disabled_module
+from app.core.screen_access import screen_roles
 from app.core.security import AccessContext, abac, rbac
 from app.db.session import rearm_session_tenant_context
 from app.domains.shared import ContingentItemStatus
@@ -48,13 +49,11 @@ TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 # а проверка прав сравнивает коды буквально. Значит проверяющий-подрядчик,
 # заведённый канонической ролью, на свой единственный экран не попадёт.
 # Добавление второго кода расширяет доступ — это решение владельца.
-_CONTRACTOR_READ_ROLES = [
-    "admin",
-    "owner",
-    "inspector_contractor",
-    "client_admin",
-]
-_CONTRACTOR_WRITE_ROLES = ["admin", "owner"]
+# Роли берутся из единой карты прав экрана (core/screen_access): пункт меню
+# виден ровно тем, кого пускает ручка — иначе человек видит раздел и получает
+# 403 (docs/audit/ACCESS_MENU_VS_API.md, сторож tests/test_menu_matches_api.py).
+_CONTRACTOR_READ_ROLES = list(screen_roles("contractor.view"))
+_CONTRACTOR_WRITE_ROLES = list(screen_roles("contractor.manage"))
 
 _CONTRACTORS_FEATURE_CODE = "contractors"
 

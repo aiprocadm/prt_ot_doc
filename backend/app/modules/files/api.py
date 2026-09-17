@@ -23,6 +23,7 @@ from app.api.dependencies import get_session, get_tenant_record
 from app.api.helpers.upload import reject_oversize_upload
 from app.api.tenant_row_http import enforce_row_belongs_to_tenant
 from app.core.idempotency import compute_request_hash
+from app.core.screen_access import screen_roles
 from app.core.security import AccessContext, abac
 from app.models.models import Tenant
 from app.modules.files import service
@@ -58,7 +59,10 @@ router = APIRouter()
 
 # Canonical files API router for `/api/v1/files` endpoints.
 _FILE_UPLOAD_ROLES = ["admin", "employee"]
-_FILE_READ_ROLES = ["admin", "employee", "client_admin", "client_user"]
+# Роли берутся из единой карты прав экрана (core/screen_access): пункт меню
+# виден ровно тем, кого пускает ручка — иначе человек видит раздел и получает
+# 403 (docs/audit/ACCESS_MENU_VS_API.md, сторож tests/test_menu_matches_api.py).
+_FILE_READ_ROLES = list(screen_roles("file.view"))
 
 
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:

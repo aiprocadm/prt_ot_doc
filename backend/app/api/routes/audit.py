@@ -13,6 +13,7 @@ from app.api.dependencies import get_correlation_id, get_session, get_tenant_rec
 from app.celery.tasks.audit_export_job import export_audit_job
 from app.core.audit_decorator import audit_operation
 from app.core.errors import api_problem_detail
+from app.core.screen_access import screen_roles
 from app.core.security import AccessContext, rbac
 from app.core.tenant_validation import TenantContextValidator
 from app.models.models import AuditExportJob, AuditLog, Tenant
@@ -22,7 +23,7 @@ router = APIRouter()
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
-AdminAccess = Annotated[AccessContext, Depends(rbac(["admin", "owner", "auditor_ro"]))]
+AdminAccess = Annotated[AccessContext, Depends(rbac(list(screen_roles("audit.view"))))]
 
 
 class AuditLogEntry(BaseModel):

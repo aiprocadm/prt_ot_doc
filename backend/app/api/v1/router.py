@@ -38,6 +38,7 @@ from app.core.payload_constraints import (
     enforce_mapping_constraints,
     normalize_output_basename,
 )
+from app.core.screen_access import screen_roles
 from app.core.security import AccessContext, abac
 from app.core.tracing import get_trace_id
 from app.db.session import rearm_session_tenant_context
@@ -104,7 +105,12 @@ ATTACHMENT_HEADER = 'attachment; filename="{filename}"'
 UploadDocx = Annotated[UploadFile, File(media_type=DOCX_CONTENT_TYPE)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
-_MANAGERIAL_ROLES = ["admin"]
+# Роли берутся из единой карты прав экрана (core/screen_access): пункт меню
+# виден ровно тем, кого пускает ручка (docs/audit/ACCESS_MENU_VS_API.md,
+# сторож tests/test_menu_matches_api.py). Один список «admin» на карточки людей
+# и на шаблоны — два разных пункта меню, у них разные круги ролей.
+_MANAGERIAL_ROLES = list(screen_roles("employee_card.view"))
+_TEMPLATE_READ_ROLES = list(screen_roles("template.view"))
 _EDITOR_ROLES = ["admin"]
 _TEMPLATE_SCOPE_ORDER = {
     "branch": 0,
@@ -124,6 +130,10 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | N
 ManagerAccess = Annotated[
     AccessContext,
     Depends(abac(_tenant_resource_id, required_roles=_MANAGERIAL_ROLES, action="read")),
+]
+TemplateReadAccess = Annotated[
+    AccessContext,
+    Depends(abac(_tenant_resource_id, required_roles=_TEMPLATE_READ_ROLES, action="read")),
 ]
 EditorAccess = Annotated[
     AccessContext,
@@ -605,7 +615,7 @@ async def get_employees(
 async def get_templates(
     tenant: TenantDep,
     session: SessionDep,
-    access: ManagerAccess,
+    access: TemplateReadAccess,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     status_value: str | None = Query(default=None, alias="status"),
@@ -696,7 +706,7 @@ async def create_template_catalog(
 
 @router.get("/templates/{template_id}", response_model=TemplateDTO)
 async def get_template_details(
-    template_id: str, session: SessionDep, tenant: TenantDep, access: ManagerAccess
+    template_id: str, session: SessionDep, tenant: TenantDep, access: TemplateReadAccess
 ) -> TemplateDTO:
     template = await session.get(Template, template_id)
     if (
@@ -976,7 +986,7 @@ async def inspect_template_version(
 async def audit_tenant_templates(
     session: SessionDep,
     tenant: TenantDep,
-    access: ManagerAccess,
+    access: TemplateReadAccess,
     template_id: str | None = Query(default=None),
 ) -> TemplateAuditReportDTO:
     """Run the hardened linter against every non-deleted template version
@@ -1237,7 +1247,7 @@ async def create_template_version(
 
 @router.get("/templates/{template_id}/versions", response_model=list[dict])
 async def list_template_versions(
-    template_id: str, session: SessionDep, tenant: TenantDep, access: ManagerAccess
+    template_id: str, session: SessionDep, tenant: TenantDep, access: TemplateReadAccess
 ) -> list[dict[str, object]]:
     stmt = (
         select(TemplateVersion)
@@ -1268,7 +1278,7 @@ async def get_template_version(
     version_id: str,
     session: SessionDep,
     tenant: TenantDep,
-    access: ManagerAccess,
+    access: TemplateReadAccess,
 ) -> TemplateVersionDTO:
     version = await session.get(TemplateVersion, version_id)
     if (
@@ -1344,7 +1354,7 @@ async def get_template_by_code_version(
     code: str,
     session: SessionDep,
     tenant: TenantDep,
-    access: ManagerAccess,
+    access: TemplateReadAccess,
     request: Request,
     version: int = Query(..., ge=1),
 ) -> dict[str, object]:

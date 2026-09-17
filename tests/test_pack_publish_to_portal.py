@@ -33,7 +33,9 @@ def _real_archive() -> bytes:
     return buffer.getvalue()
 
 
-async def _put_archive(sessionmaker, data_factory, key_suffix: str = "result.zip") -> tuple[str, str]:
+async def _put_archive(
+    sessionmaker, data_factory, key_suffix: str = "result.zip"
+) -> tuple[str, str]:
     """Положить настоящий архив под префиксом арендатора. Возвращает (slug, ключ)."""
 
     async with sessionmaker() as session:
@@ -70,7 +72,9 @@ async def test_client_downloads_the_real_archive(
     assert link.status_code == 200, link.text
     token = link.json()["portal_url"].split("token=", 1)[1]
 
-    portal = await async_client.get(f"/api/v1/portal/packages/{run_id}", params={"token": token})
+    portal = await async_client.get(
+        f"/api/v1/portal/packages/{run_id}", headers={"X-Portal-Token": token}
+    )
     assert portal.status_code == 200, portal.text
     files = {item["kind"]: item for item in portal.json()["files"]}
     assert "zip" in files, "комплекта в кабинете нет — выдавать нечего"
@@ -211,7 +215,9 @@ async def test_run_without_a_real_archive_has_no_zip(
 
     link = await async_client.post(f"{BASE}/runs/{run_id}/portal-link", headers=headers)
     token = link.json()["portal_url"].split("token=", 1)[1]
-    portal = await async_client.get(f"/api/v1/portal/packages/{run_id}", params={"token": token})
+    portal = await async_client.get(
+        f"/api/v1/portal/packages/{run_id}", headers={"X-Portal-Token": token}
+    )
 
     kinds = {item["kind"] for item in portal.json()["files"]}
     assert "zip" not in kinds, "кабинет снова выдаёт подделку вместо архива"

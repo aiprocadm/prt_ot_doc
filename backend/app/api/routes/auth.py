@@ -20,6 +20,7 @@ from app.core.config import get_settings
 from app.core.csrf import CsrfOriginError, assert_trusted_origin
 from app.core.rate_limit import ip_subject_key, limiter, login_per_identity
 from app.core.rbac_abac import ROLE_PERMISSIONS
+from app.core.screen_access import permissions_for_roles
 from app.core.security import (
     AccessContext,
     decode_token,
@@ -263,7 +264,10 @@ async def me(access: AccessContext = Depends(rbac())) -> MeResponse:
     abilities = sorted(
         {perm for role in context.roles for perm in ROLE_PERMISSIONS.get(role, set())}
     )
-    permissions = sorted({perm.replace(":", ".") for perm in abilities})
+    # Права ЭКРАНА берутся из единой карты (core/screen_access): по ним витрина
+    # рисует меню, и по ней же ручки объявляют свои роли — иначе пункт виден
+    # тому, кому ручка ответит 403 (docs/audit/ACCESS_MENU_VS_API.md).
+    permissions = permissions_for_roles(context.roles)
     return MeResponse(
         sub=context.sub,
         email=access.user.email,
@@ -300,13 +304,10 @@ async def me_permissions(access: AccessContext = Depends(rbac())) -> Permissions
     """Return effective permission codes and ABAC scopes for the authenticated subject."""
 
     context = access.to_auth_context()
-    permissions = sorted(
-        {
-            perm.replace(":", ".")
-            for role in context.roles
-            for perm in ROLE_PERMISSIONS.get(role, set())
-        }
-    )
+    # Единая карта прав экрана — та же, из которой ручки берут свои роли.
+    # Старый серверный словарь вёл роли под именами, которых в продукте нет
+    # («hse_specialist», «fire_engineer»), и для настоящих ролей отдавал пусто.
+    permissions = permissions_for_roles(context.roles)
     return PermissionsResponse(
         roles=context.roles,
         permissions=permissions,

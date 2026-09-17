@@ -19,6 +19,7 @@ from app.api.helpers.etag import (
 )
 from app.core.errors import api_problem_detail
 from app.core.feature_flags import is_module_enabled, raise_for_disabled_module
+from app.core.screen_access import screen_roles
 from app.core.security import AccessContext, abac, rbac
 from app.core.tenant_validation import TenantContextValidator
 from app.domains.committees.kpi import CommitteeKpiService
@@ -93,12 +94,19 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | No
 
 
 _ROLES = ["admin"]
+# Чтение — из единой карты прав экрана (core/screen_access): пункт меню виден
+# ровно тем, кого пускает ручка (сторож tests/test_menu_matches_api.py).
+# Запись НЕ расширялась: она остаётся на прежнем списке.
+_READ_ROLES = list(screen_roles("committee.view"))
 Access = Annotated[AccessContext, Depends(abac(_tenant_resource_id, required_roles=_ROLES))]
+ReadAccess = Annotated[
+    AccessContext, Depends(abac(_tenant_resource_id, required_roles=_READ_ROLES))
+]
 
 # KPI dashboard audience = management (mirrors analytics ``_ANALYTICS_READ_ROLES``),
 # deliberately broader than the admin-only committee CRUD guard above so heads /
 # managers can read execution KPIs without the committees-write role.
-_KPI_ROLES = ["admin", "owner", "hr", "ot_pb_lead", "line_manager", "ot_specialist", "manager"]
+_KPI_ROLES = list(screen_roles("analytics.view"))
 KpiAccess = Annotated[AccessContext, Depends(abac(_tenant_resource_id, required_roles=_KPI_ROLES))]
 
 
@@ -298,7 +306,7 @@ async def list_committees(
     response: Response,
     tenant: TenantDep,
     session: SessionDep,
-    access: Access,
+    access: ReadAccess,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> CommitteePage | Response:
@@ -344,7 +352,7 @@ async def list_protocols(
     response: Response,
     tenant: TenantDep,
     session: SessionDep,
-    access: Access,
+    access: ReadAccess,
     committee_id: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
@@ -463,7 +471,7 @@ async def create_committee(
 
 @router.get("/{cid}", response_model=CommitteeRead)
 async def get_committee(
-    cid: str, tenant: TenantDep, session: SessionDep, access: Access
+    cid: str, tenant: TenantDep, session: SessionDep, access: ReadAccess
 ) -> CommitteeRead:
     TenantContextValidator.ensure_tenant_context(tenant)
     row = await _get_committee(session, tenant, cid)
@@ -521,7 +529,7 @@ async def remove_member(
 
 @router.get("/{cid}/members", response_model=list[MemberDetailRead])
 async def list_members(
-    cid: str, tenant: TenantDep, session: SessionDep, access: Access
+    cid: str, tenant: TenantDep, session: SessionDep, access: ReadAccess
 ) -> list[MemberDetailRead]:
     TenantContextValidator.ensure_tenant_context(tenant)
     await _get_committee(session, tenant, cid)
@@ -570,7 +578,7 @@ async def list_meetings(
     response: Response,
     tenant: TenantDep,
     session: SessionDep,
-    access: Access,
+    access: ReadAccess,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> MeetingPage | Response:
@@ -635,7 +643,7 @@ async def schedule_meeting(
 
 @router.get("/meetings/{mid}", response_model=MeetingRead)
 async def get_meeting(
-    mid: str, tenant: TenantDep, session: SessionDep, access: Access
+    mid: str, tenant: TenantDep, session: SessionDep, access: ReadAccess
 ) -> MeetingRead:
     TenantContextValidator.ensure_tenant_context(tenant)
     row = await _get_meeting(session, tenant, mid)
@@ -711,7 +719,7 @@ async def update_meeting(
 # --- Attendance ---
 @router.get("/meetings/{mid}/attendance", response_model=list[AttendanceRead])
 async def get_attendance(
-    mid: str, tenant: TenantDep, session: SessionDep, access: Access
+    mid: str, tenant: TenantDep, session: SessionDep, access: ReadAccess
 ) -> list[AttendanceRead]:
     TenantContextValidator.ensure_tenant_context(tenant)
     await _get_meeting(session, tenant, mid)
@@ -792,7 +800,7 @@ async def put_attendance(
 # --- Invitations (срез-4) ---
 @router.get("/meetings/{mid}/invitations", response_model=list[InvitationRead])
 async def get_invitations(
-    mid: str, tenant: TenantDep, session: SessionDep, access: Access
+    mid: str, tenant: TenantDep, session: SessionDep, access: ReadAccess
 ) -> list[InvitationRead]:
     TenantContextValidator.ensure_tenant_context(tenant)
     await _get_meeting(session, tenant, mid)
@@ -915,7 +923,7 @@ async def print_protocol(
     mid: str,
     tenant: TenantDep,
     session: SessionDep,
-    access: Access,
+    access: ReadAccess,
     fmt: Literal["docx", "pdf"] = Query("docx", alias="format"),
 ) -> Response:
     """Печатная форма протокола (срез-4). Только для проведённого заседания."""
@@ -945,7 +953,7 @@ async def print_protocol(
 
 @router.get("/meetings/{mid}/protocol", response_model=ProtocolRead)
 async def get_protocol(
-    mid: str, tenant: TenantDep, session: SessionDep, access: Access
+    mid: str, tenant: TenantDep, session: SessionDep, access: ReadAccess
 ) -> ProtocolRead:
     TenantContextValidator.ensure_tenant_context(tenant)
     meeting = await _get_meeting(session, tenant, mid)
@@ -1071,7 +1079,7 @@ async def cast_vote(
 
 @router.get("/decisions/{did}/votes", response_model=DecisionVoteSummary)
 async def get_votes(
-    did: str, tenant: TenantDep, session: SessionDep, access: Access
+    did: str, tenant: TenantDep, session: SessionDep, access: ReadAccess
 ) -> DecisionVoteSummary:
     TenantContextValidator.ensure_tenant_context(tenant)
     await _get_decision(session, tenant, did)

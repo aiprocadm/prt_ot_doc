@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.feature_flags import is_feature_enabled
+from app.core.screen_access import screen_roles
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.models.models import Tenant
@@ -30,7 +31,10 @@ TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 # Roles that can read an employee card. Mirrors the access list used for HR /
 # OT-PB workflows: admin/owner manage everyone; hr и line_manager — операционно;
 # ot_pb_lead — для расследований/допусков. Расширяется при необходимости.
-_EMPLOYEE_READ_ROLES = ["admin", "owner", "hr", "line_manager", "ot_pb_lead"]
+# Роли берутся из единой карты прав экрана (core/screen_access): пункт меню
+# виден ровно тем, кого пускает ручка — иначе человек видит раздел и получает
+# 403 (docs/audit/ACCESS_MENU_VS_API.md, сторож tests/test_menu_matches_api.py).
+_EMPLOYEE_READ_ROLES = list(screen_roles("employee_card.view"))
 
 
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:

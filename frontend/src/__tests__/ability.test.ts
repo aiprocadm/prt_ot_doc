@@ -61,8 +61,17 @@ describe("buildAbility", () => {
         template: { current_version: { status: "published" } },
       }),
     ).toBe(false);
+    // Срез-217: активация шаблона — право администратора, не руководителя ОТ:
+    // сервер и раньше пускал сюда только admin, а витрина показывала кнопку.
     expect(
       ability.can(PERMISSIONS.TEMPLATE_ACTIVATE, {
+        template: { current_version: { id: "v1", status: "published" } },
+        version: { id: "v2", status: "published" },
+      }),
+    ).toBe(false);
+    const admin = buildAbility({ ...baseUser, roles: ["admin"] });
+    expect(
+      admin.can(PERMISSIONS.TEMPLATE_ACTIVATE, {
         template: { current_version: { id: "v1", status: "published" } },
         version: { id: "v2", status: "published" },
       }),

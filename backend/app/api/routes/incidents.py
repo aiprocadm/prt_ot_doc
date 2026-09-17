@@ -16,6 +16,7 @@ from app.api.helpers.etag import (
 from app.core.audit_decorator import audit_operation
 from app.core.disciplines import DISCIPLINE_TITLES, Discipline
 from app.core.errors import api_problem_detail
+from app.core.screen_access import screen_roles
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.models.models import (
@@ -44,8 +45,11 @@ router = APIRouter(tags=["incidents"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 
-_INCIDENT_READ_ROLES = ["admin"]
-_INCIDENT_WRITE_ROLES = ["admin"]
+# Роли берутся из единой карты прав экрана (core/screen_access): пункт меню
+# виден ровно тем, кого пускает ручка — иначе человек видит раздел и получает
+# 403 (docs/audit/ACCESS_MENU_VS_API.md, сторож tests/test_menu_matches_api.py).
+_INCIDENT_READ_ROLES = list(screen_roles("incident.view"))
+_INCIDENT_WRITE_ROLES = list(screen_roles("incident.create"))
 
 #: дисциплина происшествия — код из ОБЩЕГО словаря (in01, разд. 54.2); тот же
 #: приём, что у курса обучения и стажировки

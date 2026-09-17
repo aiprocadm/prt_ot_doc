@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.errors import api_problem_detail
+from app.core.screen_access import screen_roles
 from app.core.security import abac, rbac
 from app.models.models import (
     Tenant,
@@ -105,19 +106,11 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | N
     return getattr(tenant, "id", None)
 
 
-_DOCUMENT_RUN_ROLES = ["admin", "employee", "client_admin"]
-_DOCUMENT_READ_ROLES = [
-    "owner",
-    "admin",
-    "employee",
-    "line_manager",
-    "hr",
-    "ot_specialist",
-    "ot_head",
-    "client_admin",
-    "client_user",
-    "clerk",
-]
+_DOCUMENT_RUN_ROLES = list(screen_roles("doc.create"))
+# Роли берутся из единой карты прав экрана (core/screen_access): пункт меню
+# виден ровно тем, кого пускает ручка — иначе человек видит раздел и получает
+# 403 (docs/audit/ACCESS_MENU_VS_API.md, сторож tests/test_menu_matches_api.py).
+_DOCUMENT_READ_ROLES = list(screen_roles("doc.view"))
 _DOCUMENT_STATUS_ROLES = ["admin"]
 _DEFAULT_DOCUMENT_PIPELINE_PROFILE = "default_doc_pipeline"
 

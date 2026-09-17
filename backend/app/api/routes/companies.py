@@ -18,6 +18,7 @@ from app.api.helpers.etag import (
 )
 from app.core.errors import api_problem_detail
 from app.core.rbac_abac import actor_from_claims, policy_forbidden
+from app.core.screen_access import screen_roles
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.models.models import Company, Tenant
@@ -32,8 +33,11 @@ TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 
 
 _defense_roles = ["admin", "owner"]
-_COMPANY_READ_ROLES = ["admin", "owner"]
-_COMPANY_WRITE_ROLES = ["admin", "owner"]
+# Роли берутся из единой карты прав экрана (core/screen_access): пункт меню
+# виден ровно тем, кого пускает ручка — иначе человек видит раздел и получает
+# 403 (docs/audit/ACCESS_MENU_VS_API.md, сторож tests/test_menu_matches_api.py).
+_COMPANY_READ_ROLES = list(screen_roles("company.view"))
+_COMPANY_WRITE_ROLES = list(screen_roles("company.create"))
 
 
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
