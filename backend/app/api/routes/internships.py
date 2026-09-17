@@ -52,7 +52,7 @@ TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 # виден ровно тем, кого пускает ручка — иначе человек видит раздел и получает
 # 403 (docs/audit/ACCESS_MENU_VS_API.md, сторож tests/test_menu_matches_api.py).
 _READ_ROLES = list(screen_roles("training.view"))
-_WRITE_ROLES = ["admin", "owner", "hr", "line_manager", "ot_pb_lead", "ot_specialist"]
+_WRITE_ROLES = list(screen_roles("internship.manage"))
 
 #: коды дисциплин словами — берутся из ОБЩЕГО словаря продукта, своей копии
 #: здесь нет: две копии разошлись бы на первой новой дисциплине

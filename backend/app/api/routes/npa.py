@@ -37,6 +37,7 @@ from app.api.dependencies import get_session, get_tenant_record
 from app.api.routes.platform_tenants import _require_managing_admin
 from app.core.audit_decorator import audit_operation
 from app.core.role_labels import ROLE_CODES, role_label
+from app.core.screen_access import screen_roles
 from app.core.security import abac, rbac
 from app.core.tenant_validation import TenantContextValidator
 from app.domains.npa.impact import NpaImpactService
@@ -79,7 +80,7 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 # NPA reads (`GET /npa*`) stay authn-only — normative acts are reference data. Creating
 # update tasks from an act's impact writes tenant-wide task rows -> DOC_WRITE (mirrors
 # the export/report write set: admin/owner/ot_specialist).
-_IMPACT_WRITE_ROLES = ["admin", "owner", "ot_specialist"]
+_IMPACT_WRITE_ROLES = list(screen_roles("npa.manage"))
 
 
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | None:

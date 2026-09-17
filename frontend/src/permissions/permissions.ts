@@ -11,14 +11,19 @@ export const PERMISSIONS = {
   TEMPLATE_DELETE: "template.delete",
   TEMPLATE_ACTIVATE: "template.activate",
   PACK_VIEW: "pack.view",
+  PACK_MANAGE: "pack.manage",
   GENERATION_VIEW: "generation.view",
+  GENERATION_MANAGE: "generation.manage",
   DOCUMENT_VIEW: "doc.view",
   DOCUMENT_CREATE: "doc.create",
   DOCUMENT_SIGN: "doc.sign",
   DOCUMENT_EXPORT: "doc.export",
+  DOCUMENT_EDIT: "doc.edit",
+  BRANDING_MANAGE: "branding.manage",
   FILE_VIEW: "file.view",
   TASK_VIEW: "task.view",
   TASK_UPDATE: "task.update",
+  NOTIFICATION_MANAGE: "notification.manage",
   RISK_VIEW: "risk.view",
   RISK_ASSESS: "risk.assess",
   RISK_EDIT: "risk.edit",
@@ -30,6 +35,7 @@ export const PERMISSIONS = {
   TRAINING_VIEW: "training.view",
   TRAINING_ASSIGN: "training.assign",
   TRAINING_COMPLETE: "training.complete",
+  INTERNSHIP_MANAGE: "internship.manage",
   MEDICAL_VIEW: "medical.view",
   PERMIT_VIEW: "permit.view",
   PERMIT_MANAGE: "permit.manage",
@@ -63,6 +69,7 @@ export const PERMISSIONS = {
   ADMIN_MANAGE_ROLES: "admin.manage_roles",
   ADMIN_MANAGE_TENANTS: "admin.manage_tenants",
   NPA_VIEW: "npa.view",
+  NPA_MANAGE: "npa.manage",
   /** Срез-208: контур ПДн (152-ФЗ). Роли ровно те же, что у ручек
    *  `_PDN_ROLES` = admin / owner / hr: «меню шире, чем ручки» — известный
    *  дефект платформы, и повторять его здесь нельзя. */
@@ -70,6 +77,7 @@ export const PERMISSIONS = {
   AUDIT_VIEW: "audit.view",
   SETTINGS_VIEW: "settings.view",
   REPORTS_VIEW: "reports.view",
+  REPORTS_MANAGE: "reports.manage",
   COMPANY_CREATE: "company.create",
   PERSON_CREATE: "person.create",
   WORKFLOW_MANAGE: "workflow.manage",
@@ -191,7 +199,6 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
       permission !== PERMISSIONS.INTEGRATIONS_VIEW &&
       permission !== PERMISSIONS.RULES_VIEW &&
       permission !== PERMISSIONS.RULES_MANAGE &&
-      permission !== PERMISSIONS.WORKFLOW_MANAGE &&
       permission !== PERMISSIONS.TEMPLATE_ACTIVATE &&
       permission !== PERMISSIONS.TEMPLATE_DELETE &&
       permission !== PERMISSIONS.CRM_FINANCE_VIEW &&
@@ -207,7 +214,6 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
       permission !== PERMISSIONS.INTEGRATIONS_VIEW &&
       permission !== PERMISSIONS.RULES_VIEW &&
       permission !== PERMISSIONS.RULES_MANAGE &&
-      permission !== PERMISSIONS.WORKFLOW_MANAGE &&
       permission !== PERMISSIONS.TEMPLATE_ACTIVATE &&
       permission !== PERMISSIONS.TEMPLATE_DELETE &&
       permission !== PERMISSIONS.CRM_FINANCE_VIEW &&
@@ -237,6 +243,17 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     PERMISSIONS.AUDIT_PREP_VIEW,
     PERMISSIONS.NPA_VIEW,
     PERMISSIONS.REPORTS_VIEW,
+    // Срез-223: запись, которую ручки давали специалисту всегда, — теперь и на
+    // карте (сервер отдаёт те же коды; здесь — запас для офлайна).
+    PERMISSIONS.PACK_MANAGE,
+    PERMISSIONS.GENERATION_MANAGE,
+    PERMISSIONS.DOCUMENT_EDIT,
+    PERMISSIONS.BRANDING_MANAGE,
+    PERMISSIONS.NOTIFICATION_MANAGE,
+    PERMISSIONS.NPA_MANAGE,
+    PERMISSIONS.REPORTS_MANAGE,
+    PERMISSIONS.WORKFLOW_MANAGE,
+    PERMISSIONS.INTERNSHIP_MANAGE,
     PERMISSIONS.COMPANY_CREATE,
     PERMISSIONS.PERSON_CREATE,
     PERMISSIONS.CALENDAR_VIEW,

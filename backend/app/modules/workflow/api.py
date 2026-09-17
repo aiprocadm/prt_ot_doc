@@ -9,6 +9,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.screen_access import screen_roles
 from app.core.security import AccessContext, abac, rbac
 from app.models.models import Tenant
 from app.modules.workflow.models import (
@@ -27,7 +28,7 @@ AccessDep = Annotated[AccessContext, Depends(rbac())]
 # `AccessDep`. Authoring/publishing workflow definitions and starting instances are
 # tenant-wide engine config with NO in-service role check, so they get least-privilege
 # gating mirroring 618614d9: DOC_WRITE (admin/owner/ot_specialist).
-_WF_WRITE_ROLES = ["admin", "owner", "ot_specialist"]
+_WF_WRITE_ROLES = list(screen_roles("workflow.manage"))
 
 
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | None:

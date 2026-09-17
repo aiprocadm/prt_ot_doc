@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
+from app.core.screen_access import screen_roles
 from app.core.security import AccessContext, abac, rbac
 from app.core.tenant_validation import TenantContextValidator
 from app.models.models import Tenant
@@ -45,7 +46,7 @@ _TEMPLATE_READ_ROLES = [
     "accountant",
     "auditor_ro",
 ]
-_TEMPLATE_WRITE_ROLES = ["admin", "owner", "ot_specialist"]
+_TEMPLATE_WRITE_ROLES = list(screen_roles("notification.manage"))
 
 
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | None:

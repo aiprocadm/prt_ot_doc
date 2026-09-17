@@ -316,3 +316,35 @@ def test_карта_покрывает_каталог_витрины() -> None:
         f"не в таблице: {sorted(catalogue - set(SCREEN_ACCESS))}; "
         f"лишние: {sorted(set(SCREEN_ACCESS) - catalogue)}"
     )
+
+
+def test_руководитель_не_меньше_специалиста_по_всем_ручкам(live_routes) -> None:
+    """Срез-223: правило карты — по ВСЕМ живым ручкам, не только за пунктами меню.
+
+    Замер 17.09 после среза-217: 60 ручек ВНЕ меню пускали специалиста по ОТ и
+    отказывали его руководителям — один и тот же список «admin, owner,
+    ot_specialist», скопированный из одного коммита по одиннадцати файлам.
+    Теперь их права живут в карте (``*.manage``, ``doc.edit``), а этот сторож
+    не даёт списку «без руководителей» появиться снова где угодно.
+    """
+
+    leads = {"ot_pb_lead", "ot_head"}
+    behind: list[str] = []
+    seen_routes: set[tuple[str, int]] = set()
+    checked = 0
+    for (method, path), route in live_routes.items():
+        if (method, id(route)) in seen_routes:
+            continue
+        seen_routes.add((method, id(route)))
+        roles = _route_roles(route)
+        if roles is None or "ot_specialist" not in roles:
+            continue
+        checked += 1
+        missing = leads - roles
+        if missing:
+            behind.append(f"{method} {path}: без {sorted(missing)}")
+    assert checked > 400, f"разбор увидел лишь {checked} ручек со специалистом — сломан?"
+    assert not behind, (
+        "ручки пускают специалиста ОТ, но не его руководителей — "
+        "роли обязаны браться из screen_roles(...):\n  " + "\n  ".join(behind)
+    )
