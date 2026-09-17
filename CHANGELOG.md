@@ -1,5 +1,68 @@
 # CHANGELOG
 
+## 2026-09-17 (feat/tz-continue-221 — срез-221: typescript-eslint 8; три исключения `minimatch` сняты — очередь 30.09 закрыта)
+
+### Зачем
+
+Три записи в `.github/security-exceptions.yml` со сроком **30.09.2026** держали
+ReDoS в `minimatch` (GHSA-3ppc-4f35-3m26, GHSA-7r86-cg39-jmmj,
+GHSA-23c5-xmqv-rm74) и обещали «мажорный подъём eslint-цепочки».
+
+### Сверка: чинить надо не то, что записано
+
+`npm audit` и `npm ls minimatch` показали: уязвима линейка **9.0.0–9.0.6**, и
+её тянет **только** `@typescript-eslint/typescript-estree` 6 (через parser,
+eslint-plugin, utils, type-utils). Копии `minimatch` 3.1.5 под eslint 8,
+`eslint-plugin-react` и `jsx-a11y` — не уязвимы. Значит:
+
+* мажорный подъём `eslint` не нужен: `typescript-eslint` 8.70 объявляет peer
+  `eslint ^8.57 || ^9 || ^10` — прежний eslint 8.57 и прежний `.eslintrc.cjs`
+  остаются (flat-config не требуется);
+* `eslint-plugin-react` 7.37 и `jsx-a11y` 6.10 объявляют peer только до eslint 9
+  — ещё одна причина не трогать eslint ради этой дыры.
+
+### Что сделано
+
+* `@typescript-eslint/parser` и `@typescript-eslint/eslint-plugin` 6.21 →
+  **8.70.0**; уязвимой линейки `minimatch` в lock нет (остались 3.1.5, 5.1.9 и
+  починенная 9.0.9).
+* `eslint-plugin-import` **убран**: в `.eslintrc.cjs` не использовался — только
+  тянул зависимости (та же порода, что `black`, `schemathesis`).
+* `.pre-commit-config.yaml`: хук eslint переведён на те же версии, что в
+  `package.json` (typescript-eslint 8.70, plugin-react 7.37).
+* Шесть находок новых правил `recommended` typescript-eslint 8 починены по
+  существу, смысл не менялся: три пустых интерфейса-наследника (`input`,
+  `label`, `textarea`) → псевдонимы типов; два тернарника-оператора в
+  `WorkPermitFormDialog` → `if/else`; `require("tailwindcss-animate")` в
+  `tailwind.config.ts` → `import`.
+* Три записи-исключения **сняты, а не продлены**; аудит перезапущен: **ЧИСТО**,
+  у витрины **0 корневых advisory, 0 принятых записей**.
+
+**Очередь 30.09 закрыта целиком:** из восьми исключений срезы 218–221 сняли
+все восемь (black ×2, pytest, vitest, vite, minimatch ×3). Остались три записи
+с более поздними сроками (`ecdsa` — 31.10; `msgpack` (образ) и `setuptools` — 30.11).
+
+### Сторож
+
+`tests/test_frontend_toolchain.py` расширен: `@typescript-eslint/*` не ниже 8
+в пине и в lock; в lock нет `minimatch` 9.0.0–9.0.6 (сторож смотрит целиком —
+транзитивная копия та же дыра); `eslint-plugin-import` не возвращается; все
+пять снятых записей витрины не висят до срока.
+
+### Проверка
+
+* `eslint --max-warnings=0`, типы, prettier — чисто;
+* полный прогон витрины и сборка — см. итог в PR.
+
+### Границы
+
+* `rollup ^4` и `ts-node` в devDependencies напрямую не используются — мёртвые
+  инструменты без исключений; отдельный шаг. Умеренная (moderate) advisory у
+  `react-router` 6 гейтом не считается (гейт — high/critical); подъём
+  react-router 7 — отдельное решение, он ломающий.
+* `isort` в `requirements-dev.txt` — та же порода.
+
+
 ## 2026-09-17 (feat/tz-continue-220 — срез-220: vite 8 + vitest 4; два исключения витрины сняты)
 
 ### Зачем

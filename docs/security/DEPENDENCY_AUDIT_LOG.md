@@ -3,6 +3,13 @@
 ## 2026-09-17 — ЧИСТО
 
 - pip-audit: 1 находок, все приняты записями с причиной и сроком
+- npm-audit gate: 0 high/critical root advisories, 0 accepted via security-exceptions.yml
+
+Trivy (образ) в этот прогон не входит: он требует Docker и запускается отдельно.
+
+## 2026-09-17 — ЧИСТО
+
+- pip-audit: 1 находок, все приняты записями с причиной и сроком
 - npm-audit gate: 3 high/critical root advisories, 3 accepted via security-exceptions.yml
 
 Trivy (образ) в этот прогон не входит: он требует Docker и запускается отдельно.
