@@ -116,7 +116,8 @@ export const MAIN_NAV_GROUPS: NavGroup[] = [
         label: "Пайплайны и задания",
         to: "/pipelines/runs",
         icon: Archive,
-        permission: PERMISSIONS.DOCUMENT_VIEW,
+        // Срез-217: прогоны генерации — тем, кто генерирует, а не каждому читателю.
+        permission: PERMISSIONS.GENERATION_VIEW,
       },
       {
         label: "Архив",
@@ -134,7 +135,8 @@ export const MAIN_NAV_GROUPS: NavGroup[] = [
         label: "Командный центр",
         to: "/command-center",
         icon: ShieldAlert,
-        permission: PERMISSIONS.DASHBOARD_VIEW,
+        // Срез-217: управленческий экран — не всем, кто видит главную.
+        permission: PERMISSIONS.COMMAND_CENTER_VIEW,
       },
       {
         label: "Центр внимания",
@@ -427,7 +429,9 @@ export const MAIN_NAV_GROUPS: NavGroup[] = [
         label: "Тренды",
         to: "/analytics/trends",
         icon: Activity,
-        permission: PERMISSIONS.REPORTS_VIEW,
+        // Срез-217: ручки трендов — аналитические; пункт с правом отчётов был
+        // виден бухгалтеру и клиенту, которым ручка отвечает отказом.
+        permission: PERMISSIONS.ANALYTICS_VIEW,
       },
       {
         label: "Управленческая аналитика",

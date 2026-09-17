@@ -363,7 +363,11 @@ async def test_справочник_формы_открыт_специалист
 
     # Почему нужна своя ручка: административные справочники специалисту закрыты.
     assert (await async_client.get("/api/v1/admin/users", headers=specialist)).status_code == 403
-    assert (await async_client.get("/api/v1/sites", headers=specialist)).status_code == 403
+    # Срез-217: площадки открыты профильным ролям по карте прав экрана; отрицательный
+    # контроль — ручка, оставшаяся только у администратора.
+    assert (
+        await async_client.get("/api/v1/admin/tenant-health", headers=specialist)
+    ).status_code == 403
 
     response = await async_client.get(f"{BASE}/options", headers=specialist)
     assert response.status_code == 200, response.text

@@ -29,6 +29,7 @@ from app.api.helpers.upload import reject_oversize_upload
 from app.core.archive_safety import ArchiveSafetyError
 from app.core.errors import api_problem_detail
 from app.core.feature_flags import is_module_enabled, raise_for_disabled_module
+from app.core.screen_access import screen_roles
 from app.core.security import AccessContext, abac, rbac
 from app.core.tenant_validation import TenantContextValidator
 from app.domains.medical.service import _load_factor_catalog
@@ -111,7 +112,14 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | No
 
 
 _ROLES = ["admin"]
+# Чтение — из единой карты прав экрана (core/screen_access): пункт меню виден
+# ровно тем, кого пускает ручка (сторож tests/test_menu_matches_api.py).
+# Запись НЕ расширялась: она остаётся на прежнем списке.
+_READ_ROLES = list(screen_roles("sout.view"))
 Access = Annotated[AccessContext, Depends(abac(_tenant_resource_id, required_roles=_ROLES))]
+ReadAccess = Annotated[
+    AccessContext, Depends(abac(_tenant_resource_id, required_roles=_READ_ROLES))
+]
 
 
 _FEATURE_CODE = "sout"
@@ -340,7 +348,7 @@ async def list_campaigns(
     response: Response,
     tenant: TenantDep,
     session: SessionDep,
-    access: Access,
+    access: ReadAccess,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> CampaignPage | Response:
@@ -399,7 +407,7 @@ async def create_campaign(
 
 @router.get("/{cid}", response_model=CampaignRead)
 async def get_campaign(
-    cid: str, tenant: TenantDep, session: SessionDep, access: Access
+    cid: str, tenant: TenantDep, session: SessionDep, access: ReadAccess
 ) -> CampaignRead:
     TenantContextValidator.ensure_tenant_context(tenant)
     row = await _get_campaign(session, tenant, cid)
@@ -443,7 +451,7 @@ async def list_workplaces(
     response: Response,
     tenant: TenantDep,
     session: SessionDep,
-    access: Access,
+    access: ReadAccess,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> WorkplacePage | Response:
@@ -529,7 +537,7 @@ async def add_workplace(
 
 @router.get("/workplaces/{wid}", response_model=WorkplaceRead)
 async def get_workplace(
-    wid: str, tenant: TenantDep, session: SessionDep, access: Access
+    wid: str, tenant: TenantDep, session: SessionDep, access: ReadAccess
 ) -> WorkplaceRead:
     TenantContextValidator.ensure_tenant_context(tenant)
     row = await _get_workplace(session, tenant, wid)
@@ -576,7 +584,7 @@ async def update_workplace(
 
 @router.get("/workplaces/{wid}/class-history", response_model=list[ClassHistoryRead])
 async def list_class_history(
-    wid: str, tenant: TenantDep, session: SessionDep, access: Access
+    wid: str, tenant: TenantDep, session: SessionDep, access: ReadAccess
 ) -> list[ClassHistoryRead]:
     TenantContextValidator.ensure_tenant_context(tenant)
     await _get_workplace(session, tenant, wid)
@@ -599,7 +607,7 @@ async def list_class_history(
 
 @router.get("/workplaces/{wid}/norm-suggestions", response_model=NormSuggestions)
 async def get_norm_suggestions(
-    wid: str, tenant: TenantDep, session: SessionDep, access: Access
+    wid: str, tenant: TenantDep, session: SessionDep, access: ReadAccess
 ) -> NormSuggestions:
     TenantContextValidator.ensure_tenant_context(tenant)
     wp = await _get_workplace(session, tenant, wid)
@@ -629,7 +637,7 @@ async def get_norm_suggestions(
 
 @router.get("/workplaces/{wid}/cascade/preview", response_model=CascadePreview)
 async def cascade_preview(
-    wid: str, tenant: TenantDep, session: SessionDep, access: Access
+    wid: str, tenant: TenantDep, session: SessionDep, access: ReadAccess
 ) -> CascadePreview:
     TenantContextValidator.ensure_tenant_context(tenant)
     preview = await preview_cascade(session, tenant, wid)
@@ -724,7 +732,7 @@ async def add_guarantee(
 # --- Report projection ---
 @router.get("/{cid}/report", response_model=CampaignReport)
 async def get_report(
-    cid: str, tenant: TenantDep, session: SessionDep, access: Access
+    cid: str, tenant: TenantDep, session: SessionDep, access: ReadAccess
 ) -> CampaignReport:
     TenantContextValidator.ensure_tenant_context(tenant)
     campaign = await _get_campaign(session, tenant, cid)
@@ -799,7 +807,7 @@ async def print_sout_card(
     wid: str,
     tenant: TenantDep,
     session: SessionDep,
-    access: Access,
+    access: ReadAccess,
     fmt: Literal["docx", "pdf"] = Query("docx", alias="format"),
 ) -> Response:
     TenantContextValidator.ensure_tenant_context(tenant)
@@ -817,7 +825,7 @@ async def print_summary_sheet(
     cid: str,
     tenant: TenantDep,
     session: SessionDep,
-    access: Access,
+    access: ReadAccess,
     fmt: Literal["docx", "pdf"] = Query("docx", alias="format"),
 ) -> Response:
     TenantContextValidator.ensure_tenant_context(tenant)
@@ -832,7 +840,7 @@ async def print_summary_sheet(
 
 @router.get("/{cid}/declaration", response_model=DeclarationPreview)
 async def get_declaration(
-    cid: str, tenant: TenantDep, session: SessionDep, access: Access
+    cid: str, tenant: TenantDep, session: SessionDep, access: ReadAccess
 ) -> DeclarationPreview:
     TenantContextValidator.ensure_tenant_context(tenant)
     campaign = await _get_campaign(session, tenant, cid)
@@ -859,7 +867,7 @@ async def print_declaration(
     cid: str,
     tenant: TenantDep,
     session: SessionDep,
-    access: Access,
+    access: ReadAccess,
     fmt: Literal["docx", "pdf"] = Query("docx", alias="format"),
 ) -> Response:
     TenantContextValidator.ensure_tenant_context(tenant)

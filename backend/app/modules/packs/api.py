@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.errors import api_problem_detail
+from app.core.screen_access import screen_roles
 from app.core.security import AccessContext, abac
 from app.models.models import (
     PackagePresetItem,
@@ -51,19 +52,10 @@ router = APIRouter(tags=["packs-v2"])
 
 _PACKS_V2_TYPE = "packs"
 
-_READ_ROLES = [
-    "admin",
-    "owner",
-    "hr",
-    "line_manager",
-    "manager",
-    "ot_pb_lead",
-    "ot_head",
-    "ot_specialist",
-    "pb_engineer",
-    "accountant",
-    "auditor_ro",
-]
+# Роли берутся из единой карты прав экрана (core/screen_access): пункт меню
+# виден ровно тем, кого пускает ручка — иначе человек видит раздел и получает
+# 403 (docs/audit/ACCESS_MENU_VS_API.md, сторож tests/test_menu_matches_api.py).
+_READ_ROLES = list(screen_roles("pack.view"))
 _WRITE_ROLES = ["admin", "owner", "ot_specialist"]
 
 

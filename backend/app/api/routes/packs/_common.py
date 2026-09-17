@@ -18,6 +18,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.errors import api_problem_detail
+from app.core.screen_access import screen_roles
 from app.core.security import AccessContext, abac
 from app.models.models import (
     Company,
@@ -77,7 +78,10 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | N
     return getattr(tenant, "id", None)
 
 
-_PACK_READ_ROLES = ["admin", "employee", "client_admin", "client_user"]
+# Роли берутся из единой карты прав экрана (core/screen_access): пункт меню
+# виден ровно тем, кого пускает ручка — иначе человек видит раздел и получает
+# 403 (docs/audit/ACCESS_MENU_VS_API.md, сторож tests/test_menu_matches_api.py).
+_PACK_READ_ROLES = list(screen_roles("pack.view"))
 _PACK_WRITE_ROLES = ["admin", "employee", "client_admin"]
 
 PackReadAccess = Annotated[

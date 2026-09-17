@@ -38,6 +38,7 @@ from app.core.config import get_settings
 from app.core.errors import api_problem_detail
 from app.core.metrics import get_metrics
 from app.core.rate_limit import ip_tenant_key, limiter, upload_per_tenant
+from app.core.screen_access import screen_roles
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.db.session import rearm_session_tenant_context
@@ -107,7 +108,10 @@ def _tenant_resource_id(tenant: Tenant = TENANT_DEPENDENCY) -> UUID | None:
 
 
 _FILE_UPLOAD_ROLES = ["admin", "employee"]
-_FILE_READ_ROLES = ["admin", "employee", "client_admin", "client_user"]
+# Роли берутся из единой карты прав экрана (core/screen_access): пункт меню
+# виден ровно тем, кого пускает ручка — иначе человек видит раздел и получает
+# 403 (docs/audit/ACCESS_MENU_VS_API.md, сторож tests/test_menu_matches_api.py).
+_FILE_READ_ROLES = list(screen_roles("file.view"))
 
 AccessDep = Annotated[
     AccessContext,

@@ -101,6 +101,7 @@ DISCIPLINE_WRITE_ROLES_BASE: tuple[str, ...] = (
     "admin",
     "owner",
     "ot_pb_lead",
+    "ot_head",
     "ot_specialist",
 )
 

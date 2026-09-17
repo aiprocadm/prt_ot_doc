@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.errors import api_problem_detail
+from app.core.screen_access import screen_roles
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.domains.permits import (
@@ -41,8 +42,11 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | No
     return getattr(tenant, "id", None)
 
 
-_PERMIT_READ_ROLES = ["admin"]
-_PERMIT_WRITE_ROLES = ["admin"]
+# Роли берутся из единой карты прав экрана (core/screen_access): пункт меню
+# виден ровно тем, кого пускает ручка — иначе человек видит раздел и получает
+# 403 (docs/audit/ACCESS_MENU_VS_API.md, сторож tests/test_menu_matches_api.py).
+_PERMIT_READ_ROLES = list(screen_roles("permit.view"))
+_PERMIT_WRITE_ROLES = list(screen_roles("permit.manage"))
 
 ReaderAccess = Annotated[
     AccessContext, Depends(abac(_tenant_resource_id, required_roles=_PERMIT_READ_ROLES))

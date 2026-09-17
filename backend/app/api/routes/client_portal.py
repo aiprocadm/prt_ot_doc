@@ -51,6 +51,9 @@ internal_router = APIRouter(prefix="/packages", tags=["packages"])
 presets_router = APIRouter(prefix="/presets/packages", tags=["package-presets"])
 
 
+# Служебные ручки портала (наборы для клиентов, разбор запросов) зовут экраны
+# сотрудников, а не пункт меню «Кабинет клиента» — тот стоит за
+# modules/client_portal (карта прав экрана). Круг здесь — прежний.
 _STAFF_READ_ROLES = [
     "admin",
     "owner",

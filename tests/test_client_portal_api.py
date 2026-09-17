@@ -55,7 +55,9 @@ async def test_portal_token_can_list_only_scoped_package(async_client, sessionma
         )
         await session.commit()
 
-    response = await async_client.get("/api/v1/portal/packages", params={"token": "scoped-token"})
+    response = await async_client.get(
+        "/api/v1/portal/packages", headers={"X-Portal-Token": "scoped-token"}
+    )
     assert response.status_code == 200
     payload = response.json()
     assert len(payload) == 1
@@ -97,7 +99,7 @@ async def test_portal_token_cannot_access_other_package_403(
         await session.commit()
 
     response = await async_client.get(
-        f"/api/v1/portal/packages/{run2.id}", params={"token": "scoped-token-2"}
+        f"/api/v1/portal/packages/{run2.id}", headers={"X-Portal-Token": "scoped-token-2"}
     )
     assert response.status_code == 403
 
@@ -131,7 +133,9 @@ async def test_portal_token_expired(async_client, sessionmaker, data_factory):
         )
         await session.commit()
 
-    response = await async_client.get("/api/v1/portal/packages", params={"token": "expired-token"})
+    response = await async_client.get(
+        "/api/v1/portal/packages", headers={"X-Portal-Token": "expired-token"}
+    )
     assert response.status_code == 401
 
 
@@ -170,7 +174,9 @@ async def test_create_run_generates_pipeline_artifacts_and_history(
     assert details.status_code == 200
     token = details.json()["portal_url"].split("token=", 1)[1]
 
-    portal = await async_client.get(f"/api/v1/portal/packages/{run_id}", params={"token": token})
+    portal = await async_client.get(
+        f"/api/v1/portal/packages/{run_id}", headers={"X-Portal-Token": token}
+    )
     assert portal.status_code == 200, portal.text
     payload = portal.json()
     assert len(payload["requirements"]) == 2
@@ -195,13 +201,13 @@ async def test_create_run_generates_pipeline_artifacts_and_history(
 
     ticket_resp = await async_client.post(
         f"/api/v1/portal/packages/{run_id}/tickets",
-        params={"token": token},
+        headers={"X-Portal-Token": token},
         json={"title": "Нужен апдейт", "message": "Пришлите новую версию"},
     )
     assert ticket_resp.status_code == 201, ticket_resp.text
 
     files_response = await async_client.get(
-        f"/api/v1/portal/packages/{run_id}/files", params={"token": token}
+        f"/api/v1/portal/packages/{run_id}/files", headers={"X-Portal-Token": token}
     )
     assert files_response.status_code == 200
     files = files_response.json()["files"]

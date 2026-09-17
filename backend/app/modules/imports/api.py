@@ -35,6 +35,7 @@ from app.api.helpers.upload import reject_oversize_upload
 from app.core.audit_decorator import audit_operation
 from app.core.errors import api_problem_detail
 from app.core.feature_flags import is_module_enabled
+from app.core.screen_access import screen_roles
 from app.core.security import AccessContext, abac
 from app.models.imports import ImportBatch
 from app.models.tenant_billing import SavedImportProfile
@@ -73,7 +74,10 @@ _FEATURE_CODE = "imports"
 
 # Импорт создаёт и перезаписывает кадровые данные пачками. Это ближе к
 # администрированию арендатора, чем к ежедневной работе, поэтому круг узкий.
-_ROLES = ["owner", "admin"]
+# Роли берутся из единой карты прав экрана (core/screen_access): пункт меню
+# виден ровно тем, кого пускает ручка — иначе человек видит раздел и получает
+# 403 (docs/audit/ACCESS_MENU_VS_API.md, сторож tests/test_menu_matches_api.py).
+_ROLES = list(screen_roles("imports.manage"))
 
 
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:

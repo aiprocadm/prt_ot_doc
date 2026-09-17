@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.idempotency import compute_request_hash
+from app.core.screen_access import screen_roles
 from app.core.security import AccessContext, abac
 from app.models.job_engine import DocumentJob, DocumentJobStep
 from app.models.models import Tenant
@@ -33,19 +34,10 @@ from app.services.pipelines_orchestrator import DocumentPipelineOrchestrator
 
 router = APIRouter(prefix="/pipelines", tags=["pipelines"])
 
-_READ_ROLES = [
-    "admin",
-    "owner",
-    "hr",
-    "line_manager",
-    "manager",
-    "ot_pb_lead",
-    "ot_head",
-    "ot_specialist",
-    "pb_engineer",
-    "accountant",
-    "auditor_ro",
-]
+# Роли берутся из единой карты прав экрана (core/screen_access): пункт меню
+# виден ровно тем, кого пускает ручка — иначе человек видит раздел и получает
+# 403 (docs/audit/ACCESS_MENU_VS_API.md, сторож tests/test_menu_matches_api.py).
+_READ_ROLES = list(screen_roles("generation.view"))
 _WRITE_ROLES = ["admin", "owner", "ot_specialist"]
 
 
