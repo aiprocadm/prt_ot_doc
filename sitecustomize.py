@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from types import ModuleType
 
 from test_env_defaults import apply_test_env_defaults
 
@@ -127,54 +126,6 @@ def _patch_spec_from_file_location() -> None:
 
 _ensure_workspace_symlinks()
 _patch_spec_from_file_location()
-
-try:  # pragma: no cover - defensive import
-    import schemathesis  # noqa: F401
-except Exception:  # pragma: no cover
-    schemathesis = None  # type: ignore[assignment]
-
-if schemathesis is not None:
-    try:
-        from schemathesis.core import NOT_SET as _not_set  # type: ignore[attr-defined]
-    except ModuleNotFoundError:
-        try:
-            from schemathesis.constants import NOT_SET as _not_set  # type: ignore[attr-defined]
-        except Exception:  # pragma: no cover
-
-            class _Sentinel:
-                pass
-
-            _not_set = _Sentinel()  # type: ignore[assignment]
-
-        core_module = ModuleType("schemathesis.core")
-        core_module.NOT_SET = _not_set  # type: ignore[attr-defined]
-
-        try:
-            from schemathesis.exceptions import SchemaError as _BaseLoaderError
-        except Exception:  # pragma: no cover
-            _BaseLoaderError = Exception
-
-        errors_module = ModuleType("schemathesis.core.errors")
-        errors_module.LoaderError = _BaseLoaderError  # type: ignore[attr-defined]
-
-        core_module.errors = errors_module  # type: ignore[attr-defined]
-
-        sys.modules.setdefault("schemathesis.core", core_module)
-        sys.modules.setdefault("schemathesis.core.errors", errors_module)
-    else:  # pragma: no cover - when module already available
-        try:
-            import schemathesis.core.errors as errors_module  # type: ignore[attr-defined]
-        except ModuleNotFoundError:
-            try:
-                from schemathesis.exceptions import SchemaError as _BaseLoaderError
-            except Exception:  # pragma: no cover
-                _BaseLoaderError = Exception
-
-            errors_module = ModuleType("schemathesis.core.errors")
-            errors_module.LoaderError = _BaseLoaderError  # type: ignore[attr-defined]
-        sys.modules.setdefault("schemathesis.core.errors", errors_module)
-        setattr(sys.modules["schemathesis.core"], "errors", errors_module)  # type: ignore[index]
-
 
 try:  # pragma: no cover - optional dependency
     from httpx import AsyncClient

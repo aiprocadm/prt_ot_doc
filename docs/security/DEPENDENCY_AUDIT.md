@@ -43,7 +43,7 @@ PYTHONPATH=backend python scripts/ci/run_dependency_audit.py
 образ, требует Docker и в этот скрипт не входит — он запускается отдельно.
 
 **Ближайшая работа (сроки исключений истекают 30.09.2026):** пять мажорных
-подъёмов инструментов разработки — `pytest` 9, `vitest` 4, `vite` 8, (`black` 26 снят с повестки: пакет убран, срез-218)
+подъёмов инструментов разработки — `vitest` 4, `vite` 8, (`pytest` 9 — сделано, срез-219; (`black` 26 снят с повестки: пакет убран, срез-218)
 цепочка `eslint` 10. Каждый меняет поведение сборки или формат кода, поэтому
 каждый — отдельный срез с полным прогоном.
 
@@ -54,7 +54,7 @@ PYTHONPATH=backend python scripts/ci/run_dependency_audit.py
   вычищена подъёмом `python-multipart` 0.0.31 / `python-dotenv` 1.2.2 /
   `click` 8.3.3 (+`typer` 0.27.0 — typer<0.16 ломается на click>=8.2); осознанный
   остаток принят записями `tool: pip-audit` в `.github/security-exceptions.yml`
-  (ecdsa — апстрим-фикса нет; pytest 9 — dev-only мажор отдельным PR; black убран вовсе (срез-218)
+  (ecdsa — апстрим-фикса нет; pytest 9 поднят (срез-219); black убран вовсе (срез-218)
   PR; блок starlette ×7 СНЯТ 2026-07-31 подъёмом fastapi 0.141.1 /
   starlette 1.3.1). Записи имеют срок
   `expires_on`, просрочку валит `check_security_exceptions.py`; в команду
@@ -106,8 +106,9 @@ PYTHONPATH=backend python scripts/ci/run_dependency_audit.py
    `python-multipart` 0.0.31, `python-dotenv` 1.2.2, `click` 8.3.3 + `typer` 0.27.0.
 2. ~~Отдельной задачей — `fastapi`/`starlette` до версий без advisories~~ —
    **сделано 2026-07-31**: fastapi 0.141.1 + starlette 1.3.1 (+schemathesis
-   4.10.2), полный прогон набора и db-гейта. Остаются (отдельными PR): `pytest` 9.x
-   (тянет совместимость pytest-asyncio/cov/timeout/xdist). `black` 26.x не
+   4.10.2), полный прогон набора и db-гейта. `pytest` 9.1 поднят срезом-219 вместе с
+   pytest-asyncio 1.4 / cov 7.1 / timeout 2.4 / xdist 3.8; `schemathesis` убран —
+   в тестах не использовался, держал потолок pytest. `black` 26.x не
    понадобился: срез-218 убрал black — он не стоял ни в одном гейте, а
    `black --check` был красным на 170 файлах; форматтер один — `ruff format`.
 3. ~~Для остатка — записи в `.github/security-exceptions.yml`~~ — **сделано**:
