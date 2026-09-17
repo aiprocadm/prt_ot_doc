@@ -64,29 +64,6 @@ exceptions:
   # dev-инструменты (в собранный фронт не попадают); починки только мажорными
   # бампами, каждый — отдельный PR с прогоном фронт-гейтов.
 
-  - id: GHSA-5xrq-8626-4rwp
-    tool: npm-audit
-    category: vulnerability
-    owner: reviewers-platform-infra
-    reason: >-
-      vitest 1.x (critical, dev-only test runner, never shipped): arbitrary
-      file read/execute applies only when the Vitest UI dev server is
-      listening — CI runs headless `vitest run`, no UI server. Fix is vitest
-      4.x + @vitest/coverage-v8 4.x, a major bump of the whole test toolchain
-      (603 frontend tests) in a dedicated PR.
-    expires_on: 2026-09-30
-    created_on: 2026-07-31
-  - id: GHSA-fx2h-pf6j-xcff
-    tool: npm-audit
-    category: vulnerability
-    owner: reviewers-platform-infra
-    reason: >-
-      vite 5.x (dev server only, never shipped): server.fs.deny bypass via
-      Windows alternate paths — dev machines here run Linux/WSL and the dev
-      server is not exposed. Fix is vite 8.x, a major build-toolchain bump in
-      a dedicated PR.
-    expires_on: 2026-09-30
-    created_on: 2026-07-31
   - id: GHSA-3ppc-4f35-3m26
     tool: npm-audit
     category: vulnerability
