@@ -381,6 +381,11 @@ const FEATURE_OFF_ERROR = {
 beforeEach(() => {
   // restoreAllMocks (не clearAllMocks): иначе vi.spyOn(window, "confirm") из delete-тестов
   // остаётся навешанным и протекает в последующие тесты файла.
+  // Срез-220 (vitest 4): restoreAllMocks больше НЕ обнуляет вызовы у vi.fn() из
+  // фабрик vi.mock — счётчики копились между тестами (2 → 11 → 15 …). Вызовы
+  // чистит clearAllMocks (реализации он не трогает), restoreAllMocks остаётся
+  // ради spyOn(window, "confirm").
+  vi.clearAllMocks();
   vi.restoreAllMocks();
   // toastMock — обычные vi.fn(), restoreAllMocks их не трогает: чистим вызовы вручную.
   toastMock.success.mockClear();

@@ -43,7 +43,7 @@ PYTHONPATH=backend python scripts/ci/run_dependency_audit.py
 образ, требует Docker и в этот скрипт не входит — он запускается отдельно.
 
 **Ближайшая работа (сроки исключений истекают 30.09.2026):** пять мажорных
-подъёмов инструментов разработки — `vitest` 4, `vite` 8, (`pytest` 9 — сделано, срез-219; (`black` 26 снят с повестки: пакет убран, срез-218)
+подъёмов инструментов разработки — eslint-цепочка (`vitest` 4 и `vite` 8 — сделано, срез-220; `pytest` 9 — сделано, срез-219; (`black` 26 снят с повестки: пакет убран, срез-218)
 цепочка `eslint` 10. Каждый меняет поведение сборки или формат кода, поэтому
 каждый — отдельный срез с полным прогоном.
 
@@ -117,7 +117,7 @@ PYTHONPATH=backend python scripts/ci/run_dependency_audit.py
 4. Убрать `continue-on-error`: у `pip-audit` — **сделано** (шаг «pip-audit gate»
    в `ci.yml`); у `npm audit` — **сделано 2026-07-31** (шаг «npm audit gate» +
    `check_npm_audit.py`). Весь план выполнен; остаток долга — только мажорные
-   бампы из п. 2 (pytest 9, vite 8, vitest 4, eslint-цепочка; black убран;
+   бампы из п. 2 (eslint-цепочка; pytest 9, vite 8, vitest 4 — сделаны срезами 219–220; black убран;
    fastapi/starlette закрыт 2026-07-31), каждый снимает свои записи из
    security-exceptions.yml.
 
