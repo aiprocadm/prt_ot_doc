@@ -9,7 +9,9 @@ def test_contractors_cross_contractor_scope_is_denied() -> None:
     actor = ActorContext(
         user_id="u-1",
         tenant_id="t-1",
-        roles=("hse_head",),
+        # Срез-228: роль звалась ``hse_head`` — такой в продукте нет, и отказ
+        # приходил раньше проверки области, то есть проверялось не то.
+        roles=("ot_pb_lead",),
         contractor_ids=("ctr-1",),
     )
     decision = policy_engine.can(

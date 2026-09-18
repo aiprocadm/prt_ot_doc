@@ -1,3 +1,8 @@
+# Срез-228: роли `hse_specialist`, `hse_head` и `project_manager` в продукте
+# НЕ СУЩЕСТВУЮТ — их убрали из словарей прав вместе с остальными выдуманными.
+# Проверки ниже были зелёными ровно потому, что спрашивали несуществующий мир:
+# у такой роли прав нет вовсе, и любой отказ подтверждался сам собой. Здесь
+# стоят настоящие роли продукта: специалист ОТ, руководитель ОТиПБ, менеджер.
 from app.modules.rbac_abac.engine import authorize
 from app.modules.rbac_abac.types import Resource, Subject
 
@@ -26,7 +31,7 @@ def test_policy_engine_deny_permission_mismatch() -> None:
         Subject(
             user_id="u1",
             tenant_id="t1",
-            roles=("project_manager",),
+            roles=("manager",),
             permissions=("documents.read",),
             company_ids=("c1",),
         ),
@@ -39,7 +44,7 @@ def test_policy_engine_deny_permission_mismatch() -> None:
 
 def test_policy_engine_deny_project_scope_mismatch() -> None:
     decision = authorize(
-        Subject(user_id="u1", tenant_id="t1", roles=("project_manager",), project_ids=("p1",)),
+        Subject(user_id="u1", tenant_id="t1", roles=("manager",), project_ids=("p1",)),
         action="read",
         resource=Resource(resource_type="documents", attrs={"project_id": "p2"}),
     )
@@ -49,7 +54,7 @@ def test_policy_engine_deny_project_scope_mismatch() -> None:
 
 def test_policy_engine_deny_risk_level_above_max() -> None:
     decision = authorize(
-        Subject(user_id="u1", tenant_id="t1", roles=("hse_specialist",), risk_level_max=2),
+        Subject(user_id="u1", tenant_id="t1", roles=("ot_specialist",), risk_level_max=2),
         action="read",
         resource=Resource(resource_type="risk_maps", attrs={"risk_level": "high"}),
     )

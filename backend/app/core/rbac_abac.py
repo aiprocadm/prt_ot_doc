@@ -31,14 +31,28 @@ class Action(str, enum.Enum):
     CANCEL_JOB = "cancel_job"
 
 
+#: Иные написания ролей, которые может принести токен. Слева — что пришло,
+#: справа — НАСТОЯЩАЯ роль продукта.
+#:
+#: СРЕЗ-228. Четыре записи вели на роли, которых в продукте нет. Хуже всего была
+#: ``"teacher": "instructor"``: преподаватель — роль НАСТОЯЩАЯ, но нормализация
+#: уводила её на выдуманного «инструктора», и вывод прав из карты (срез-227) для
+#: преподавателя молча не работал — в карте такой роли нет. Он недополучал
+#: шесть прав, которые карта ему даёт.
+#:
+#: Правило теперь одно и проверяется на импорте: синоним обязан вести на
+#: существующую роль. Иначе это тихо пустые права — та же ловушка, что в
+#: срезах 224, 226 и 227.
 ROLE_ALIASES: dict[str, str] = {
     "tenant_owner": "owner",
     "tenant_admin": "admin",
-    "teacher": "instructor",
-    "hsse_head": "hse_head",
-    "hsse_specialist": "hse_specialist",
+    # HSSE — принятое в отрасли написание службы охраны труда, промышленной
+    # безопасности и экологии; в продукте это руководитель ОТиПБ и его специалист.
+    "hsse_head": "ot_pb_lead",
+    "hsse_specialist": "ot_specialist",
     "contractor_inspector": "inspector_contractor",
-    "methodist_legal": "methodist",
+    # «Методист по правовым вопросам» — в продукте это юрист.
+    "methodist_legal": "lawyer",
 }
 
 
@@ -174,16 +188,10 @@ _ROLE_FULL = {
 MODULE_PERMISSIONS: dict[str, set[str]] = {
     "owner": set(MODULE_NAMES),
     "admin": set(MODULE_NAMES),
-    "methodist": {"documents", "templates"},
     "lawyer": {"documents", "templates"},
-    "project_manager": {"documents", "reports"},
     "executor": {"documents"},
     "clerk": {"documents"},
-    "instructor": {"training", "briefings"},
     "student": {"training"},
-    "hse_head": {"documents", "risk", "ppe", "inspections", "incidents", "contractors"},
-    "hse_specialist": {"documents", "risk", "ppe", "inspections", "incidents"},
-    "fire_engineer": {"inspections", "incidents"},
     "ecologist": {"documents", "risk", "incidents"},
     "hr": {"documents", "training"},
     "accountant": {"reports"},
@@ -198,30 +206,7 @@ MODULE_PERMISSIONS: dict[str, set[str]] = {
 ROLE_PERMISSIONS: dict[str, set[str]] = {
     "owner": _ROLE_FULL,
     "admin": _ROLE_FULL,
-    "methodist": {
-        "templates:read",
-        "templates:list",
-        "templates:create",
-        "templates:update",
-        "templates:delete",
-        "templates:approve",
-        "template_versions:read",
-        "template_versions:list",
-        "template_versions:create",
-        "template_versions:update",
-        "template_versions:approve",
-    },
     "lawyer": {"documents:read", "documents:list", "templates:read", "templates:list"},
-    "project_manager": {
-        "documents:read",
-        "documents:list",
-        "documents:create",
-        "documents:update",
-        "document_jobs:run_pipeline",
-        "document_jobs:retry_job",
-        "reports:read",
-        "reports:list",
-    },
     "executor": {
         "documents:read",
         "documents:list",
@@ -237,72 +222,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "files:read",
         "files:download",
     },
-    "instructor": {
-        "trainings:read",
-        "trainings:list",
-        "trainings:create",
-        "trainings:update",
-        "trainings:delete",
-        "briefings:read",
-        "briefings:list",
-        "briefings:create",
-        "briefings:update",
-    },
     "student": {"trainings:read", "trainings:list"},
-    "hse_head": {
-        "documents:read",
-        "documents:list",
-        "documents:create",
-        "documents:update",
-        "risk_maps:read",
-        "risk_maps:list",
-        "risk_maps:create",
-        "risk_maps:update",
-        "ppe_norms:read",
-        "ppe_norms:list",
-        "ppe_norms:create",
-        "ppe_norms:update",
-        "inspections:read",
-        "inspections:list",
-        "inspections:create",
-        "inspections:update",
-        "incidents:read",
-        "incidents:list",
-        "incidents:create",
-        "incidents:update",
-        "contractors:read",
-        "contractors:list",
-        "contractors:create",
-        "contractors:update",
-    },
-    "hse_specialist": {
-        "documents:read",
-        "documents:list",
-        "documents:create",
-        "documents:update",
-        "risk_maps:read",
-        "risk_maps:list",
-        "risk_maps:create",
-        "risk_maps:update",
-        "ppe_norms:read",
-        "ppe_norms:list",
-        "ppe_norms:create",
-        "ppe_norms:update",
-        "inspections:read",
-        "inspections:list",
-        "incidents:read",
-        "incidents:list",
-        "contractors:read",
-        "contractors:list",
-    },
-    "fire_engineer": {
-        "documents:read",
-        "documents:list",
-        "inspections:read",
-        "inspections:list",
-        "incidents:read",
-        "incidents:list",
-    },
     "ecologist": {
         "documents:read",
         "documents:list",
@@ -548,6 +468,33 @@ def modules_for_role(role: str) -> frozenset[str]:
         if module:
             allowed.add(module)
     return frozenset(allowed)
+
+
+def _check_roles_are_real() -> None:
+    """Словари и синонимы не смеют называть роль, которой в продукте нет.
+
+    СРЕЗ-228, проверка на импорте. Именно так словари и разошлись с жизнью: в
+    них годами жили ``hse_specialist``, ``fire_engineer`` и ``instructor``, а
+    настоящие роли не получали ничего — набор прав выходил ПУСТЫМ, и отказ
+    приходил тому, кто работу и делает.
+    """
+
+    from app.models.tenant_billing import RoleEnum  # noqa: PLC0415 — круг импортов
+
+    known = {role.value for role in RoleEnum}
+    for name, table in (
+        ("ROLE_PERMISSIONS", ROLE_PERMISSIONS),
+        ("MODULE_PERMISSIONS", MODULE_PERMISSIONS),
+    ):
+        unknown = sorted(set(table) - known)
+        if unknown:
+            raise RuntimeError(f"{name} называет несуществующие роли: {unknown}")
+    broken = sorted(target for target in ROLE_ALIASES.values() if target not in known)
+    if broken:
+        raise RuntimeError(f"ROLE_ALIASES ведут на несуществующие роли: {broken}")
+
+
+_check_roles_are_real()
 
 
 def _check_bridge() -> None:

@@ -3,30 +3,24 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.rbac_abac import RESOURCE_PERMISSIONS, ROLE_PERMISSIONS
+from app.core.rbac_abac import RESOURCE_PERMISSIONS, permissions_for_role
 from app.models.models import AuthzPermission, AuthzRole, AuthzRolePermission
+from app.models.tenant_billing import RoleEnum
 
-ROLE_CODES = [
-    "owner",
-    "admin",
-    "methodist",
-    "project_manager",
-    "executor",
-    "clerk",
-    "instructor",
-    "student",
-    "hse_head",
-    "hse_specialist",
-    "fire_engineer",
-    "ecologist",
-    "hr",
-    "accountant",
-    "lawyer",
-    "line_manager",
-    "client",
-    "auditor_ro",
-    "inspector_contractor",
-]
+#: Роли, которые заводятся каждому арендатору, — РОВНО те, что есть в продукте.
+#:
+#: СРЕЗ-228. Здесь стоял список из девятнадцати имён, написанный руками. В нём
+#: было ШЕСТЬ ролей, которых в продукте нет (``methodist``, ``project_manager``,
+#: ``instructor``, ``hse_head``, ``hse_specialist``, ``fire_engineer``), и не
+#: хватало ОДИННАДЦАТИ настоящих — включая специалиста по охране труда,
+#: руководителя службы ОТиПБ, начальника отдела ОТ, инженера ПБ и рабочего.
+#: Список читает администратор платформы на экране ролей и прав
+#: (``GET /admin/authz/roles``), то есть неправдой он был в обе стороны: чужие
+#: роли показывались, свои — нет.
+#:
+#: Теперь источник один — ``RoleEnum``. Новая роль продукта появляется в
+#: каталоге сама, а выдуманная не появится вовсе.
+ROLE_CODES: list[str] = [role.value for role in RoleEnum]
 
 
 async def seed_authz_catalog(session: AsyncSession, *, tenant_id: str) -> None:
@@ -79,7 +73,11 @@ async def seed_authz_catalog(session: AsyncSession, *, tenant_id: str) -> None:
                 await session.flush()
             permission_records[code] = existing
 
-    for role_code, permission_codes in ROLE_PERMISSIONS.items():
+    # Срез-228: права роли берутся из ``permissions_for_role`` — записанное
+    # руками ПЛЮС выведенное из единой карты прав экрана (срез-227). Раньше
+    # здесь читался только словарь, и настоящим ролям не доставалось НИЧЕГО.
+    for role_code in ROLE_CODES:
+        permission_codes = permissions_for_role(role_code)
         role = role_records.get(role_code)
         if role is None:
             continue
