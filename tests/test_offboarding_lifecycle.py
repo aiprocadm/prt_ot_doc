@@ -23,6 +23,14 @@ from datetime import timedelta
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.incidents import (
+    Incident,
+    IncidentPerson,
+    IncidentPersonRole,
+    IncidentStage,
+    IncidentStatus,
+    IncidentType,
+)
 from app.models.models import RoleEnum
 from app.modules.offboarding.lifecycle import (
     ACTIVITY_TABLES,
@@ -147,14 +155,94 @@ class TestPurgePlan:
         plan = await service.build_purge_plan()
         assert plan.grace_expired is False
 
+    async def test_материалы_расследования_не_удаляются(
+        self, test_db_session: AsyncSession, data_factory: TestDataFactory
+    ) -> None:
+        """Срез-224. Реестр обработки даёт процессу «Расследование несчастных
+        случаев» срок 45 лет со ссылкой на ст. 230.1 ТК РФ. Значит участники
+        происшествия и журнал расследования обязаны попасть в «обезличить», а не
+        в «удалить».
+
+        До среза-224 карта процессов называла ``incident_persons`` и
+        ``incident_investigations`` — таблицы, которых у моделей нет (остались от
+        прежних волн, миграции их создают пустыми). Настоящие ``incident_person``
+        и ``incident_log`` не были названы нигде, и план 45-летние материалы
+        УДАЛЯЛ.
+        """
+
+        tenant, service = await _service(data_factory, test_db_session, "offb-i")
+        company = await data_factory.create_company(tenant=tenant, session=test_db_session)
+        site = await data_factory.create_site(
+            tenant=tenant, company=company, session=test_db_session
+        )
+        person = await data_factory.create_person(
+            tenant=tenant, company=company, session=test_db_session
+        )
+        incident = Incident(
+            tenant_id=str(tenant.id),
+            title="Падение с высоты",
+            incident_type=IncidentType.ACCIDENT,
+            company_id=str(company.id),
+            site_id=str(site.id),
+            status=IncidentStatus.REPORTED,
+            investigation_stage=IncidentStage.INVESTIGATION,
+        )
+        test_db_session.add(incident)
+        await test_db_session.flush()
+        test_db_session.add(
+            IncidentPerson(
+                tenant_id=str(tenant.id),
+                incident_id=str(incident.id),
+                person_id=str(person.id),
+                role=IncidentPersonRole.VICTIM,
+            )
+        )
+        await PdnProcessingRegistryService(
+            test_db_session, tenant_id=str(tenant.id)
+        ).seed_defaults()
+        await service.request()
+        await test_db_session.commit()
+
+        plan = await service.build_purge_plan()
+
+        by_table = {item.table: item for item in plan.tables}
+        assert (
+            "incident_person" in by_table
+        ), "участники происшествия есть в базе — таблица обязана быть в плане"
+        participants = by_table["incident_person"]
+        assert participants.action == "anonymize", (
+            f"материалы расследования планируются к «{participants.action}»: "
+            f"{participants.reason}"
+        )
+        assert "230.1" in participants.reason or "мес." in participants.reason
+
     async def test_activity_table_map_references_real_tables(self) -> None:
-        """Карта «процесс → таблицы» должна ссылаться на существующие таблицы,
-        иначе срок хранения молча никого не защитит."""
+        """Карта «процесс → таблицы» обязана ссылаться на ЖИВЫЕ таблицы — те, у
+        которых есть модель.
 
+        СТОРОЖ СМОТРЕЛ НЕ ТУДА (срез-224). Прежняя проверка спрашивала
+        ``table in RLS_ENABLED_TABLES`` — а в этом списке НАРОЧНО лежат и
+        таблицы-дубликаты без моделей: их армируют политиками, чтобы данные не
+        утекли между арендаторами, пока владелец не решит их снести
+        (``docs/security/RLS_RUNTIME_ROLE.md``). Поэтому опечатка во множественном
+        числе (``incident_persons`` вместо ``incident_person``) проверку
+        проходила, а срок хранения молча никого не защищал — ровно то, от чего
+        проверка была написана.
+
+        Теперь сторож требует МОДЕЛЬ: у мёртвого дубликата её нет.
+        """
+
+        import app.db.base  # noqa: F401 — подтягивает все модели
         from app.core.rls_policy import RLS_ENABLED_TABLES
+        from app.db.session import SharedBase, TenantBase
 
+        model_tables = set(SharedBase.metadata.tables) | set(TenantBase.metadata.tables)
         for code, tables in ACTIVITY_TABLES.items():
             for table in tables:
+                assert table in model_tables, (
+                    f"{code}: таблица «{table}» не имеет модели — это мёртвый дубликат "
+                    f"прежних волн, и срок хранения на него не подействует"
+                )
                 assert table in RLS_ENABLED_TABLES, f"{code}: неизвестная таблица {table}"
 
 

@@ -318,6 +318,35 @@ class TestSchemaGraph:
 
 @pytest.mark.anyio
 class TestAnonymizationCoverage:
+    async def test_обезличивание_целится_в_живые_колонки(self) -> None:
+        """Срез-224. Карта обезличивания обязана называть таблицы С МОДЕЛЬЮ и
+        колонки, которые у этих моделей ЕСТЬ.
+
+        ЧТО БЫЛО. В списке стояла запись ``incident_persons.fio_text``. Таблица
+        ``incident_persons`` — дубликат прежних волн без модели: новый код в неё
+        не пишет, а колонки ``fio_text`` нет ни у одной живой таблицы. Соседний
+        сторож «каждый идентификатор в удерживаемых таблицах обезличивается» это
+        пропускал, потому что смотрел ровно на те таблицы, которые называет карта
+        процессов, — а она называла тот же мёртвый дубликат. Два списка ссылались
+        друг на друга и вместе не видели, что данных там не бывает.
+
+        Проверка идёт по МОДЕЛЯМ, а не по схеме базы: миграции создают и мёртвые
+        таблицы тоже, поэтому схема подтвердила бы обе записи.
+        """
+
+        import app.db.base  # noqa: F401 — подтягивает все модели
+        from app.db.session import SharedBase, TenantBase
+
+        tables = {**SharedBase.metadata.tables, **TenantBase.metadata.tables}
+        for table, columns in ANONYMIZED_COLUMNS.items():
+            assert table in tables, (
+                f"обезличивается «{table}», но модели у неё нет — это мёртвый дубликат, "
+                f"и обезличивание не сработает"
+            )
+            live = {column.name for column in tables[table].columns}
+            missing = sorted(set(columns) - live)
+            assert not missing, f"{table}: колонок нет в модели — {missing}"
+
     async def test_person_columns_match_pdn_erasure(self) -> None:
         """Два разных обезличивания одного человека — источник расхождений."""
 
