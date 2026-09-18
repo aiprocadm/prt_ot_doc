@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import date
 from uuid import uuid4
 
@@ -9,7 +10,7 @@ from sqlalchemy.exc import MissingGreenlet, OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
-from app.core.rbac_abac import ROLE_PERMISSIONS
+from app.core.screen_access import screen_roles
 from app.core.security import AccessContext, rbac
 from app.db.session import rearm_session_tenant_context
 from app.models.models import Tenant
@@ -64,33 +65,55 @@ _ALLOWED_TYPES = {
     "orders",
 }
 
-# Canonical entity_type -> read permissions (any-of) that authorize seeing it in the
-# global index. These rows carry confidential titles (an incident/inspection/prescription
-# title can name an injured person), so a caller lacking the domain read permission must
-# not see them via search or suggest. Entity types absent here stay tenant-global and
-# rely on detail-page RBAC (catalog-ish data: person, company, site, document, file, …).
-_SENSITIVE_ENTITY_PERMISSIONS: dict[str, tuple[str, ...]] = {
-    "incident": ("incidents:read", "incidents:list"),
-    "inspection": ("inspections:read", "inspections:list"),
-    "prescription": ("inspections:read", "inspections:list"),
+# Тип записи в поиске → ПРАВО ЭКРАНА, по которому его видно.
+#
+# Заголовки этих записей выдают человека («травма, Иванов И.И.»), поэтому тот,
+# кому раздел закрыт, не должен натыкаться на них через поиск или подсказку.
+# Типы, которых здесь нет, остаются общими для арендатора и полагаются на
+# проверку прав на самой карточке (справочные данные: люди, компании, площадки,
+# документы, файлы).
+#
+# СРЕЗ-226: право берётся из ЕДИНОЙ КАРТЫ (``core/screen_access``) — той же, по
+# которой рисуется меню и объявляют роли ручки. До этого список прав считался по
+# словарю ``rbac_abac.ROLE_PERMISSIONS``, у которого СЕМИ настоящих ролей нет
+# вовсе (``ot_specialist``, ``ot_pb_lead``, ``ot_head``, ``pb_engineer``,
+# ``manager``, ``worker``, ``employee``), а есть шесть выдуманных
+# (``hse_specialist``, ``fire_engineer``, ``instructor``…). Для них набор прав
+# получался ПУСТЫМ, и поиск прятал ровно то, что человек открывает на экране:
+# специалист по охране труда, оба руководителя и инженер ПБ не находили ни
+# происшествий, ни проверок, ни предписаний. Замер до починки — 15 расхождений
+# «экран пускает, а поиск прячет».
+_SENSITIVE_ENTITY_SCREENS: dict[str, str] = {
+    "incident": "incident.view",
+    "inspection": "inspection.view",
+    "prescription": "inspection.view",
 }
 
 
-def _restricted_entity_types(access: AccessContext) -> set[str]:
-    """Sensitive canonical entity types the caller may NOT see in search results.
+def restricted_entity_types_for_roles(roles: Iterable[str]) -> set[str]:
+    """Типы записей, которых обладателю этих ролей в поиске видеть НЕ положено.
 
-    Empty for admins/owners (their permission set is the full catalog). Resolved from
-    the same role->permission map used elsewhere (``ROLE_PERMISSIONS``)."""
-    granted = {
-        permission
-        for role in access.to_auth_context().roles
-        for permission in ROLE_PERMISSIONS.get(role, set())
-    }
+    Отдельная ЧИСТАЯ функция, а не тело обработчика: решение о видимости обязано
+    проверяться по ВСЕМ ролям продукта разом, без поднятия запроса. Сторож
+    зовёт именно её — иначе проверка пересказывала бы правило своими словами и
+    оставалась зелёной при любой поломке.
+    """
+
+    held = {str(role).strip().lower() for role in roles}
     return {
         entity_type
-        for entity_type, required in _SENSITIVE_ENTITY_PERMISSIONS.items()
-        if not any(permission in granted for permission in required)
+        for entity_type, screen in _SENSITIVE_ENTITY_SCREENS.items()
+        if not (held & set(screen_roles(screen)))
     }
+
+
+def _restricted_entity_types(access: AccessContext) -> set[str]:
+    """То же решение для текущего запроса.
+
+    Пусто у владельца и администратора: карта прав отдаёт им всё.
+    """
+
+    return restricted_entity_types_for_roles(access.to_auth_context().roles)
 
 
 @router.get("/search")
