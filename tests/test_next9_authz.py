@@ -1,3 +1,8 @@
+# Срез-228: роли `hse_specialist`, `hse_head` и `project_manager` в продукте
+# НЕ СУЩЕСТВУЮТ — их убрали из словарей прав вместе с остальными выдуманными.
+# Проверки ниже были зелёными ровно потому, что спрашивали несуществующий мир:
+# у такой роли прав нет вовсе, и любой отказ подтверждался сам собой. Здесь
+# стоят настоящие роли продукта: специалист ОТ, руководитель ОТиПБ, менеджер.
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -7,7 +12,6 @@ import pytest
 from sqlalchemy import select
 
 from app.core.rbac_abac import (
-    ROLE_PERMISSIONS,
     ActorContext,
     actor_from_claims,
     audit_authz_decision,
@@ -38,8 +42,15 @@ def test_owner_can_list_documents_across_scope() -> None:
     assert decision.allowed is True
 
 
-def test_hse_specialist_denied_on_foreign_company() -> None:
-    actor = _actor(roles=["hse_specialist"], company_ids=["cmp-1"])
+def test_специалисту_ОТ_закрыта_чужая_компания() -> None:
+    """Срез-228: роль звалась ``hse_specialist`` — такой в продукте нет.
+
+    Проверка утверждает, что отказ приходит именно от проверки ОБЛАСТИ (чужая
+    компания), а не раньше. С выдуманной ролью это не проверялось вовсе: прав у
+    неё не было, и до проверки области дело не доходило.
+    """
+
+    actor = _actor(roles=["ot_specialist"], company_ids=["cmp-1"])
     obj = SimpleNamespace(company_id="cmp-2")
     decision = policy_engine.authorize(actor, action="read", resource="documents", obj=obj)
     assert decision.allowed is False
@@ -84,14 +95,14 @@ def test_inspector_contractor_reads_within_contractor() -> None:
 
 
 def test_scoped_query_filters_company_rows() -> None:
-    actor = _actor(roles=["hse_specialist"], company_ids=["cmp-1"])
+    actor = _actor(roles=["ot_specialist"], company_ids=["cmp-1"])
     stmt = scoped_query(select(Incident), model=Incident, actor=actor, resource="incidents")
     compiled = str(stmt)
     assert "company_id" in compiled
 
 
 def test_scoped_query_fail_closed_for_scoped_resource_without_columns() -> None:
-    actor = _actor(roles=["hse_specialist"], company_ids=["cmp-1"])
+    actor = _actor(roles=["ot_specialist"], company_ids=["cmp-1"])
     with pytest.raises(Exception):
         scoped_query(select(Template), model=Template, actor=actor, resource="templates")
 
@@ -107,29 +118,20 @@ def test_missing_permission_returns_forbidden_decision() -> None:
     assert decision.reason == "missing_permission"
 
 
-def test_role_mapping_contains_required_next9_roles() -> None:
-    for role in [
-        "owner",
-        "admin",
-        "methodist",
-        "project_manager",
-        "executor",
-        "clerk",
-        "instructor",
-        "student",
-        "hse_head",
-        "hse_specialist",
-        "fire_engineer",
-        "ecologist",
-        "hr",
-        "accountant",
-        "lawyer",
-        "line_manager",
-        "client",
-        "auditor_ro",
-        "inspector_contractor",
-    ]:
-        assert role in ROLE_PERMISSIONS
+def test_у_каждой_роли_продукта_есть_права() -> None:
+    """Срез-228. Здесь стоял список имён, написанный руками: шесть ролей в нём
+    не существовали, а одиннадцати настоящих не хватало. Проверка была зелёной
+    ровно потому, что спрашивала тот же выдуманный мир.
+
+    Спрашиваем у продукта и у функции, которая знает и словарь, и единую карту
+    прав экрана (срез-227).
+    """
+
+    from app.core.rbac_abac import permissions_for_role
+    from app.models.tenant_billing import RoleEnum
+
+    empty = sorted(role.value for role in RoleEnum if not permissions_for_role(role.value))
+    assert not empty, f"роли без единого права: {empty}"
 
 
 @pytest.mark.anyio("asyncio")

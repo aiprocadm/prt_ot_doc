@@ -16,7 +16,9 @@ import pytest
 from app.core.rbac_abac import (
     MODULE_NAMES,
     MODULE_PERMISSIONS,
+    ROLE_ALIASES,
     ActorContext,
+    modules_for_role,
     policy_engine,
 )
 
@@ -41,25 +43,29 @@ class TestModuleLevelAccessControl:
         allowed_modules = MODULE_PERMISSIONS.get("owner", set())
         assert allowed_modules == set(MODULE_NAMES)
 
-    def test_ot_specialist_has_risk_module(self):
-        """OT specialist should have access to risk module."""
-        allowed_modules = MODULE_PERMISSIONS.get("hse_specialist", set())
-        assert "risk" in allowed_modules
+    def test_специалисту_ОТ_открыт_модуль_рисков(self):
+        """Срез-228: проверка спрашивала роль ``hse_specialist``, которой в
+        продукте НЕТ, — и потому была зелёной при любом положении дел.
 
-    def test_ot_specialist_cannot_access_admin_module(self):
-        """OT specialist should NOT have access to admin module."""
-        allowed_modules = MODULE_PERMISSIONS.get("hse_specialist", set())
-        assert "admin" not in allowed_modules
+        Настоящая роль называется ``ot_specialist``, и круг её модулей считается
+        функцией: словарь ПЛЮС выведенное из единой карты прав экрана.
+        """
 
-    def test_trainer_can_access_training_module(self):
-        """Trainer role should access training module."""
-        allowed_modules = MODULE_PERMISSIONS.get("instructor", set())
-        assert "training" in allowed_modules
+        allowed = modules_for_role("ot_specialist")
+        assert "risk" in allowed
+        assert "admin" not in allowed, "специалист — не администратор платформы"
 
-    def test_trainer_cannot_access_risk_module(self):
-        """Trainer role should NOT access risk module."""
-        allowed_modules = MODULE_PERMISSIONS.get("instructor", set())
-        assert "risk" not in allowed_modules
+    def test_преподавателю_открыто_обучение_но_не_риски(self):
+        """Та же подмена: роль звалась ``instructor``, в продукте она ``teacher``.
+
+        Хуже того, синоним уводил настоящего преподавателя на выдуманного
+        инструктора, и вывод прав из карты для него молча не работал.
+        """
+
+        allowed = modules_for_role("teacher")
+        assert "training" in allowed
+        assert "briefings" in allowed
+        assert "risk" not in allowed
 
     def test_hr_can_access_documents_and_training(self):
         """HR role should access documents and training modules."""
@@ -89,52 +95,61 @@ class TestModuleLevelAccessControl:
         assert "risk" not in allowed_modules
         assert "ppe" not in allowed_modules
 
-    def test_module_permissions_all_roles_defined(self):
-        """All role-permission mappings should exist for module access."""
-        known_roles = {
-            "owner",
-            "admin",
-            "methodist",
-            "lawyer",
-            "project_manager",
-            "executor",
-            "clerk",
-            "instructor",
-            "student",
-            "hse_head",
-            "hse_specialist",
-            "fire_engineer",
-            "ecologist",
-            "hr",
-            "accountant",
-            "line_manager",
-            "client",
-            "auditor_ro",
-            "inspector_contractor",
-            "client_admin",
-            "client_user",
-        }
-        for role in known_roles:
-            assert role in MODULE_PERMISSIONS, f"Missing module permissions for role: {role}"
+    def test_у_каждой_настоящей_роли_есть_круг_модулей(self):
+        """Срез-228. Здесь стоял список имён, написанный руками: шесть ролей в
+        нём не существовали, а одиннадцати настоящих не хватало. Проверка была
+        зелёной ровно потому, что спрашивала тот же выдуманный мир.
+
+        Теперь перечень берётся у продукта, а круг модулей — у функции, которая
+        знает и словарь, и единую карту прав.
+        """
+
+        from app.models.tenant_billing import RoleEnum
+
+        empty = sorted(role.value for role in RoleEnum if not modules_for_role(role.value))
+        assert not empty, f"роли без единого модуля: {empty}"
+
+    def test_словари_прав_не_называют_несуществующих_ролей(self):
+        """Доказано поломкой: сторож на импорте валит модуль при выдуманном имени.
+
+        Это и есть корень срезов 226–228: словарь называл шесть ролей, которых
+        нет, и семи настоящим не доставалось ничего.
+        """
+
+        from app.models.tenant_billing import RoleEnum
+
+        known = {role.value for role in RoleEnum}
+        assert not set(MODULE_PERMISSIONS) - known
+        assert not set(ROLE_ALIASES.values()) - known, "синоним ведёт в никуда"
 
     @pytest.mark.parametrize(
         "role,expected_modules",
         [
             ("owner", set(MODULE_NAMES)),
             ("admin", set(MODULE_NAMES)),
-            ("methodist", {"documents", "templates"}),
-            ("lawyer", {"documents", "templates"}),
-            ("hse_head", {"documents", "risk", "ppe", "inspections", "incidents", "contractors"}),
-            ("hse_specialist", {"documents", "risk", "ppe", "inspections", "incidents"}),
-            ("instructor", {"training", "briefings"}),
-            ("student", {"training"}),
-            ("hr", {"documents", "training"}),
+            ("lawyer", {"documents", "templates", "reports"}),
+            (
+                "ot_pb_lead",
+                {
+                    "documents",
+                    "templates",
+                    "risk",
+                    "ppe",
+                    "inspections",
+                    "incidents",
+                    "contractors",
+                    "reports",
+                    "training",
+                    "briefings",
+                },
+            ),
+            ("student", {"training", "briefings", "documents"}),
         ],
     )
-    def test_role_module_permissions(self, role: str, expected_modules: set[str]):
-        """Verify module permissions for each major role."""
-        actual_modules = MODULE_PERMISSIONS.get(role, set())
-        assert actual_modules == expected_modules, f"Mismatch for role {role}"
+    def test_круг_модулей_роли(self, role: str, expected_modules: set[str]):
+        """Срез-228: роли настоящие, круг считается функцией, а не словарём."""
+
+        assert modules_for_role(role) == expected_modules, f"не сходится у роли {role}"
 
 
 class TestModuleAccessPolicyEngine:
@@ -174,7 +189,7 @@ class TestModuleAccessPolicyEngine:
         actor = ActorContext(
             user_id="specialist123",
             tenant_id="tenant1",
-            roles=("hse_specialist",),
+            roles=("ot_specialist",),
         )
         decision = policy_engine.can(
             actor=actor,
@@ -190,7 +205,7 @@ class TestModuleAccessPolicyEngine:
         actor = ActorContext(
             user_id="trainer123",
             tenant_id="tenant1",
-            roles=("instructor",),
+            roles=("teacher",),
         )
         decision = policy_engine.can(
             actor=actor,
@@ -205,7 +220,7 @@ class TestModuleAccessPolicyEngine:
         actor = ActorContext(
             user_id="trainer123",
             tenant_id="tenant1",
-            roles=("instructor",),
+            roles=("teacher",),
         )
         decision = policy_engine.can(
             actor=actor,
@@ -286,7 +301,7 @@ class TestModuleAccessPolicyEngine:
         actor = ActorContext(
             user_id="multi123",
             tenant_id="tenant1",
-            roles=("hr", "instructor"),  # hr + instructor
+            roles=("hr", "teacher"),  # кадровик + преподаватель
         )
         # Actor should have: documents, training, briefings
         # Should be able to access training
@@ -295,7 +310,7 @@ class TestModuleAccessPolicyEngine:
             action="read",
             resource="trainings",
         )
-        # Module check should pass (instructor role has training module)
+        # Module check should pass (у преподавателя есть модуль обучения)
         assert decision.reason != "module_access_denied"
 
     def test_multiple_roles_union_modules_documents(self):
@@ -303,7 +318,7 @@ class TestModuleAccessPolicyEngine:
         actor = ActorContext(
             user_id="multi123",
             tenant_id="tenant1",
-            roles=("hr", "instructor"),
+            roles=("hr", "teacher"),
         )
         decision = policy_engine.can(
             actor=actor,
@@ -317,27 +332,31 @@ class TestModuleAccessPolicyEngine:
 class TestModuleAccessBoundaryViolations:
     """Test negative scenarios: cross-module boundary violations."""
 
-    def test_ppe_specialist_cannot_access_training(self):
-        """PPE specialist (implied by hse_specialist) cannot access training."""
+    def test_специалисту_ОТ_закрыта_админка_платформы(self):
+        """Срез-228. Здесь стояло «специалисту по СИЗ закрыто обучение», и роль
+        звалась ``hse_specialist`` — такой в продукте нет, поэтому отказ
+        подтверждался сам собой.
+
+        У настоящего специалиста ОТ обучение как раз открыто: единая карта даёт
+        ему ``training.view`` — он проводит инструктажи и ведёт обучение. Граница
+        у него другая и настоящая: настройки платформы.
+        """
+
         actor = ActorContext(
-            user_id="ppe123",
+            user_id="ot-specialist-1",
             tenant_id="tenant1",
-            roles=("hse_specialist",),  # has ppe but not training
+            roles=("ot_specialist",),
         )
-        decision = policy_engine.can(
-            actor=actor,
-            action="read",
-            resource="trainings",
-        )
-        assert decision.allowed is False
-        assert decision.reason == "module_access_denied"
+        assert policy_engine.can(actor=actor, action="read", resource="trainings").allowed is True
+        denied = policy_engine.can(actor=actor, action="read", resource="admin")
+        assert denied.allowed is False
 
     def test_training_specialist_cannot_access_incidents(self):
         """Training specialist cannot access incidents module."""
         actor = ActorContext(
             user_id="training123",
             tenant_id="tenant1",
-            roles=("instructor",),
+            roles=("teacher",),
         )
         decision = policy_engine.can(
             actor=actor,
@@ -444,7 +463,7 @@ class TestModuleAccessAuditFields:
         actor = ActorContext(
             user_id="specialist123",
             tenant_id="tenant1",
-            roles=("hse_specialist",),
+            roles=("ot_specialist",),
         )
         decision = policy_engine.can(
             actor=actor,
@@ -460,7 +479,7 @@ class TestModuleAccessAuditFields:
         actor = ActorContext(
             user_id="trainer123",
             tenant_id="tenant1",
-            roles=("instructor",),
+            roles=("teacher",),
         )
         decision = policy_engine.can(
             actor=actor,

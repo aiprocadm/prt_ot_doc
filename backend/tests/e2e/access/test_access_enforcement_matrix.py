@@ -120,9 +120,9 @@ class TestScopeBasedABAC:
         )
         assert decision.allowed is True, "Inspector should read within assigned contractor"
 
-    def test_hse_specialist_denied_on_foreign_company(self) -> None:
-        """HSE specialist should be denied access to companies outside their scope."""
-        hse_specialist = Subject(
+    def test_специалисту_ОТ_закрыта_чужая_компания(self) -> None:
+        """Срез-228: роль в теле уже настоящая, имя проверки осталось от выдуманной."""
+        ot_specialist = Subject(
             user_id="hse-1",
             tenant_id="t-1",
             roles=("ot_specialist",),
@@ -132,7 +132,7 @@ class TestScopeBasedABAC:
 
         # Should deny: access to different company
         decision = evaluate(
-            hse_specialist,
+            ot_specialist,
             "read",
             Resource(
                 resource_type="risk_map",

@@ -58,7 +58,9 @@ def test_executor_cannot_access_other_project() -> None:
 
 
 def test_risk_level_ceiling_blocks_high_risk_doc() -> None:
-    actor = _actor(roles=["hse_specialist"], max_risk_level=2)
+    # Срез-228: роль звалась ``hse_specialist`` — такой в продукте нет, и
+    # проверка была зелёной просто потому, что прав не было вовсе.
+    actor = _actor(roles=["ot_specialist"], max_risk_level=2)
     decision = policy_engine.can(actor, action="read", resource="documents", ctx={"risk_level": 3})
     assert decision.allowed is False
 

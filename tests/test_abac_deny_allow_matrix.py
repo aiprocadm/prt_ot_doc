@@ -9,6 +9,12 @@ Tests cover:
 - Scope filters (company, site)
 """
 
+# Срез-228: роли `hse_specialist`, `hse_head` и `project_manager` в продукте
+# НЕ СУЩЕСТВУЮТ — их убрали из словарей прав вместе с остальными выдуманными.
+# Проверки ниже были зелёными ровно потому, что спрашивали несуществующий мир:
+# у такой роли прав нет вовсе, и любой отказ подтверждался сам собой. Здесь
+# стоят настоящие роли продукта: специалист ОТ, руководитель ОТиПБ, менеджер.
+
 from __future__ import annotations
 
 from app.modules.rbac_abac.engine import evaluate
@@ -433,7 +439,7 @@ class TestABACAttributes:
         subject = Subject(
             user_id="pm-1",
             tenant_id="tenant-1",
-            roles=("project_manager",),
+            roles=("manager",),
             permissions=("project:read",),
             project_ids=("project-alpha", "project-beta"),
         )
