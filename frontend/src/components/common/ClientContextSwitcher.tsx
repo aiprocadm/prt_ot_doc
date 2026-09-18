@@ -8,6 +8,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ErrorState } from "@/components/common/ErrorState";
+import { useAuthStore } from "@/stores/auth";
 import type { ApiError } from "@/types/dto/common";
 
 /**
@@ -45,6 +46,9 @@ interface ClientContextSwitcherProps {
 export const ClientContextSwitcher = ({
   onContextChange,
 }: ClientContextSwitcherProps) => {
+  // Срез-225: вход в контур Dedicated-клиента меняет права специалиста, и
+  // личность надо перечитать — иначе меню останется от аутсорсера.
+  const reloadIdentity = useAuthStore((state) => state.reloadIdentity);
   const [clients, setClients] = useState<MyManagedClient[]>([]);
   const [sections, setSections] = useState<string[]>([]);
   const [active, setActive] = useState<StoredClientContext | null>(() => {
@@ -58,6 +62,8 @@ export const ClientContextSwitcher = ({
     return stored;
   });
   const [error, setError] = useState<ApiError | null>(null);
+  /** Почему контур клиента недоступен (срез-225). Пусто — всё в порядке. */
+  const [contourReason, setContourReason] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const [expired, setExpired] = useState(false);
@@ -93,9 +99,28 @@ export const ClientContextSwitcher = ({
         clientId: confirmed.client_id,
         clientName: confirmed.client_name,
         expiresAt: confirmed.expires_at ?? undefined,
+        // Срез-225: у Dedicated-клиента данные лежат в ЕГО арендаторе, и без
+        // этого ключа вход в контекст открывал пустоту. Ключ кладём ВМЕСТЕ с
+        // контекстом, одной записью: разъехавшись, они дали бы запрос к
+        // чужому арендатору со своим токеном.
+        contour: confirmed.contour
+          ? {
+              tenantSlug: confirmed.contour.tenant_slug,
+              accessToken: confirmed.contour.access_token,
+              role: confirmed.contour.role,
+              displayName: confirmed.contour.display_name,
+            }
+          : undefined,
       };
       managedClientStorage.set(next);
       setActive(next);
+      // Причина показывается РЯДОМ с успешным входом, а не вместо него: вход
+      // состоялся и записан в аудит, просто данных клиента не будет.
+      setContourReason(confirmed.contour_reason ?? null);
+      // Срез-225: в контуре клиента у специалиста ДРУГИЕ права. Перечитываем
+      // личность, иначе меню останется нарисованным по правам аутсорсера, а
+      // ручки клиента ответят отказом.
+      if (next.contour) await reloadIdentity();
       onContextChange?.(next);
     } catch (err) {
       setError(asApiError(err, "Не удалось войти в контекст клиента"));
@@ -108,9 +133,13 @@ export const ClientContextSwitcher = ({
     async (expired = false) => {
       // Сначала гасим локально: если сеть отвалилась, специалист всё равно
       // обязан выйти из чужого контекста, а не остаться в нём с ошибкой.
+      const hadContour = Boolean(managedClientStorage.get()?.contour);
       managedClientStorage.clear();
       setActive(null);
+      setContourReason(null);
       setExpired(expired);
+      // Вернулись к себе — права тоже свои.
+      if (hadContour) await reloadIdentity();
       onContextChange?.(null);
       try {
         await managedClientsApi.leaveContext();
@@ -119,7 +148,7 @@ export const ClientContextSwitcher = ({
         // контекста не выглядел неудавшимся.
       }
     },
-    [onContextChange],
+    [onContextChange, reloadIdentity],
   );
 
   // Срок работы «от имени» истекает и БЕЗ участия пользователя: вкладка может
@@ -163,6 +192,18 @@ export const ClientContextSwitcher = ({
             data-testid="client-context-countdown"
           >
             Осталось {formatLeft(secondsLeft)}
+          </span>
+        )}
+        {/* Срез-225. Вход состоялся, а ключа от контура клиента нет —
+            согласие отозвано, грант снят или контур ещё не поднят. Молчать
+            здесь нельзя: специалист увидит пустые разделы и решит, что сломана
+            платформа, вместо того чтобы позвонить клиенту. */}
+        {contourReason && (
+          <span
+            className="text-xs font-medium text-amber-800 dark:text-amber-200"
+            data-testid="client-context-contour-reason"
+          >
+            Данные клиента недоступны: {contourReason}
           </span>
         )}
         {/* Фильтр применён пока не во всех разделах, и молчать об этом нельзя:

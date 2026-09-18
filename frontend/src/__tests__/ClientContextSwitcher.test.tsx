@@ -15,6 +15,15 @@ vi.mock("@/api/managedClients", async (importOriginal) => ({
   managedClientsApi: api,
 }));
 
+// Срез-225: в контуре клиента у специалиста ДРУГИЕ права, и личность обязана
+// перечитаться. Держим вызов под наблюдением, а не верим на слово.
+const reloadIdentity = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+
+vi.mock("@/stores/auth", () => ({
+  useAuthStore: (selector: (state: { reloadIdentity: () => Promise<void> }) => unknown) =>
+    selector({ reloadIdentity }),
+}));
+
 import { ClientContextSwitcher } from "@/components/common/ClientContextSwitcher";
 
 const CLIENTS = [
@@ -36,6 +45,7 @@ const CLIENTS = [
 
 beforeEach(() => {
   managedClientStorage.clear();
+  reloadIdentity.mockClear();
   Object.values(api).forEach((fn) => fn.mockReset());
   api.my.mockResolvedValue({
     items: CLIENTS,
@@ -168,6 +178,159 @@ describe("ClientContextSwitcher", () => {
     const { container } = render(<ClientContextSwitcher />);
     await waitFor(() => expect(api.my).toHaveBeenCalled());
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe("ClientContextSwitcher — контур Dedicated-клиента (срез-225)", () => {
+  it("ключ от контура сохраняется вместе с контекстом", async () => {
+    // Порознь они бессмысленны: контекст без ключа открывает пустоту, ключ без
+    // контекста — это запрос к чужому арендатору без основания.
+    api.enterContext.mockResolvedValue({
+      client_id: "mc1",
+      client_name: "ООО Ромашка",
+      mode: "dedicated",
+      all_modules: true,
+      modules: [],
+      audit_recorded: true,
+      scoped_sections: [],
+      expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      contour: {
+        tenant_slug: "romashka",
+        access_token: "contour-token",
+        token_type: "bearer",
+        role: "ot_specialist",
+        display_name: "Иванов (Северстрой)",
+      },
+    });
+    const user = userEvent.setup();
+    render(<ClientContextSwitcher />);
+    await waitFor(() =>
+      expect(screen.getByTestId("client-context-switcher")).toBeInTheDocument(),
+    );
+
+    await user.selectOptions(
+      screen.getByLabelText("Работать от имени клиента"),
+      "mc1",
+    );
+
+    await waitFor(() => expect(api.enterContext).toHaveBeenCalledWith("mc1"));
+    expect(managedClientStorage.get()?.contour).toMatchObject({
+      tenantSlug: "romashka",
+      accessToken: "contour-token",
+      role: "ot_specialist",
+    });
+  });
+
+  it("контура нет — человеку говорят ПОЧЕМУ, а не показывают пустые разделы", async () => {
+    api.enterContext.mockResolvedValue({
+      client_id: "mc1",
+      client_name: "ООО Ромашка",
+      mode: "dedicated",
+      all_modules: true,
+      modules: [],
+      audit_recorded: true,
+      scoped_sections: [],
+      expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      contour: null,
+      contour_reason: "Клиент отозвал согласие на ведение",
+    });
+    const user = userEvent.setup();
+    render(<ClientContextSwitcher />);
+    await waitFor(() =>
+      expect(screen.getByTestId("client-context-switcher")).toBeInTheDocument(),
+    );
+
+    await user.selectOptions(
+      screen.getByLabelText("Работать от имени клиента"),
+      "mc1",
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("client-context-contour-reason"),
+      ).toBeInTheDocument(),
+    );
+    expect(
+      screen.getByTestId("client-context-contour-reason"),
+    ).toHaveTextContent("Клиент отозвал согласие на ведение");
+    expect(managedClientStorage.get()?.contour).toBeUndefined();
+  });
+
+  it("вход в контур перечитывает права: меню не останется от аутсорсера", async () => {
+    // Без этого повторяется расхождение среза-223, только между арендаторами:
+    // меню нарисовано по правам аутсорсера, а ручки клиента отвечают отказом.
+    api.enterContext.mockResolvedValue({
+      client_id: "mc1",
+      client_name: "ООО Ромашка",
+      mode: "dedicated",
+      all_modules: true,
+      modules: [],
+      audit_recorded: true,
+      scoped_sections: [],
+      expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      contour: {
+        tenant_slug: "romashka",
+        access_token: "contour-token",
+        token_type: "bearer",
+        role: "ot_specialist",
+        display_name: "Иванов (Северстрой)",
+      },
+    });
+    const user = userEvent.setup();
+    render(<ClientContextSwitcher />);
+    await waitFor(() =>
+      expect(screen.getByTestId("client-context-switcher")).toBeInTheDocument(),
+    );
+
+    await user.selectOptions(
+      screen.getByLabelText("Работать от имени клиента"),
+      "mc1",
+    );
+
+    await waitFor(() => expect(reloadIdentity).toHaveBeenCalledTimes(1));
+
+    await user.click(screen.getByRole("button", { name: "Выйти из контекста" }));
+
+    // Вернулись к себе — права тоже свои.
+    await waitFor(() => expect(reloadIdentity).toHaveBeenCalledTimes(2));
+  });
+
+  it("у Lightweight-клиента права не перечитываются: контур не менялся", async () => {
+    const user = userEvent.setup();
+    render(<ClientContextSwitcher />);
+    await waitFor(() =>
+      expect(screen.getByTestId("client-context-switcher")).toBeInTheDocument(),
+    );
+
+    await user.selectOptions(
+      screen.getByLabelText("Работать от имени клиента"),
+      "mc1",
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("client-context-banner")).toBeInTheDocument(),
+    );
+    expect(reloadIdentity).not.toHaveBeenCalled();
+  });
+
+  it("у Lightweight-клиента причины нет и она не показывается", async () => {
+    const user = userEvent.setup();
+    render(<ClientContextSwitcher />);
+    await waitFor(() =>
+      expect(screen.getByTestId("client-context-switcher")).toBeInTheDocument(),
+    );
+
+    await user.selectOptions(
+      screen.getByLabelText("Работать от имени клиента"),
+      "mc1",
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("client-context-banner")).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByTestId("client-context-contour-reason"),
+    ).not.toBeInTheDocument();
   });
 });
 

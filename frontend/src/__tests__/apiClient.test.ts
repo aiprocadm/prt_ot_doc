@@ -262,6 +262,153 @@ describe("apiClient: контекст ведомого клиента (BIZ-49 р
   });
 });
 
+describe("apiClient: ключ от контура Dedicated-клиента (срез-225)", () => {
+  const contour = {
+    tenantSlug: "romashka",
+    accessToken: "contour-token",
+    role: "ot_specialist",
+    displayName: "Иванов (Северстрой)",
+  };
+
+  beforeEach(async () => {
+    const { managedClientStorage } = await import("@/api/managedClientStorage");
+    managedClientStorage.clear();
+    tenantStorage.clear();
+    tokenStorage.clear();
+  });
+
+  it("запрос данных уходит по ключу контура: и токен, и арендатор — клиента", async () => {
+    // Без этого вход в контекст Dedicated-клиента открывал ПУСТОТУ: данные
+    // лежат в другом арендаторе, куда свой токен не пускает.
+    const { managedClientStorage } = await import("@/api/managedClientStorage");
+    tenantStorage.setTenant({ slug: "severstroy" });
+    tokenStorage.setTokens({ accessToken: "own-token", expiresIn: 600 });
+    managedClientStorage.set({
+      clientId: "mc1",
+      clientName: "Ромашка",
+      contour,
+    });
+
+    const mock = new MockAdapter(apiClient);
+    mock.onGet("/documents").reply((config) => {
+      expect(config.headers?.Authorization).toBe("Bearer contour-token");
+      expect(config.headers?.["X-Tenant"]).toBe("romashka");
+      return [200, {}];
+    });
+    await apiClient.get("/documents");
+    mock.restore();
+  });
+
+  it("в контуре клиента заголовок «ведомый клиент» не едет", async () => {
+    // Строки такого клиента в ЕГО собственном контуре нет, а метка
+    // делегирования лежит в токене (срез-215).
+    const { managedClientStorage } = await import("@/api/managedClientStorage");
+    tenantStorage.setTenant({ slug: "severstroy" });
+    tokenStorage.setTokens({ accessToken: "own-token", expiresIn: 600 });
+    managedClientStorage.set({
+      clientId: "mc1",
+      clientName: "Ромашка",
+      contour,
+    });
+
+    const mock = new MockAdapter(apiClient);
+    mock.onGet("/documents").reply((config) => {
+      expect(config.headers?.["X-Managed-Client"]).toBeUndefined();
+      return [200, {}];
+    });
+    await apiClient.get("/documents");
+    mock.restore();
+  });
+
+  it("выход из контекста уходит от личности аутсорсера, иначе выйти нельзя", async () => {
+    // Портфель и сам контекст живут в пространстве аутсорсера: уйди этот
+    // запрос по ключу контура, специалист застрял бы в чужом контуре.
+    const { managedClientStorage } = await import("@/api/managedClientStorage");
+    tenantStorage.setTenant({ slug: "severstroy" });
+    tokenStorage.setTokens({ accessToken: "own-token", expiresIn: 600 });
+    managedClientStorage.set({
+      clientId: "mc1",
+      clientName: "Ромашка",
+      contour,
+    });
+
+    const mock = new MockAdapter(apiClient);
+    mock.onDelete("/managed-clients/context").reply((config) => {
+      expect(config.headers?.Authorization).toBe("Bearer own-token");
+      expect(config.headers?.["X-Tenant"]).toBe("severstroy");
+      return [204];
+    });
+    await apiClient.delete("/managed-clients/context");
+    mock.restore();
+  });
+
+  it("у Lightweight-клиента ключа нет — работаем своим токеном", async () => {
+    const { managedClientStorage } = await import("@/api/managedClientStorage");
+    tenantStorage.setTenant({ slug: "severstroy" });
+    tokenStorage.setTokens({ accessToken: "own-token", expiresIn: 600 });
+    managedClientStorage.set({ clientId: "mc2", clientName: "Василёк" });
+
+    const mock = new MockAdapter(apiClient);
+    mock.onGet("/documents").reply((config) => {
+      expect(config.headers?.Authorization).toBe("Bearer own-token");
+      expect(config.headers?.["X-Tenant"]).toBe("severstroy");
+      expect(config.headers?.["X-Managed-Client"]).toBe("mc2");
+      return [200, {}];
+    });
+    await apiClient.get("/documents");
+    mock.restore();
+  });
+
+  it("истёкший контекст больше не открывает чужой контур", async () => {
+    const { managedClientStorage } = await import("@/api/managedClientStorage");
+    tenantStorage.setTenant({ slug: "severstroy" });
+    tokenStorage.setTokens({ accessToken: "own-token", expiresIn: 600 });
+    managedClientStorage.set({
+      clientId: "mc1",
+      clientName: "Ромашка",
+      expiresAt: new Date(Date.now() - 1000).toISOString(),
+      contour,
+    });
+
+    const mock = new MockAdapter(apiClient);
+    mock.onGet("/documents").reply((config) => {
+      expect(config.headers?.Authorization).toBe("Bearer own-token");
+      expect(config.headers?.["X-Tenant"]).toBe("severstroy");
+      return [200, {}];
+    });
+    await apiClient.get("/documents");
+    mock.restore();
+  });
+
+  it("401 по ключу контура гасит контекст и НЕ зовёт обновление токена", async () => {
+    // Обновление вернуло бы токен личности АУТСОРСЕРА, запрос повторился бы с
+    // ним в контуре клиента — и специалист работал бы там под своим именем.
+    const { managedClientStorage } = await import("@/api/managedClientStorage");
+    tenantStorage.setTenant({ slug: "severstroy" });
+    tokenStorage.setTokens({ accessToken: "own-token", expiresIn: 600 });
+    managedClientStorage.set({
+      clientId: "mc1",
+      clientName: "Ромашка",
+      contour,
+    });
+
+    const mock = new MockAdapter(apiClient);
+    let refreshCalls = 0;
+    mock.onPost("/auth/refresh").reply(() => {
+      refreshCalls += 1;
+      return [200, { access_token: "new-own-token" }];
+    });
+    mock.onGet("/documents").reply(401, { code: "UNAUTHORIZED" });
+
+    await expect(apiClient.get("/documents")).rejects.toMatchObject({
+      status: 401,
+    });
+    expect(refreshCalls).toBe(0);
+    expect(managedClientStorage.get()).toBeNull();
+    mock.restore();
+  });
+});
+
 describe("apiClient: истёкший контекст клиента (BIZ-49 срез-10)", () => {
   it("отказ «время вышло» гасит локальный контекст", async () => {
     // Иначе баннер продолжает обещать работу «от имени», каждый запрос

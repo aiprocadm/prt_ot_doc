@@ -28,6 +28,17 @@ interface AuthState {
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
   initialize: () => Promise<void>;
+  /**
+   * Перечитать личность и права (срез-225).
+   *
+   * Нужно при входе в контур Dedicated-клиента и выходе из него: там
+   * специалист — обычный пользователь клиента со СВОИМИ, более узкими правами
+   * (срез-215 намеренно опускает административные роли). Права, загруженные
+   * при входе в систему, там уже не годятся: меню рисовалось бы по правам
+   * аутсорсера, а ручки отвечали бы отказом — ровно то расхождение, которое
+   * закрывал срез-223, только теперь между двумя арендаторами.
+   */
+  reloadIdentity: () => Promise<void>;
 }
 
 const persistTokens = (payload: { access_token: string }) => {
@@ -144,6 +155,16 @@ export const useAuthStore = createWithEqualityFn<AuthState>()(
           state.loading = false;
         });
       }
+    },
+    reloadIdentity: async () => {
+      const { profile, profileError } = await loadProfileWithPermissions();
+      set((state) => {
+        // Личность не подтвердилась — оставляем прежнюю и показываем ошибку.
+        // Обнулить её значило бы выкинуть человека из интерфейса из-за одного
+        // неудачного запроса.
+        if (profile) state.user = profile;
+        state.error = profileError;
+      });
     },
     refresh: async () => {
       const data = await requestTokenRefresh();
