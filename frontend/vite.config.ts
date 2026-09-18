@@ -4,7 +4,6 @@ import { defineConfig, type UserConfig } from "vite";
 import { configDefaults } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
-import tsconfigPaths from "vite-tsconfig-paths";
 
 const manualChunks: NonNullable<UserConfig["build"]>["rollupOptions"] extends {
   output?: { manualChunks?: infer T };
@@ -35,9 +34,16 @@ export default defineConfig(({ mode }) => {
   const isTest = mode === "test";
 
   return {
+    // Срез-229: псевдоним `@/*` из tsconfig разбирает САМ сборщик.
+    //
+    // Раньше это делал плагин `vite-tsconfig-paths`. Начиная с vite 8 та же
+    // работа встроена, и сборщик на каждом прогоне печатал об этом
+    // напоминание. Плагин — лишняя зависимость в дереве: её однажды
+    // пришлось бы поднимать «потому что уязвимость», ничего при этом не
+    // приобретая (та же порода, что снятые срезом-222 мёртвые инструменты).
+    resolve: { tsconfigPaths: true },
     plugins: [
       react(),
-      tsconfigPaths(),
       !isTest &&
         VitePWA({
           registerType: "autoUpdate",
