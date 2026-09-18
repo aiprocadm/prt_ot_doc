@@ -19,7 +19,7 @@ from app.core.audit_decorator import audit_operation
 from app.core.config import get_settings
 from app.core.csrf import CsrfOriginError, assert_trusted_origin
 from app.core.rate_limit import ip_subject_key, limiter, login_per_identity
-from app.core.rbac_abac import ROLE_PERMISSIONS
+from app.core.rbac_abac import permissions_for_roles as rbac_permissions_for_roles
 from app.core.screen_access import permissions_for_roles
 from app.core.security import (
     AccessContext,
@@ -261,9 +261,8 @@ async def me(access: AccessContext = Depends(rbac())) -> MeResponse:
     """Return basic profile information for the authenticated subject."""
 
     context = access.to_auth_context()
-    abilities = sorted(
-        {perm for role in context.roles for perm in ROLE_PERMISSIONS.get(role, set())}
-    )
+    # Срез-227: те же права, что у движка модулей, — из единой карты.
+    abilities = sorted(rbac_permissions_for_roles(context.roles))
     # Права ЭКРАНА берутся из единой карты (core/screen_access): по ним витрина
     # рисует меню, и по ней же ручки объявляют свои роли — иначе пункт виден
     # тому, кому ручка ответит 403 (docs/audit/ACCESS_MENU_VS_API.md).

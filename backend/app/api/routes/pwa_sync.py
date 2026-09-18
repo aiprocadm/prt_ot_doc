@@ -16,7 +16,7 @@ from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.disciplines import BRIEFING_TYPES
 from app.core.errors import api_problem_detail
-from app.core.rbac_abac import ROLE_PERMISSIONS
+from app.core.rbac_abac import permissions_for_roles
 from app.core.security import AccessContext, rbac
 from app.models.models import (
     BriefingJournal,
@@ -153,11 +153,10 @@ def _decimal_to_float(value: Decimal | float | int | None) -> float:
 
 def _normalize_permissions(access: AccessContext) -> list[str]:
     roles = access.to_auth_context().roles
-    permissions = {
-        permission.replace(":", ".")
-        for role in roles
-        for permission in ROLE_PERMISSIONS.get(role, set())
-    }
+    # Срез-227: офлайн-приложение получает те же права, что и сервер даёт
+    # ручкам. По прежнему словарю у семи настоящих ролей выходил ПУСТОЙ
+    # список, и все офлайн-разделы числились бы закрытыми.
+    permissions = {permission.replace(":", ".") for permission in permissions_for_roles(roles)}
     return sorted(permissions)
 
 

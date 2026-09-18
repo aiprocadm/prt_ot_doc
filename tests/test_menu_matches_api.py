@@ -211,8 +211,49 @@ def _closure_roles(func) -> frozenset[str] | None:
     return closure[code.co_freevars.index("normalized_roles")].cell_contents
 
 
+def _module_gate(func) -> tuple[str, str] | None:
+    """``(ресурс, действие)`` из замыкания сторожа прав модуля; ``None`` — не он.
+
+    СРЕЗ-227. Второй рубеж продукта: ``require_permission("briefings.read")``
+    разворачивается в ``require_action(resource_type=…, action=…)``, и решение
+    принимает движок прав модуля, а не список ролей. Разбор обязан видеть и его.
+    """
+
+    code = getattr(func, "__code__", None)
+    closure = getattr(func, "__closure__", None)
+    if code is None or closure is None:
+        return None
+    names = code.co_freevars
+    if "resource_type" not in names or "action" not in names:
+        return None
+    resource = closure[names.index("resource_type")].cell_contents
+    action = closure[names.index("action")].cell_contents
+    if not isinstance(resource, str) or not isinstance(action, str):
+        return None
+    return resource, action
+
+
+def _module_gate_roles(resource: str, action: str) -> frozenset[str]:
+    """Кого пускает рубеж прав модуля."""
+
+    from app.core.rbac_abac import permissions_for_role
+
+    code = f"{resource}:{action}".lower()
+    # Владелец и администратор проходят рубеж всегда (явная оговорка в движке).
+    admitted = {"owner", "admin"}
+    admitted |= {role for role in SERVER_ROLES if code in permissions_for_role(role)}
+    return frozenset(admitted)
+
+
 def _route_roles(route) -> frozenset[str] | None:
-    """Роли, которые пускает ручка; ``None`` — ролевого сторожа нет."""
+    """Роли, которые пускает ручка; ``None`` — рубежа нет вовсе.
+
+    СРЕЗ-227: рубежей ДВА, и раньше разбор видел только первый. У ручек
+    инструктажей, заданий генерации, корпоративных рисков и обучения стоит
+    ``rbac()`` БЕЗ ролей (любой вошедший), а настоящий отказ выдаёт движок прав
+    модуля. Разбор считал такие ручки «не ограниченными», и пятнадцати ролям
+    меню обещало разделы, куда ручка отвечала 403.
+    """
 
     found: list[frozenset[str]] = []
     stack, seen = [route.dependant], set()
@@ -224,6 +265,9 @@ def _route_roles(route) -> frozenset[str] | None:
         roles = _closure_roles(dep.call)
         if roles:
             found.append(roles)
+        gate = _module_gate(dep.call)
+        if gate is not None:
+            found.append(_module_gate_roles(*gate))
         stack.extend(dep.dependencies)
     if not found:
         return None
@@ -279,7 +323,7 @@ def test_меню_не_шире_ручки(label: str, to: str, code: str, live_
     method, path = MENU_ENDPOINTS[to]
     admitted = _route_roles(live_routes[(method, path)])
     if admitted is None:
-        return  # любой вошедший — пункт не ограничен ручкой
+        return  # рубежа нет вовсе — ручка открыта любому вошедшему
     granted = set(screen_roles(code)) & SERVER_ROLES
     refused = sorted(granted - admitted)
     assert not refused, (
@@ -299,6 +343,20 @@ def test_запасная_карта_витрины_не_шире_серверн
             if role not in set(screen_roles(code)):
                 wider.append(f"{role}: {code}")
     assert not wider, "карта витрины даёт больше, чем сервер:\n  " + "\n  ".join(wider)
+
+
+def test_разбор_видит_второй_рубеж(live_routes) -> None:
+    """Срез-227. Доказано поломкой: пока разбор не знал про права модуля, ручки
+    инструктажей читались как «открыты любому вошедшему», и сторож молчал.
+
+    Проверяется НЕ список ролей, а сам факт: у этой ручки рубеж ВИДЕН и он уже
+    кого-то не пускает.
+    """
+
+    admitted = _route_roles(live_routes[("GET", f"{V1}/briefings/entries")])
+    assert admitted is not None, "рубеж прав модуля снова невидим для разбора"
+    assert "lawyer" not in admitted, "рубеж виден, но никого не ограничивает"
+    assert {"owner", "admin", "ot_specialist"} <= admitted
 
 
 def test_разбор_видит_выдачу_права() -> None:

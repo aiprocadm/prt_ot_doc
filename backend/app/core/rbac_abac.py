@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import enum
+import functools
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
@@ -390,6 +391,181 @@ SCOPED_RESOURCES = {
 }
 
 
+# ---------------------------------------------------------------------------
+# СРЕЗ-227: права роли выводятся из ЕДИНОЙ КАРТЫ ПРАВ ЭКРАНА.
+# ---------------------------------------------------------------------------
+#
+# ЧТО БЫЛО. Два словаря выше (``ROLE_PERMISSIONS`` и ``MODULE_PERMISSIONS``)
+# ведут роли под именами, которых в продукте НЕТ (``hse_specialist``,
+# ``hse_head``, ``fire_engineer``, ``instructor``, ``methodist``,
+# ``project_manager``), а настоящих ролей в них не хватает: семи в первом и
+# девяти во втором. Для них набор прав выходил ПУСТЫМ, а ``PolicyEngine.can``
+# спрашивает оба — сперва модуль, потом право. Токен доступа прав в себе не
+# несёт (в нём ``tenant_id``, ``roles`` и ``company_id``), так что подставить их
+# было неоткуда.
+#
+# Чем это оборачивалось (замер среза-226, живая проба): ``GET /briefings/...``
+# отвечал 403 специалисту по охране труда, руководителю службы ОТиПБ и
+# кадровику, хотя пункт меню «Инструктажи» виден десяти ролям. Тем же рубежом
+# закрыты задания генерации, корпоративные риски и обучение.
+#
+# РЕШЕНИЕ. Список ролей у права живёт ОДИН РАЗ — в ``core/screen_access``
+# (срез-217). Здесь заведён МОСТ: ресурс модуля → право экрана, по которому его
+# читают и меняют. Права роли = то, что записано руками, ПЛЮС выведенное из
+# карты. Именно объединение, а не замена: так никто не теряет доступ, который
+# у него был, и правка монотонна — отказов становится только меньше.
+#
+# Мост намеренно ЯВНЫЙ: у каждой строки видно, каким экраном оправдан доступ к
+# ресурсу. Ресурс без строки — ошибка на импорте, а не тихо пустые права.
+
+#: Ресурс → (право экрана на ЧТЕНИЕ, право экрана на ИЗМЕНЕНИЕ).
+_SCREEN_OF_RESOURCE: dict[str, tuple[str, str]] = {
+    # Настройки платформы: только владелец и администратор (право пустое).
+    "admin": ("admin.manage_roles", "admin.manage_roles"),
+    "briefings": ("training.view", "training.assign"),
+    "calendar": ("calendar.view", "calendar.view"),
+    "contractors": ("contractor.view", "contractor.manage"),
+    "data_quality": ("data_quality.view", "data_quality.view"),
+    "document_jobs": ("generation.view", "generation.manage"),
+    "document_versions": ("doc.view", "doc.create"),
+    "documents": ("doc.view", "doc.create"),
+    "employee_card": ("employee_card.view", "employee_card.view"),
+    "files": ("file.view", "doc.create"),
+    "incidents": ("incident.view", "incident.create"),
+    "inspections": ("inspection.view", "inspection.create"),
+    "package_presets": ("pack.view", "pack.manage"),
+    "package_profiles": ("pack.view", "pack.manage"),
+    "ppe_issues": ("ppe.view", "ppe.issue"),
+    "ppe_norms": ("ppe.view", "ppe.issue"),
+    "reports": ("reports.view", "reports.manage"),
+    "risk_maps": ("risk.view", "risk.edit"),
+    "risk_methodologies": ("risk.view", "risk.edit"),
+    "template_versions": ("template.view", "template.edit"),
+    "templates": ("template.view", "template.edit"),
+    "trainings": ("training.view", "training.assign"),
+    "warehouse_stock": ("warehouse.view", "ppe.issue"),
+}
+
+#: Точечные исключения: действие, которое стоит за ОТДЕЛЬНЫМ правом экрана.
+_SCREEN_OF_ACTION: dict[tuple[str, str], str] = {
+    ("documents", "sign"): "doc.sign",
+    ("documents", "approve"): "doc.sign",
+    ("documents", "send_edo"): "doc.sign",
+    ("documents", "export"): "doc.export",
+    ("documents", "download"): "doc.export",
+    ("documents", "run_pipeline"): "generation.manage",
+    ("document_versions", "download"): "doc.export",
+    ("files", "sign"): "doc.sign",
+    ("files", "download"): "doc.export",
+    ("reports", "export"): "doc.export",
+    ("reports", "download"): "doc.export",
+    ("templates", "approve"): "template.activate",
+    ("templates", "delete"): "template.delete",
+    ("template_versions", "approve"): "template.activate",
+    ("template_versions", "delete"): "template.delete",
+    ("trainings", "approve"): "training.complete",
+    ("incidents", "export"): "risk.export",
+    ("inspections", "export"): "risk.export",
+    ("risk_maps", "export"): "risk.export",
+}
+
+#: Действия, считающиеся изменением. Остальные — чтение.
+_WRITE_ACTIONS: frozenset[str] = frozenset(
+    {
+        "create",
+        "update",
+        "delete",
+        "approve",
+        "sign",
+        "send_edo",
+        "run_pipeline",
+        "retry_job",
+        "cancel_job",
+    }
+)
+
+#: Словарь кодов прав целиком — то, чем вообще оперирует движок.
+ALL_PERMISSION_CODES: frozenset[str] = frozenset(
+    code for codes in ROLE_PERMISSIONS.values() for code in codes
+)
+
+
+def screen_permission_for(resource: str, action: str) -> str:
+    """Право экрана, которым оправдан доступ к ресурсу модуля."""
+
+    override = _SCREEN_OF_ACTION.get((resource, action))
+    if override:
+        return override
+    if resource not in _SCREEN_OF_RESOURCE:
+        raise KeyError(f"ресурс «{resource}» не сопоставлен праву экрана")
+    read_code, write_code = _SCREEN_OF_RESOURCE[resource]
+    return write_code if action in _WRITE_ACTIONS else read_code
+
+
+@functools.lru_cache(maxsize=64)
+def _derived_permissions(role: str) -> frozenset[str]:
+    """Права роли, выведенные из карты прав экрана.
+
+    Результат кэшируется: зовётся на КАЖДОМ запросе, а зависит только от
+    имени роли — обе карты статичны и живут в коде.
+    """
+
+    from app.core.screen_access import screen_roles  # noqa: PLC0415 — круг импортов
+
+    granted: set[str] = set()
+    for code in ALL_PERMISSION_CODES:
+        resource, _, action = code.partition(":")
+        if not action:
+            continue
+        if role in screen_roles(screen_permission_for(resource, action)):
+            granted.add(code)
+    return frozenset(granted)
+
+
+def permissions_for_role(role: str) -> frozenset[str]:
+    """Права роли: записанные руками ПЛЮС выведенные из карты прав экрана."""
+
+    normalized = _normalize_role(role)
+    return frozenset(ROLE_PERMISSIONS.get(normalized, set())) | _derived_permissions(normalized)
+
+
+def permissions_for_roles(roles: Iterable[str]) -> frozenset[str]:
+    """То же для набора ролей человека."""
+
+    granted: set[str] = set()
+    for role in roles:
+        granted |= permissions_for_role(str(role))
+    return frozenset(granted)
+
+
+def modules_for_role(role: str) -> frozenset[str]:
+    """Модули, открытые роли: записанные руками ПЛЮС следующие из её прав."""
+
+    normalized = _normalize_role(role)
+    allowed = set(MODULE_PERMISSIONS.get(normalized, set()))
+    for code in permissions_for_role(normalized):
+        module = PolicyEngine._RESOURCE_TO_MODULE.get(code.partition(":")[0])
+        if module:
+            allowed.add(module)
+    return frozenset(allowed)
+
+
+def _check_bridge() -> None:
+    """Каждый ресурс словаря обязан быть сопоставлен праву экрана.
+
+    Проверка на импорте, а не в тесте: неизвестный ресурс — это тихо пустые
+    права, ровно та ловушка, что разбиралась в срезах 224 и 226.
+    """
+
+    resources = {code.partition(":")[0] for code in ALL_PERMISSION_CODES}
+    missing = sorted(resources - set(_SCREEN_OF_RESOURCE))
+    if missing:
+        raise RuntimeError(f"ресурсы без права экрана: {missing}")
+
+
+_check_bridge()
+
+
 class PolicyEngine:
     _ACTION_ALIASES = {
         "generate": "run_pipeline",
@@ -459,9 +635,11 @@ class PolicyEngine:
         # Check module-level access first
         module = self._RESOURCE_TO_MODULE.get(normalized_resource)
         if module:
-            allowed_modules = set()
+            allowed_modules: set[str] = set()
             for role in actor.roles:
-                allowed_modules.update(MODULE_PERMISSIONS.get(role, set()))
+                # Срез-227: модули роли — из единой карты прав экрана тоже,
+                # иначе настоящие роли не проходили даже сюда.
+                allowed_modules.update(modules_for_role(role))
             if module not in allowed_modules:
                 return Decision(
                     False,
@@ -481,7 +659,11 @@ class PolicyEngine:
             )
 
         matched_roles = tuple(
-            role for role in actor.roles if permission_code in ROLE_PERMISSIONS.get(role, set())
+            # Срез-227: права роли — записанные руками ПЛЮС выведенные из
+            # карты прав экрана (``permissions_for_role``).
+            role
+            for role in actor.roles
+            if permission_code in permissions_for_role(role)
         )
         if not matched_roles:
             return Decision(False, "missing_permission", audit_meta={"permission": permission_code})
