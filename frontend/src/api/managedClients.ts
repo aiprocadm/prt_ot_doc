@@ -321,6 +321,28 @@ export interface ClientContextResponse {
   /** Когда работа «от имени» истечёт (срез-10, Доп. №3 63.2). */
   expires_at?: string | null;
   seconds_left?: number | null;
+  /**
+   * Вход в СОБСТВЕННЫЙ контур Dedicated-клиента (срез-215 на сервере,
+   * срез-225 на витрине). У Lightweight-клиента поле пустое: его данные лежат
+   * в пространстве аутсорсера, и отдельный ключ там не нужен.
+   */
+  contour?: ClientContourResponse | null;
+  /**
+   * Почему контура нет, если он полагался. Пустое, когда контур выдан или не
+   * нужен вовсе. Показывать это обязательно: «вошёл, а данных нет» читается
+   * как поломка платформы, а не как отозванное согласие клиента.
+   */
+  contour_reason?: string | null;
+}
+
+export interface ClientContourResponse {
+  tenant_slug: string;
+  access_token: string;
+  token_type?: string;
+  /** Роль, которую специалист получил в контуре клиента. */
+  role: string;
+  /** Как личность подписана в списке пользователей клиента. */
+  display_name: string;
 }
 
 /**

@@ -44,12 +44,50 @@ const isTenantRequiredPath = (path: string) => {
   return !TENANT_WHITELIST.some((pattern) => pattern.test(path));
 };
 
+/**
+ * Запросы, которые ОБЯЗАНЫ уходить от личности аутсорсера, даже когда
+ * специалист работает в контуре Dedicated-клиента (срез-225).
+ *
+ * Портфель клиентов и сам вход-выход из контекста живут в пространстве
+ * аутсорсера: клиента с таким `id` в чужом контуре просто нет. Если пустить их
+ * по ключу контура, специалист не сможет из этого контура ВЫЙТИ — а выход из
+ * чужого контекста обязан работать всегда.
+ *
+ * Сессионные ручки (`/auth/login`, `/auth/refresh`, `/auth/logout`) — тоже:
+ * сессию держит личность аутсорсера, у ключа контура обновления нет вовсе.
+ */
+const OUTSOURCER_IDENTITY_PATHS: RegExp[] = [
+  /\/v1\/managed-clients(\/|$)/,
+  /\/v1\/auth\/(login|refresh|logout)(\/|$)/,
+];
+
+const keepsOutsourcerIdentity = (path: string) =>
+  OUTSOURCER_IDENTITY_PATHS.some((pattern) => pattern.test(path));
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
 type RequestWithServerRetry = InternalAxiosRequestConfig & {
   _serverRetryCount?: number;
 };
+
+/**
+ * Пометка «запрос ушёл по ключу контура клиента» (срез-225).
+ *
+ * Нужна ответу, а не запросу: по заголовку это уже не отличить — к моменту
+ * ответа в хранилище может лежать что угодно, а решение «обновлять токен или
+ * выходить из контекста» зависит от того, ЧЕЙ ключ был у ЭТОГО запроса.
+ */
+type RequestWithContour = InternalAxiosRequestConfig & {
+  _viaClientContour?: boolean;
+};
+
+const markContourRequest = (config: InternalAxiosRequestConfig): void => {
+  (config as RequestWithContour)._viaClientContour = true;
+};
+
+const wentViaContour = (config: InternalAxiosRequestConfig | undefined) =>
+  Boolean((config as RequestWithContour | undefined)?._viaClientContour);
 
 declare module "axios" {
   export interface AxiosRequestConfig {
@@ -227,6 +265,22 @@ apiClient.interceptors.request.use((config) => {
   if (clientContext && requiresTenant) {
     config.headers["X-Managed-Client"] = clientContext.clientId;
   }
+  // Срез-225. У Dedicated-клиента данные лежат в ЕГО арендаторе, и заголовком
+  // туда не попасть: нужен ключ от контура, который выдаёт вход в контекст.
+  // Подменяем ОБЕ вещи разом — токен и арендатора, — потому что порознь они
+  // бессмысленны: свой токен в чужом контуре не примут, а чужой арендатор со
+  // своим токеном — это ровно та попытка пролезть к соседу, которую сервер
+  // обязан отвергнуть.
+  const contour = requiresTenant ? managedClientStorage.contour() : null;
+  if (contour && !keepsOutsourcerIdentity(requestPath)) {
+    config.headers.Authorization = `Bearer ${contour.accessToken}`;
+    config.headers["X-Tenant"] = contour.tenantSlug;
+    // В своём контуре клиента специалист — обычный его пользователь: строки
+    // «ведомый клиент» там нет, а метка делегирования уже лежит В ТОКЕНЕ, и
+    // запреты разд. 63.2 действуют по ней (срез-215).
+    delete config.headers["X-Managed-Client"];
+    markContourRequest(config);
+  }
   config.timeout = config.timeout ?? 15_000;
   return config;
 });
@@ -253,6 +307,23 @@ apiClient.interceptors.response.use(
     // запрос получает отказ — а данные при этом уже НЕ отфильтрованы.
     if (status === 403 && isExpiredClientContext(error.response?.data)) {
       managedClientStorage.clear();
+    }
+    // Срез-225. Ключ от контура клиента ОБНОВЛЕНИЮ НЕ ПОДЛЕЖИТ — так решено на
+    // сервере (срез-215): обновление пережило бы и срок контекста, и отзыв
+    // согласия. Отправить сюда обычный `/auth/refresh` было бы хуже, чем
+    // бесполезно: он вернул бы токен ЛИЧНОСТИ АУТСОРСЕРА, запрос повторился бы
+    // с ним в контуре клиента — и специалист продолжил бы работать «в контуре»
+    // под своим настоящим именем. Поэтому ключ погас — значит, вышли из
+    // контекста, а человек войдёт заново, и вход перепроверит основание.
+    if (status === 401 && wentViaContour(originalRequest)) {
+      managedClientStorage.clear();
+      const apiError = normalizeApiError(error.response?.data, {
+        status,
+        message: "Доступ к контуру клиента закончился. Войдите в контекст заново.",
+        details: error.response?.data,
+      });
+      handleApiError(apiError, originalRequest?.url);
+      return Promise.reject(apiError);
     }
     if (status === 401 && originalRequest && !originalRequest._retry) {
       const requestAuthHeader = originalRequest.headers?.Authorization;
