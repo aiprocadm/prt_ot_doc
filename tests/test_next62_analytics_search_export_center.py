@@ -280,6 +280,102 @@ async def test_search_returns_total_and_extended_filters(
 
 
 @pytest.mark.anyio
+async def test_поиск_находит_то_что_человек_открывает_на_экране(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
+    """Срез-226. Специалист по охране труда — основной пользователь продукта:
+    происшествия и проверки он ведёт сам. Поиск обязан их ему отдавать.
+
+    До среза-226 не отдавал. Поиск считал права по словарю
+    ``rbac_abac.ROLE_PERMISSIONS``, где СЕМИ настоящих ролей нет вовсе
+    (``ot_specialist``, ``ot_pb_lead``, ``ot_head``, ``pb_engineer``,
+    ``manager``, ``worker``, ``employee``), зато есть шесть выдуманных. Набор
+    прав выходил ПУСТЫМ, и поиск прятал ровно то, что человек открывает на
+    экране: замер дал 15 расхождений «экран пускает, а поиск прячет».
+    """
+
+    async with sessionmaker() as session:  # type: AsyncSession
+        tenant = await data_factory.ensure_tenant(session=session)
+        session.add_all(
+            [
+                SearchIndexEntry(
+                    tenant_id=tenant.id,
+                    entity_type="incident",
+                    entity_id="inc-ot",
+                    title="Инцидент: травма на площадке",
+                    route="/incidents/inc-ot",
+                    search_text="Инцидент травма площадка",
+                ),
+                SearchIndexEntry(
+                    tenant_id=tenant.id,
+                    entity_type="inspection",
+                    entity_id="insp-ot",
+                    title="Проверка ГИТ",
+                    route="/inspections/insp-ot",
+                    search_text="Проверка ГИТ",
+                ),
+            ]
+        )
+        await session.commit()
+
+    params = {"entity_types": "incident,inspection"}
+    for role in (RoleEnum.OT_SPECIALIST, RoleEnum.OT_PB_LEAD, RoleEnum.PB_ENGINEER):
+        headers = await make_auth_headers(role)
+        response = await async_client.get(
+            "/api/v1/search", params=params, headers={**headers, "X-Tenant": "test"}
+        )
+        assert response.status_code == 200, response.text
+        kept = {item["entity_type"] for item in response.json()["items"]}
+        assert kept == {"incident", "inspection"}, (role.value, sorted(kept))
+
+
+def test_поиск_не_прячет_того_что_пускает_экран() -> None:
+    """Сторож согласия: поиск и экран отвечают на один вопрос одинаково.
+
+    ОБЛАСТЬ ОБЗОРА ВАЖНЕЕ СПИСКА (урок срезов 223–224): проверка идёт по ВСЕМ
+    ролям продукта, а не по паре образцов. Пара образцов и была — тест ниже
+    брал юриста и администратора, и оба ответа совпадали с прежним поведением,
+    поэтому пятнадцать расхождений он не видел.
+    """
+
+    from app.core.screen_access import screen_roles
+    from app.models.tenant_billing import RoleEnum as ProductRole
+    from app.modules.search.api import (
+        _SENSITIVE_ENTITY_SCREENS,
+        restricted_entity_types_for_roles,
+    )
+
+    assert _SENSITIVE_ENTITY_SCREENS, "карта пуста — проверка меряет не то"
+    # Экран — независимый источник: роли берутся из единой карты прав, а не
+    # из той же функции, что проверяется.
+    visible_on_screen = {
+        entity_type: set(screen_roles(screen))
+        for entity_type, screen in _SENSITIVE_ENTITY_SCREENS.items()
+    }
+    conflicts: list[str] = []
+    seen_hidden = 0
+    for role in sorted(item.value for item in ProductRole):
+        hidden = restricted_entity_types_for_roles({role})
+        seen_hidden += len(hidden)
+        for entity_type in sorted(hidden):
+            if role in visible_on_screen[entity_type]:
+                conflicts.append(f"{role}: экран пускает «{entity_type}», а поиск прячет")
+    assert seen_hidden > 0, "разбор не нашёл ни одного скрытого типа — проверка пуста"
+    assert not conflicts, "\n".join(conflicts)
+
+
+def test_карта_поиска_называет_настоящие_права_экрана() -> None:
+    """Опечатка в коде права — та же ловушка, что в срезе-224: имя правдоподобно,
+    а защиты нет. ``screen_roles`` на неизвестном праве падает, и это нужно
+    поймать здесь, а не на живом запросе."""
+
+    from app.core.screen_access import SCREEN_ACCESS
+    from app.modules.search.api import _SENSITIVE_ENTITY_SCREENS
+
+    unknown = sorted(set(_SENSITIVE_ENTITY_SCREENS.values()) - set(SCREEN_ACCESS))
+    assert not unknown, f"права экрана не заведены: {unknown}"
+
+
 async def test_search_hides_sensitive_types_from_unprivileged_role(
     async_client, sessionmaker, data_factory, make_auth_headers
 ):
