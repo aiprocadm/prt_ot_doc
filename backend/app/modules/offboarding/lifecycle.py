@@ -56,6 +56,16 @@ class OffboardingStateError(RuntimeError):
 # должно быть читаемым при ревью, а не выводиться эвристикой по имени таблицы.
 # Таблица, не попавшая ни в один процесс, планируется к удалению: у неё нет
 # основания храниться дольше.
+#
+# ИМЕНА ЗДЕСЬ — ТОЛЬКО ТАБЛИЦЫ С МОДЕЛЬЮ (срез-224). Миграции создают ещё
+# три десятка таблиц-дубликатов прежних волн, у которых модели нет и данных не
+# бывает; они лежат в списке RLS, потому что их армируют политиками до решения
+# владельца о сносе. Имя такого дубликата, попав сюда, выглядит правдоподобно и
+# ничего не защищает: строка процесса есть, а данные удаляются. Так и вышло —
+# процесс расследований называл `incident_persons` и `incident_investigations`,
+# а настоящие `incident_person` и `incident_log` не были названы нигде, и план
+# удалял материалы, которые ст. 230.1 ТК РФ велит хранить 45 лет. Сторож
+# `test_activity_table_map_references_real_tables` теперь требует модель.
 ACTIVITY_TABLES: dict[str, tuple[str, ...]] = {
     "hr_records": ("person", "person_compliance_read_models"),
     "medical_exams": (
@@ -71,7 +81,7 @@ ACTIVITY_TABLES: dict[str, tuple[str, ...]] = {
         "risk_assessments",
     ),
     "training": ("training_session", "training_certificates", "training_protocols"),
-    "incidents": ("incident", "incident_investigations", "incident_persons"),
+    "incidents": ("incident", "incident_log", "incident_person"),
 }
 
 
