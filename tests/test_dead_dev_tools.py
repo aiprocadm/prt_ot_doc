@@ -23,9 +23,22 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 #: Бэкенд: имя пакета в requirements*.txt.
 DEAD_PYTHON_TOOLS = ("black", "schemathesis", "isort")
 #: Витрина: имя пакета в package.json (dependencies + devDependencies).
-DEAD_NODE_TOOLS = ("rollup", "ts-node", "tsconfig-paths", "eslint-plugin-import")
-#: Живой сосед с похожим именем — его наличие подтверждает, что сторож смотрит точно.
-LIVE_NODE_TOOL = "vite-tsconfig-paths"
+#:
+#: СРЕЗ-229: сюда добавился `vite-tsconfig-paths`. Он был ЖИВЫМ и служил
+#: доказательством, что сторож различает близкие имена: мёртвый
+#: `tsconfig-paths` и живой `vite-tsconfig-paths`. С vite 8 его работу делает
+#: сам сборщик (`resolve.tsconfigPaths`), и плагин стал лишней зависимостью.
+DEAD_NODE_TOOLS = (
+    "rollup",
+    "ts-node",
+    "tsconfig-paths",
+    "eslint-plugin-import",
+    "vite-tsconfig-paths",
+)
+#: Живой сосед с похожим именем — его наличие подтверждает, что сторож смотрит
+#: точно. После среза-229 это `vite-plugin-pwa`: имя тоже начинается на `vite-`,
+#: и его снимать никто не собирался.
+LIVE_NODE_TOOL = "vite-plugin-pwa"
 
 
 def _python_pins() -> set[str]:
@@ -57,6 +70,9 @@ def test_мёртвые_node_инструменты_не_в_манифесте()
 
 
 def test_сторож_различает_живого_соседа() -> None:
-    """`tsconfig-paths` мёртв, `vite-tsconfig-paths` жив: сторож обязан их различать."""
+    """Сторож смотрит на ТОЧНОЕ имя, а не на похожее начало.
+
+    Проверка дословно ловила бы подмену «снять всё, что начинается на `vite-`».
+    """
 
     assert LIVE_NODE_TOOL in _node_deps()

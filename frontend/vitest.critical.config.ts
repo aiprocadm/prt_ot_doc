@@ -1,10 +1,11 @@
 import { defineConfig } from "vite";
 import { configDefaults } from "vitest/config";
 import react from "@vitejs/plugin-react";
-import tsconfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig({
-  plugins: [react(), tsconfigPaths()],
+  plugins: [react()],
+  // Срез-229: псевдоним `@/*` разбирает сам сборщик (vite 8), плагин снят.
+  resolve: { tsconfigPaths: true },
   test: {
     environment: "jsdom",
     globals: true,
