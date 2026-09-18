@@ -347,20 +347,28 @@ class TestModuleAccessBoundaryViolations:
         assert decision.allowed is False
         assert decision.reason == "module_access_denied"
 
-    def test_contractor_cannot_access_documents(self):
-        """Contractor inspector cannot access document module."""
+    def test_инспектор_подрядчика_читает_документы_но_не_меняет(self):
+        """Срез-227: проверка закрепляла контракт, который сменил срез-217.
+
+        Раньше здесь стояло «инспектор подрядчика не допущен к модулю
+        документов». Единая карта прав экрана (решение владельца, срез-217)
+        говорит иначе: ``doc.view`` выдан и ему — подрядчик обязан видеть
+        документы, по которым его проверяют. Ручка `GET /documents` пускала его
+        УЖЕ ДО этого среза; отказывал только движок прав модуля, и это было
+        расхождение, а не защита.
+
+        Граница осталась настоящей: ЧИТАТЬ можно, МЕНЯТЬ нельзя — ``doc.create``
+        инспектору не выдан.
+        """
+
         actor = ActorContext(
             user_id="contractor123",
             tenant_id="tenant1",
             roles=("inspector_contractor",),
         )
-        decision = policy_engine.can(
-            actor=actor,
-            action="read",
-            resource="documents",
-        )
-        assert decision.allowed is False
-        assert decision.reason == "module_access_denied"
+        assert policy_engine.can(actor=actor, action="read", resource="documents").allowed is True
+        denied = policy_engine.can(actor=actor, action="create", resource="documents")
+        assert denied.allowed is False
 
     def test_client_cannot_access_incidents(self):
         """Client cannot access incidents module."""
@@ -392,32 +400,40 @@ class TestModuleAccessBoundaryViolations:
         assert decision.allowed is False
         assert decision.reason == "module_access_denied"
 
-    def test_accountant_can_only_access_reports(self):
-        """Accountant can only access reports module."""
+    def test_бухгалтер_читает_отчёты_и_документы_но_не_инструктажи(self):
+        """Срез-227: та же правка контракта, что у инспектора подрядчика.
+
+        Словарь модулей по-прежнему записывает бухгалтеру один ``reports`` — он
+        не менялся. Но круг модулей роли считается теперь как записанное руками
+        ПЛЮС следующее из её прав, а единая карта даёт бухгалтеру ``doc.view``
+        (счета и акты — его работа). Ручка `GET /documents` пускала его уже до
+        этого среза.
+
+        Граница осталась настоящей: инструктажи бухгалтеру закрыты, ``documents``
+        он только читает.
+        """
+
+        from app.core.rbac_abac import modules_for_role
+
         actor = ActorContext(
             user_id="accountant123",
             tenant_id="tenant1",
             roles=("accountant",),
         )
-        allowed_modules = MODULE_PERMISSIONS.get("accountant", set())
-        assert allowed_modules == {"reports"}
+        assert MODULE_PERMISSIONS.get("accountant", set()) == {
+            "reports"
+        }, "словарь модулей не должен был меняться"
+        assert {"reports", "documents"} <= modules_for_role("accountant")
 
-        # Should access reports
-        decision_reports = policy_engine.can(
-            actor=actor,
-            action="read",
-            resource="reports",
+        assert (
+            policy_engine.can(actor=actor, action="read", resource="reports").reason
+            != "module_access_denied"
         )
-        assert decision_reports.reason != "module_access_denied"
-
-        # Should NOT access documents
-        decision_documents = policy_engine.can(
-            actor=actor,
-            action="read",
-            resource="documents",
+        assert policy_engine.can(actor=actor, action="read", resource="documents").allowed is True
+        assert (
+            policy_engine.can(actor=actor, action="create", resource="documents").allowed is False
         )
-        assert decision_documents.allowed is False
-        assert decision_documents.reason == "module_access_denied"
+        assert policy_engine.can(actor=actor, action="read", resource="briefings").allowed is False
 
 
 class TestModuleAccessAuditFields:

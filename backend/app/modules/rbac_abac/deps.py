@@ -5,7 +5,7 @@ from typing import Any
 
 from fastapi import HTTPException, Request, status
 
-from app.core.rbac_abac import ROLE_ALIASES, ROLE_PERMISSIONS
+from app.core.rbac_abac import ROLE_ALIASES, permissions_for_role
 from app.services.audit import AuditService
 
 from .engine import evaluate
@@ -28,11 +28,14 @@ def _subject_from_request(request: Request) -> Subject:
     if raw_permissions:
         permissions = tuple(dict.fromkeys(raw_permissions))
     else:
+        # Срез-227: токен прав в себе не несёт, и раньше здесь подставлялся
+        # словарь, в котором семи настоящих ролей нет вовсе — предусловие
+        # движка отказывало им всем. Теперь права берутся из единой карты.
         permissions = tuple(
             dict.fromkeys(
                 permission
                 for role in normalized_roles
-                for permission in ROLE_PERMISSIONS.get(role, set())
+                for permission in sorted(permissions_for_role(role))
             )
         )
 
