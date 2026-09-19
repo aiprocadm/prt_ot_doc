@@ -835,45 +835,23 @@ def recompute_active_workers_job(tenant_slug: str) -> dict[str, int | str]:
     return _run_coroutine(_run())
 
 
-@celery_app.task(name="approval_deadline_sweeper_job")
-def approval_deadline_sweeper_job(tenant_slug: str | None = None) -> dict[str, str]:
-    return {"status": "ok", "tenant_slug": tenant_slug or "*"}
-
-
-@celery_app.task(name="escalation_scan_job")
-def escalation_scan_job(tenant_slug: str | None = None) -> dict[str, str]:
-    return approval_deadline_sweeper_job(tenant_slug=tenant_slug)
-
-
-@celery_app.task(name="refresh_signature_status_job")
-def refresh_signature_status_job(*, request_id: str, tenant_id: str) -> dict[str, str]:
-    return {"status": "queued", "request_id": request_id, "tenant_id": tenant_id}
-
-
-@celery_app.task(name="verify_signature_job")
-def verify_signature_job(*, request_id: str, tenant_id: str) -> dict[str, str]:
-    return {"status": "verifying", "request_id": request_id, "tenant_id": tenant_id}
-
-
-@celery_app.task(name="refresh_edo_status_job")
-def refresh_edo_status_job(*, message_id: str, tenant_id: str) -> dict[str, str]:
-    return {"status": "queued", "message_id": message_id, "tenant_id": tenant_id}
-
-
-@celery_app.task(name="process_edo_webhook_job")
-def process_edo_webhook_job(*, inbox_id: str, tenant_id: str) -> dict[str, str]:
-    return {"status": "processed", "inbox_id": inbox_id, "tenant_id": tenant_id}
-
-
-@celery_app.task(name="generate_edo_protocol_job")
-def generate_edo_protocol_job(*, message_id: str, tenant_id: str) -> dict[str, str]:
-    return {"status": "queued", "message_id": message_id, "tenant_id": tenant_id}
-
-
-@celery_app.task(name="webhook_dispatch_job")
-def webhook_dispatch_job(limit: int = 50, tenant_slug: str = "test") -> dict[str, int]:
-    dispatched = dispatch_outbox_events(tenant_slug=tenant_slug)
-    return {"dispatched": int(dispatched), "limit": int(limit)}
+# СРЕЗ-230: здесь стояли ВОСЕМЬ задач-заглушек. Они возвращали заготовленный
+# ответ (`{"status": "ok"}`, `{"status": "queued"}`) и не делали НИЧЕГО:
+#
+#   approval_deadline_sweeper_job, escalation_scan_job,
+#   refresh_signature_status_job, verify_signature_job,
+#   refresh_edo_status_job, process_edo_webhook_job,
+#   generate_edo_protocol_job, webhook_dispatch_job
+#
+# Их не звал никто: каждое имя встречалось в коде и тестах РОВНО один раз — в
+# собственном объявлении. Вреда они не наносили именно поэтому, но были
+# ловушкой: читающий видел «обход просроченных согласований» или «обработка
+# входящего сообщения ЭДО» и считал механизм существующим. У каждой работа
+# давно делается в другом месте — перечень с адресами лежит в
+# `tests/test_stub_tasks_removed.py`, и тот же файл не даёт им вернуться.
+#
+# Убирать, а не дописывать: дописать заглушку значит завести ВТОРОЙ механизм
+# рядом с работающим, и они разъедутся при первой же правке.
 
 
 @celery_app.task(
