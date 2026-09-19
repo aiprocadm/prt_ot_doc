@@ -558,3 +558,62 @@ async def test_packs_run_conflict_same_key_different_hash(
     body = response.json()
     assert body.get("code") == "IDEMPOTENCY_MISMATCH", f"unexpected code: {body}"
     assert body.get("type") == "idempotency", f"unexpected type: {body}"
+
+
+@pytest.mark.anyio
+async def test_уборка_удаляет_старые_записи_и_бережёт_свежие(test_db_session, data_factory) -> None:
+    """Срез-231. Единственный путь удаления записей — эта уборка, и до среза её
+    НИКТО НЕ ЗАПУСКАЛ: в расписании её не было, из кода не звали.
+
+    Настройка срока хранения при этом существовала (``IDEMPOTENCY_TTL_DAYS``,
+    по умолчанию 30 дней), то есть продукт обещал чистку и не делал её. Ключи
+    копились вечно у каждого арендатора.
+
+    Здесь проверяется сама работа: старую завершённую запись убирает, свежую и
+    незавершённую оставляет. Ставить в расписание механизм, который не проверен,
+    нельзя.
+    """
+
+    from app.services.idempotency import cleanup_idempotency_keys
+
+    tenant = await data_factory.ensure_tenant(slug="idem-clean", session=test_db_session)
+    now = datetime.now(tz=timezone.utc)
+
+    stale = IdempotencyKey(
+        tenant_id=str(tenant.id),
+        endpoint="POST /documents:generate",
+        key="stale-key",
+        status=IdempotencyStatus.SUCCEEDED,
+        updated_at=now - timedelta(days=45),
+    )
+    fresh = IdempotencyKey(
+        tenant_id=str(tenant.id),
+        endpoint="POST /documents:generate",
+        key="fresh-key",
+        status=IdempotencyStatus.SUCCEEDED,
+        updated_at=now - timedelta(days=1),
+    )
+    # Незавершённую (`pending`) не трогаем даже старую: по ней ещё может прийти повтор.
+    in_flight = IdempotencyKey(
+        tenant_id=str(tenant.id),
+        endpoint="POST /documents:generate",
+        key="in-flight-key",
+        status=IdempotencyStatus.PENDING,
+        updated_at=now - timedelta(days=45),
+    )
+    test_db_session.add_all([stale, fresh, in_flight])
+    await test_db_session.flush()
+
+    removed = await cleanup_idempotency_keys(session=test_db_session, ttl_days=30)
+
+    assert removed == 1, "убрать должна была ровно одну запись — старую завершённую"
+    left = set(
+        (
+            await test_db_session.execute(
+                select(IdempotencyKey.key).where(IdempotencyKey.tenant_id == str(tenant.id))
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert left == {"fresh-key", "in-flight-key"}
