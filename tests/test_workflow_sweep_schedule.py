@@ -12,10 +12,20 @@
 («событие публиковала не та задача»): код есть, тесты зелёные, в жизни не
 происходит ничего.
 
-КАК ПРОВЕРЯЕТСЯ. Берём расписание живого приложения и все зарегистрированные
-задачи. Каждая задача, которая по имени объявлена периодической (оканчивается
-на ``.tick``), обязана быть либо в расписании, либо в списке тех, кого зовёт
-веерная задача. Реестр исключений требует причину у каждой строки.
+КАК ПРОВЕРЯЛОСЬ И ЧТО ИЗМЕНИЛОСЬ (срез-231). Сторож брал задачи, чьё ИМЯ
+оканчивается на ``.tick``. Дефект нашёлся ровно за этой границей: уборка ключей
+идемпотентности (``idempotency.cleanup``) написана, срок хранения настроен
+(``IDEMPOTENCY_TTL_DAYS``), а в расписании её не было и не звал её никто —
+единственный путь удаления записей не выполнялся ни разу. Имя не кончается на
+``.tick``, поэтому проверка её не видела.
+
+**Область обзора теперь задаётся устройством задачи, а не её именем.** Задача,
+которая НЕ ПРИНИМАЕТ АРГУМЕНТОВ, работает сама по себе: позвать её из кода
+нечем и незачем, значит запускать её должно расписание. Такая задача обязана
+быть либо в расписании, либо в реестре исключений — с причиной у каждой строки.
+
+Это третий раз подряд, когда дефект прятался в области обзора проверки, а не в
+её утверждениях (срезы 223, 224, 226).
 """
 
 from __future__ import annotations
@@ -32,6 +42,16 @@ KNOWN_NOT_SCHEDULED: dict[str, str] = {
     "workflow.timers.tick": (
         "принимает арендатора параметром; по всем арендаторам обходит "
         "`workflow.sweep.tick` (срез-170)"
+    ),
+    # --- срез-231: задачи без аргументов, которые запускает не расписание ---
+    "outbox.dispatch_all": (
+        "включается настройкой `OUTBOX_DISPATCH_SCHEDULE_ENABLED` и тогда "
+        "попадает в расписание сама; по умолчанию выключена осознанно — у "
+        "существующего развёртывания может лежать накопленная очередь, и первый "
+        "же тик отправил бы её подписчикам целиком"
+    ),
+    "dispatch_outbox_events": (
+        "разгрузка очереди ОДНОГО арендатора; по всем обходит " "`outbox.dispatch_all`"
     ),
 }
 
@@ -57,6 +77,41 @@ def test_расписание_и_задачи_читаются(celery_state: tup
     assert "tasks.reminders.dispatch" in scheduled
 
 
+def _self_contained_tasks() -> dict[str, str]:
+    """Задачи, которые НЕ ПРИНИМАЮТ АРГУМЕНТОВ: имя → модуль объявления.
+
+    Такую задачу неоткуда позвать осмысленно из кода — ей нечего передать.
+    Значит, запускать её должно расписание. Признак берётся у самой задачи, а
+    не у её имени: имя врёт (срез-231, `idempotency.cleanup`).
+    """
+
+    import inspect
+
+    import app.celery.tasks  # noqa: F401
+    import app.tasks  # noqa: F401
+    from app.services.celery_app import celery_app
+
+    result: dict[str, str] = {}
+    for name, task in celery_app.tasks.items():
+        if name.startswith("celery."):
+            continue
+        func = getattr(task, "run", task)
+        try:
+            signature = inspect.signature(func)
+        except (TypeError, ValueError):  # pragma: no cover - встроенные
+            continue
+        required = [
+            parameter
+            for parameter in signature.parameters.values()
+            if parameter.default is inspect.Parameter.empty
+            and parameter.kind
+            not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+        ]
+        if not required:
+            result[name] = str(getattr(task, "__module__", "?"))
+    return result
+
+
 def test_каждая_периодическая_задача_кем_то_запускается(
     celery_state: tuple[set[str], set[str]],
 ) -> None:
@@ -68,6 +123,42 @@ def test_каждая_периодическая_задача_кем_то_зап
     assert not orphans, (
         "периодическая задача есть, а запускать её некому — в жизни она не "
         "выполнится ни разу:\n" + "\n".join(f"  {name}" for name in orphans)
+    )
+
+
+def test_задача_без_аргументов_кем_то_запускается(
+    celery_state: tuple[set[str], set[str]],
+) -> None:
+    """Срез-231. Область обзора — устройство задачи, а не её имя.
+
+    Прежняя проверка брала только имена на ``.tick``, и уборка ключей
+    идемпотентности пряталась ровно за этой границей: написана, настроена и не
+    запускалась никогда.
+    """
+
+    _registered, scheduled = celery_state
+    self_contained = _self_contained_tasks()
+    assert (
+        len(self_contained) > 10
+    ), f"задач без аргументов найдено всего {len(self_contained)} — проверка потеряла область"
+
+    orphans = sorted(set(self_contained) - scheduled - set(KNOWN_NOT_SCHEDULED))
+    assert not orphans, (
+        "задача не принимает аргументов, значит запускать её должно расписание — "
+        "а её там нет и не зовёт никто:\n"
+        + "\n".join(f"  {name}  ({self_contained[name]})" for name in orphans)
+    )
+
+
+def test_уборка_ключей_идемпотентности_стоит_в_расписании(
+    celery_state: tuple[set[str], set[str]],
+) -> None:
+    """Срез-231: единственный путь удаления записей — эта задача."""
+
+    _registered, scheduled = celery_state
+    assert "idempotency.cleanup" in scheduled, (
+        "уборка ключей идемпотентности исчезла из расписания — записи снова "
+        "начнут копиться вечно, а настроенный срок хранения ничего не значит"
     )
 
 
